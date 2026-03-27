@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppTemplate\Controller;
+namespace OCA\AppVersions\Controller;
 
-use OCA\AppTemplate\AppInfo\Application;
+use OCA\AppVersions\AppInfo\Application;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
