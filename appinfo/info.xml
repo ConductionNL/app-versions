@@ -1,14 +1,14 @@
 <?xml version="1.0"?>
 <info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	  xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
-	<id>app_template</id>
-	<name>App Template</name>
+	<id>app_versions</id>
+	<name>App Versions</name>
 	<summary>An example summary</summary>
 	<description>An example description</description>
 	<version>1.0.0</version>
 	<licence>AGPL-3.0-or-later</licence>
 	<author mail="example@example.com" homepage="https://example.com">Example</author>
-	<namespace>AppTemplate</namespace>
+	<namespace>AppVersions</namespace>
 	<category>customization</category>
 	<bugs>https://example.com/bugs</bugs>
 	<dependencies>
@@ -16,9 +16,9 @@
 	</dependencies>
 	<navigations>
 		<navigation>
-			<id>app_template</id>
-			<name>App Template</name>
-			<route>app_template.page.index</route>
+			<id>app_versions</id>
+			<name>App Versions</name>
+			<route>app_versions.page.index</route>
 			<icon>app.svg</icon>
 			<type>link</type>
 		</navigation>

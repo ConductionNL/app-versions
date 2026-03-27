@@ -1,4 +1,4 @@
-# App Template
+# App Versions
 
 A template to get started with Nextcloud app development.
 
