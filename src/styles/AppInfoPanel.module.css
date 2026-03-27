@@ -1,0 +1,342 @@
+.infoPanel {
+	margin-top: 8px;
+	width: 100%;
+	overflow: visible;
+	max-height: 0;
+	opacity: 0;
+	transform: scaleX(0);
+	transform-origin: right center;
+	pointer-events: none;
+	background: var(--color-main-background);
+	border: 1px solid var(--color-border-dark);
+	border-left-width: 4px;
+	border-radius: 6px;
+	padding: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	box-sizing: border-box;
+	transition:
+		max-height 0.28s ease,
+		opacity 0.2s ease,
+		transform 0.28s ease;
+}
+
+.infoPanelOpen {
+	opacity: 1;
+	transform: scaleX(1);
+	max-height: calc(100vh - 160px);
+	pointer-events: auto;
+}
+
+.installed {
+	border-left: 4px solid var(--color-border-dark);
+	padding: 8px 10px;
+	width: 100%;
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.selectedApp,
+.installedCurrent,
+.selectedVersion {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.installedLabel {
+	font-size: 12px;
+	color: var(--color-text-maxcontrast);
+	margin-right: 6px;
+}
+
+.installedValue {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	font-weight: 600;
+	font-size: 14px;
+}
+
+.installedSubvalue {
+	font-size: 12px;
+	color: var(--color-text-maxcontrast);
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.changeAppButton {
+	align-self: flex-start;
+	margin-top: 8px;
+}
+
+.versionTransition {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 14px;
+}
+
+.versionChip {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	font-weight: 600;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 2px 8px;
+	border: 1px solid var(--color-border-dark);
+	border-radius: 9999px;
+	background: var(--color-main-background);
+}
+
+.versionArrow {
+	font-weight: 700;
+	color: var(--color-text-light);
+}
+
+.versionSummary {
+	margin: 0;
+	font-size: 12px;
+	color: var(--color-text-light);
+}
+
+.versionDegradeSummary {
+	margin: 2px 0 0;
+	color: #7c2d12;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.versionListContainer {
+	max-height: calc(100vh - 420px);
+	min-height: 120px;
+	overflow: hidden;
+	overflow-x: hidden;
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+	padding-inline-end: 4px;
+}
+
+.versionFilterInput {
+	width: 100%;
+	box-sizing: border-box;
+	border: 1px solid var(--color-border-dark);
+	border-radius: 6px;
+	padding: 6px 8px;
+	margin-bottom: 8px;
+}
+
+.versionListWrapper {
+	width: 100%;
+	max-height: calc(100vh - 460px);
+	min-height: 80px;
+	flex: 1;
+	overflow-y: scroll;
+	overflow-x: hidden;
+	scrollbar-gutter: stable;
+	scrollbar-width: thin;
+	scrollbar-color: var(--color-text-maxcontrast) var(--color-background-dark);
+}
+
+.versionListWrapper::-webkit-scrollbar {
+	width: 8px;
+}
+
+.versionListWrapper::-webkit-scrollbar-track {
+	background: var(--color-background-dark);
+	border-radius: 4px;
+}
+
+.versionListWrapper::-webkit-scrollbar-thumb {
+	background: var(--color-text-maxcontrast);
+	border-radius: 4px;
+}
+
+.versionListWrapper::-webkit-scrollbar-thumb:hover {
+	background: var(--color-text-light);
+}
+
+.versionList {
+	padding-inline-start: 20px;
+	margin: 8px 0 0;
+}
+
+.versionItem {
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 6px;
+	justify-content: flex-start;
+	padding: 6px 0;
+	transition:
+		opacity 0.18s ease,
+		transform 0.18s ease,
+		max-height 0.18s ease;
+	overflow: visible;
+}
+
+.versionItemMain {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+}
+
+.versionSelectButton {
+	line-height: 1.1;
+	margin: 2px 0;
+	visibility: hidden;
+	opacity: 0;
+	transition: opacity 0.12s ease;
+	padding: 3px 10px;
+	border: 1px solid var(--color-primary-element);
+	color: var(--color-primary-element);
+	border-radius: 6px;
+	background: var(--color-main-background);
+	font-size: 12px;
+}
+
+.versionItem:hover .versionSelectButton,
+.versionSelectButton:focus-visible {
+	visibility: visible;
+	opacity: 1;
+}
+
+.versionSelectButton:hover {
+	filter: brightness(1.05);
+}
+
+.selectedVersionFlag {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 12px;
+	font-weight: 600;
+	color: #1f2937;
+	background: #e0f2fe;
+	border: 1px solid #38bdf8;
+	border-radius: 9999px;
+	padding: 2px 10px;
+	line-height: 1.3;
+	margin-left: auto;
+}
+
+.versionActionGroup {
+	flex-direction: column;
+	gap: 8px;
+	display: flex;
+	width: 100%;
+}
+
+.versionDegradeWarning {
+	margin: 0;
+	padding: 8px 10px;
+	border: 1px solid #fdba74;
+	background: #ffedd5;
+	color: #7c2d12;
+	border-radius: 6px;
+	font-size: 12px;
+	line-height: 1.3;
+}
+
+.versionItemActions {
+	margin-top: 8px;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+}
+
+.versionActionButton {
+	appearance: none;
+	-webkit-appearance: none;
+	border-radius: 6px;
+	padding: 3px 10px;
+	font-size: 12px;
+	line-height: 1.1;
+	cursor: pointer;
+	box-sizing: border-box;
+	flex: 1 1 0;
+	width: calc(50% - 5px);
+}
+
+.versionActionUpdateButton {
+	color: #166534 !important;
+	border: 1px solid #22c55e !important;
+	background: #dcfce7 !important;
+}
+
+.versionActionUpdateButton:hover {
+	background: #bbf7d0 !important;
+}
+
+.versionActionDegradeButton {
+	color: #991b1b !important;
+	border: 1px solid #ef4444 !important;
+	background: #fee2e2 !important;
+}
+
+.versionActionDegradeButton:hover {
+	background: #fecaca !important;
+}
+
+.versionDeselectButton {
+	box-sizing: border-box;
+	flex: 1 1 0;
+	width: calc(50% - 5px);
+}
+
+.spinner {
+	display: inline-block;
+	width: 0.95em;
+	height: 0.95em;
+	border: 2px solid rgba(255, 255, 255, 0.35);
+	border-top-color: currentColor;
+	border-radius: 50%;
+	margin-right: 7px;
+	vertical-align: -1px;
+	animation: spin 0.85s linear infinite;
+}
+
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+:global(.versionFade-move),
+:global(.versionFade-enter-active),
+:global(.versionFade-leave-active) {
+	transition: all 0.2s ease;
+}
+
+:global(.versionFade-enter-from),
+:global(.versionFade-leave-to) {
+	opacity: 0;
+	transform: translateY(-4px);
+}
+
+:global(.versionFade-leave-active) {
+	position: absolute;
+}
+
+:global(.versionFade-move) {
+	transition: transform 0.2s ease;
+}
+
+.noFilterResult,
+.note {
+	margin: 0;
+	font-size: 12px;
+	color: var(--color-text-maxcontrast);
+}
+
+.error {
+	margin: 12px 0 0;
+	color: var(--color-error);
+	font-size: 13px;
+}
