@@ -3,14 +3,15 @@
 	  xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
 	<id>app_versions</id>
 	<name>App Versions</name>
-	<summary>An example summary</summary>
-	<description>An example description</description>
+	<summary>Install any earlier or newer version of already installed Nextcloud apps</summary>
+	<description>App Versions gives Nextcloud administrators the ability to roll back apps to previous versions or install specific newer versions. Essential for debugging, testing compatibility, and recovering from broken updates.</description>
 	<version>1.0.0</version>
 	<licence>AGPL-3.0-or-later</licence>
-	<author mail="example@example.com" homepage="https://example.com">Example</author>
+	<author mail="info@conduction.nl" homepage="https://conduction.nl">Conduction B.V.</author>
 	<namespace>AppVersions</namespace>
-	<category>customization</category>
-	<bugs>https://example.com/bugs</bugs>
+	<category>tools</category>
+	<bugs>https://github.com/ConductionNL/app-versions/issues</bugs>
+	<repository>https://github.com/ConductionNL/app-versions</repository>
 	<dependencies>
 		<nextcloud min-version="31" max-version="33"/>
 	</dependencies>
