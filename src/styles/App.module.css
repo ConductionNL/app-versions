@@ -1,0 +1,36 @@
+.content {
+	height: 100%;
+	margin: 16px;
+}
+
+.layout {
+	width: 100%;
+}
+
+.mainContent {
+	width: 100%;
+	padding-left: 16px;
+	padding-right: 16px;
+	box-sizing: border-box;
+}
+
+.contentRow {
+	display: block;
+	margin-top: 8px;
+}
+
+.contentRowSplit {
+	display: flex;
+	gap: 16px;
+	align-items: stretch;
+}
+
+.leftColumn,
+.rightColumn {
+	flex: 1 1 0;
+	min-width: 0;
+}
+
+.leftColumnFull {
+	width: 100%;
+}

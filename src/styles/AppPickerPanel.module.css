@@ -1,0 +1,210 @@
+.selectSection {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-top: 12px;
+}
+
+.label {
+	font-weight: 600;
+}
+
+.filterToolbar {
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+}
+
+.filterToggleButton {
+	align-self: flex-start;
+}
+
+.filterPanel {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 10px 12px;
+	border: 1px solid var(--color-border-dark);
+	border-radius: 8px;
+	background: var(--color-main-background);
+}
+
+.filterField {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	max-width: 260px;
+}
+
+.filterFieldLabel {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--color-text-maxcontrast);
+}
+
+.filterSelect {
+	width: 100%;
+	box-sizing: border-box;
+	border: 1px solid var(--color-border-dark);
+	border-radius: 6px;
+	padding: 8px 10px;
+	background: var(--color-main-background);
+}
+
+.appFilterInput {
+	width: 100%;
+	box-sizing: border-box;
+	border: 1px solid var(--color-border-dark);
+	border-radius: 6px;
+	padding: 8px 10px;
+}
+
+.appCardList {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+	gap: 16px;
+	overflow-y: visible;
+	overflow-x: hidden;
+	padding-inline-end: 4px;
+	align-content: start;
+}
+
+.appCardListSplit {
+	max-height: 360px;
+	overflow-y: auto;
+}
+
+.appCard {
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 12px;
+	border: 1px solid var(--color-border-dark);
+	border-radius: 8px;
+	background: var(--color-main-background);
+	min-height: 124px;
+	min-width: 0;
+	box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1);
+}
+
+.appCardSelected {
+	border-color: var(--color-primary-element);
+	box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary-element) 30%, transparent);
+}
+
+.appCardCore {
+	border-color: #ef4444;
+	box-shadow: 0 6px 18px rgba(127, 29, 29, 0.12);
+}
+
+.appCardBody {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 0;
+}
+
+.appCardHeader {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	min-width: 0;
+	justify-content: space-between;
+}
+
+.appCardTitleBlock {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 0;
+}
+
+.appCardTitleRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.appCardTitle,
+.appCardMeta {
+	margin: 0;
+}
+
+.appCardTitle {
+	font-weight: 700;
+	color: var(--color-main-text);
+	word-break: break-word;
+}
+
+.appCardMeta {
+	font-size: 12px;
+	color: var(--color-text-maxcontrast);
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	word-break: break-all;
+}
+
+.appCardCoreFlag {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 2px 8px;
+	border-radius: 9999px;
+	background: #fee2e2;
+	border: 1px solid #ef4444;
+	color: #991b1b;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	flex-shrink: 0;
+}
+
+.appCardMedia {
+	display: flex;
+	align-items: center;
+	margin-left: auto;
+	flex-shrink: 0;
+}
+
+.appCardIcon,
+.appCardFallbackIcon {
+	width: 48px;
+	height: 48px;
+	border-radius: 10px;
+	border: 1px solid var(--color-border-dark);
+	background: color-mix(in srgb, var(--color-main-background) 92%, var(--color-primary-element) 8%);
+}
+
+.appCardIcon {
+	display: block;
+	object-fit: contain;
+	padding: 6px;
+	box-sizing: border-box;
+}
+
+.appCardFallbackIcon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: 700;
+	font-size: 18px;
+	color: var(--color-primary-element);
+}
+
+.appCardDescription {
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.35;
+	color: var(--color-text-maxcontrast);
+}
+
+.appCardButton {
+	align-self: flex-start;
+}
+
+.noFilterResult {
+	margin: 0;
+	font-size: 12px;
+	color: var(--color-text-maxcontrast);
+}
