@@ -43,7 +43,7 @@ Vrij en open source onder de EUPL-1.2-licentie.
 **Ondersteuning:** support@conduction.nl.
     ]]></description>
     <version>1.0.0</version>
-    <licence>agpl</licence>
+    <licence>eupl</licence>
     <author mail="info@conduction.nl" homepage="https://www.conduction.nl/">Conduction B.V.</author>
     <namespace>AppVersions</namespace>
     <documentation>

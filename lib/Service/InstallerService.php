@@ -52,37 +52,32 @@ class InstallerService {
 	 *
 	 * @spec openspec/specs/version-management/spec.md#requirement-list-installed-apps
 	 */
-	public function getInstalledApps(): array {
+	public function getInstalledApps(): array
+	{
 		$installedApps = array_values(array_filter(
 			$this->appManager->getInstalledApps(),
 			fn (string $appId): bool => !$this->isSelfManagedApp($appId)
 		));
 		sort($installedApps);
 		$alwaysEnabledApps = $this->appManager->getAlwaysEnabledApps();
-		$appList = [];
-		foreach ((new \OC_App())->listAllApps() as $app) {
-			if (!isset($app['id']) || !is_string($app['id'])) {
-				continue;
-			}
-
-			$appList[$app['id']] = $app;
-		}
 
 		return array_map(
-			static function(string $appId) use ($appList, $alwaysEnabledApps): array {
-				$app = $appList[$appId] ?? [];
-				$name = isset($app['name']) && is_string($app['name']) && trim($app['name']) !== ''
-					? trim($app['name'])
+			function (string $appId) use ($alwaysEnabledApps): array {
+				$info = $this->appManager->getAppInfo($appId) ?? [];
+				$name = isset($info['name']) && is_string($info['name']) && trim($info['name']) !== ''
+					? trim($info['name'])
 					: $appId;
-				$description = isset($app['description']) && is_string($app['description'])
-					? trim($app['description'])
+				$description = isset($info['description']) && is_string($info['description'])
+					? trim($info['description'])
 					: '';
-				$summary = isset($app['summary']) && is_string($app['summary'])
-					? trim($app['summary'])
+				$summary = isset($info['summary']) && is_string($info['summary'])
+					? trim($info['summary'])
 					: '';
-				$preview = isset($app['preview']) && is_string($app['preview'])
-					? trim($app['preview'])
-					: '';
+				// Per-app preview URL is rebuilt by the frontend from the app
+				// id (the picker falls back to a letter tile when no preview
+				// is available) — OCP's getAppInfo() does not expose the
+				// enriched preview URL that \OC_App::listAllApps() injects.
+				$preview = '';
 
 				return [
 					'id' => $appId,
@@ -95,7 +90,7 @@ class InstallerService {
 			},
 			$installedApps
 		);
-	}
+	}//end getInstalledApps()
 
 	/**
 	 * Returns installed version and available versions for an app id.
