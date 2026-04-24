@@ -1,10 +1,10 @@
 ---
-status: idea
+status: in-progress
 ---
 
 # Version Management Specification
 
-**Status**: idea
+**Status**: in-progress
 **Standards**: Nextcloud App Store API v1, OCP\App\IAppManager
 **Feature tier**: MVP
 
