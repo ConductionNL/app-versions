@@ -1,5 +1,22 @@
 <?php
 
+/**
+ * AppVersions API Controller
+ *
+ * Exposes the OCS endpoints consumed by the admin UI: discovery of installed
+ * apps, the current update channel, available versions per app, and version
+ * installation.
+ *
+ * @category Controller
+ * @package  OCA\AppVersions\Controller
+ *
+ * @author    Conduction Development Team <info@conduction.nl>
+ * @copyright 2026 Conduction B.V.
+ * @license   EUPL-1.2 https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12
+ *
+ * @link https://conduction.nl
+ */
+
 declare(strict_types=1);
 
 namespace OCA\AppVersions\Controller;

@@ -1,5 +1,21 @@
 <?php
 
+/**
+ * AppVersions Application
+ *
+ * Main application class for the AppVersions Nextcloud app. Bootstraps the app
+ * and hosts its DI registrations.
+ *
+ * @category AppInfo
+ * @package  OCA\AppVersions\AppInfo
+ *
+ * @author    Conduction Development Team <info@conduction.nl>
+ * @copyright 2026 Conduction B.V.
+ * @license   EUPL-1.2 https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12
+ *
+ * @link https://conduction.nl
+ */
+
 declare(strict_types=1);
 
 namespace OCA\AppVersions\AppInfo;

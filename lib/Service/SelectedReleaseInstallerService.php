@@ -1,5 +1,22 @@
 <?php
 
+/**
+ * AppVersions Selected-Release Installer Service
+ *
+ * Low-level installer that downloads a specific release archive, verifies its
+ * signature, extracts it into the apps directory and runs the app's migration
+ * and repair steps.
+ *
+ * @category Service
+ * @package  OCA\AppVersions\Service
+ *
+ * @author    Conduction Development Team <info@conduction.nl>
+ * @copyright 2026 Conduction B.V.
+ * @license   EUPL-1.2 https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12
+ *
+ * @link https://conduction.nl
+ */
+
 declare(strict_types=1);
 
 namespace OCA\AppVersions\Service;

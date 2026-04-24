@@ -1,5 +1,22 @@
 <?php
 
+/**
+ * AppVersions Installer Service
+ *
+ * Discovers installed apps, resolves available versions from the Nextcloud app
+ * store (scoped to the current update channel) and orchestrates the download
+ * + install of a selected release.
+ *
+ * @category Service
+ * @package  OCA\AppVersions\Service
+ *
+ * @author    Conduction Development Team <info@conduction.nl>
+ * @copyright 2026 Conduction B.V.
+ * @license   EUPL-1.2 https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12
+ *
+ * @link https://conduction.nl
+ */
+
 declare(strict_types=1);
 
 namespace OCA\AppVersions\Service;
