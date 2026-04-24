@@ -996,35 +996,11 @@ watch(debugModeEnabled, () => {
 	width: 100%;
 }
 
-.updateChannel {
-	margin: 0;
-	color: var(--color-text-maxcontrast);
-	font-size: 13px;
-}
-
 .mainContent {
 	width: 100%;
 	padding-left: 16px;
 	padding-right: 16px;
 	box-sizing: border-box;
-}
-
-.settingsPanel {
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-	margin-top: 8px;
-	padding: 12px;
-	border: 1px solid var(--color-border);
-	border-radius: 8px;
-	background: var(--color-main-background);
-}
-
-.settingsToggles {
-	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
-	gap: 12px;
 }
 
 .selectSection {
@@ -1099,135 +1075,6 @@ watch(debugModeEnabled, () => {
 	overflow-y: auto;
 }
 
-.appCard {
-	display: flex;
-	flex-direction: column;
-	justify-content: space-between;
-	gap: 12px;
-	padding: 12px;
-	border: 1px solid var(--color-border-dark);
-	border-radius: 8px;
-	background: var(--color-main-background);
-	min-height: 124px;
-	min-width: 0;
-	box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1);
-}
-
-.appCardMedia {
-	display: flex;
-	align-items: center;
-	margin-left: auto;
-	flex-shrink: 0;
-}
-
-.appCardSelected {
-	border-color: var(--color-primary-element);
-	box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary-element) 30%, transparent);
-}
-
-.appCardCore {
-	border-color: #ef4444;
-	box-shadow: 0 6px 18px rgba(127, 29, 29, 0.12);
-}
-
-.appCardIcon,
-.appCardFallbackIcon {
-	width: 48px;
-	height: 48px;
-	border-radius: 10px;
-	border: 1px solid var(--color-border-dark);
-	background: color-mix(in srgb, var(--color-main-background) 92%, var(--color-primary-element) 8%);
-}
-
-.appCardIcon {
-	display: block;
-	object-fit: contain;
-	padding: 6px;
-	box-sizing: border-box;
-}
-
-.appCardFallbackIcon {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	font-weight: 700;
-	font-size: 18px;
-	color: var(--color-primary-element);
-}
-
-.appCardBody {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	min-width: 0;
-}
-
-.appCardHeader {
-	display: flex;
-	align-items: flex-start;
-	gap: 12px;
-	min-width: 0;
-	justify-content: space-between;
-}
-
-.appCardTitleBlock {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	min-width: 0;
-}
-
-.appCardTitleRow {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	min-width: 0;
-}
-
-.appCardTitle,
-.appCardMeta {
-	margin: 0;
-}
-
-.appCardTitle {
-	font-weight: 700;
-	color: var(--color-main-text);
-	word-break: break-word;
-}
-
-.appCardMeta {
-	font-size: 12px;
-	color: var(--color-text-maxcontrast);
-	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-	word-break: break-all;
-}
-
-.appCardCoreFlag {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	padding: 2px 8px;
-	border-radius: 9999px;
-	background: #fee2e2;
-	border: 1px solid #ef4444;
-	color: #991b1b;
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.04em;
-	flex-shrink: 0;
-}
-
-.appCardDescription {
-	margin: 0;
-	font-size: 13px;
-	line-height: 1.35;
-	color: var(--color-text-maxcontrast);
-}
-
-.appCardButton {
-	align-self: flex-start;
-}
-
 .installedSubvalue {
 	font-size: 12px;
 	color: var(--color-text-maxcontrast);
@@ -1258,13 +1105,6 @@ watch(debugModeEnabled, () => {
 
 .leftColumnFull {
 	width: 100%;
-}
-
-.rowInline {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 10px;
 }
 
 .installed {
@@ -1330,144 +1170,6 @@ watch(debugModeEnabled, () => {
 .versionList {
 	padding-inline-start: 20px;
 	margin: 8px 0 0;
-}
-
-.versionItem {
-	width: 100%;
-	display: flex;
-	flex-direction: column;
-	align-items: stretch;
-	gap: 6px;
-	justify-content: flex-start;
-	padding: 6px 0;
-	transition:
-		opacity 0.18s ease,
-		transform 0.18s ease,
-		max-height 0.18s ease;
-	overflow: visible;
-}
-
-.versionItemMain {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	gap: 10px;
-	width: 100%;
-}
-
-.versionActionGroup {
-	flex-direction: column;
-	gap: 8px;
-	display: flex;
-	width: 100%;
-}
-
-.versionDegradeWarning {
-	margin: 0;
-	padding: 8px 10px;
-	border: 1px solid #fdba74;
-	background: #ffedd5;
-	color: #7c2d12;
-	border-radius: 6px;
-	font-size: 12px;
-	line-height: 1.3;
-}
-
-.downgradeConfirmText {
-	font-size: 14px;
-	line-height: 1.4;
-}
-
-.versionItemDegradeMessage {
-	margin: 8px 0 0;
-	padding: 8px 10px;
-	border: 1px solid #fdba74;
-	background: #ffedd5;
-	color: #7c2d12;
-	border-radius: 6px;
-	font-size: 12px;
-	line-height: 1.3;
-}
-
-.versionItemActions {
-	margin-top: 8px;
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	gap: 10px;
-	width: 100%;
-}
-
-.versionSelectButton {
-	line-height: 1.1;
-	margin: 2px 0;
-	visibility: hidden;
-	opacity: 0;
-	transition: opacity 0.12s ease;
-	padding: 3px 10px;
-	border: 1px solid var(--color-primary-element);
-	color: var(--color-primary-element);
-	border-radius: 6px;
-	background: var(--color-main-background);
-	font-size: 12px;
-}
-
-.versionItem:hover .versionSelectButton,
-.versionSelectButton:focus-visible {
-	visibility: visible;
-	opacity: 1;
-}
-
-.versionSelectButton:hover {
-	filter: brightness(1.05);
-}
-
-.selectedVersionFlag {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 12px;
-	font-weight: 600;
-	color: #1f2937;
-	background: #e0f2fe;
-	border: 1px solid #38bdf8;
-	border-radius: 9999px;
-	padding: 2px 10px;
-	line-height: 1.3;
-	margin-left: auto;
-}
-
-.versionActionButton {
-	appearance: none;
-	-webkit-appearance: none;
-	border-radius: 6px;
-	padding: 3px 10px;
-	font-size: 12px;
-	line-height: 1.1;
-	cursor: pointer;
-	box-sizing: border-box;
-	flex: 1 1 0;
-	width: calc(50% - 5px);
-}
-
-.versionActionUpdateButton {
-	color: #166534 !important;
-	border: 1px solid #22c55e !important;
-	background: #dcfce7 !important;
-}
-
-.versionActionUpdateButton:hover {
-	background: #bbf7d0 !important;
-}
-
-.versionActionDegradeButton {
-	color: #991b1b !important;
-	border: 1px solid #ef4444 !important;
-	background: #fee2e2 !important;
-}
-
-.versionActionDegradeButton:hover {
-	background: #fecaca !important;
 }
 
 :global(.versionFade-move),
@@ -1550,43 +1252,6 @@ watch(debugModeEnabled, () => {
 	font-weight: 600;
 }
 
-.safeMode {
-	display: inline-flex;
-	gap: 8px;
-	align-items: center;
-	font-size: 12px;
-	color: var(--color-text-maxcontrast);
-	width: 100%;
-}
-
-.safeModeCheckbox {
-	accent-color: var(--color-primary-element);
-}
-
-.versionDeselectButton {
-	box-sizing: border-box;
-	flex: 1 1 0;
-	width: calc(50% - 5px);
-}
-
-.spinner {
-	display: inline-block;
-	width: 0.95em;
-	height: 0.95em;
-	border: 2px solid rgba(255, 255, 255, 0.35);
-	border-top-color: currentColor;
-	border-radius: 50%;
-	margin-right: 7px;
-	vertical-align: -1px;
-	animation: spin 0.85s linear infinite;
-}
-
-@keyframes spin {
-	to {
-		transform: rotate(360deg);
-	}
-}
-
 .selectedVersion {
 	display: flex;
 	flex-direction: column;
@@ -1594,14 +1259,6 @@ watch(debugModeEnabled, () => {
 }
 
 .versionTransition {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	font-size: 14px;
-}
-
-.versionTransitionRow {
-	margin: 0;
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -1625,177 +1282,10 @@ watch(debugModeEnabled, () => {
 	color: var(--color-text-light);
 }
 
-.versionSummary,
-.versionRangeSummary {
+.versionSummary {
 	margin: 0;
 	font-size: 12px;
 	color: var(--color-text-light);
-}
-
-.debugPanel {
-	margin-top: 0;
-	height: 100%;
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	border: 1px solid var(--color-border);
-	border-radius: 6px;
-	padding: 8px;
-	background: var(--color-main-background);
-}
-
-.resultPanel {
-	border: 1px solid var(--color-border);
-	border-radius: 6px;
-	padding: 8px;
-	background: var(--color-main-background);
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-}
-
-.resultStatus {
-	margin: 0;
-	align-self: flex-start;
-	padding: 3px 10px;
-	border-radius: 9999px;
-	font-size: 11px;
-	font-weight: 700;
-	color: var(--color-main-background);
-}
-
-.resultStatusSuccess {
-	background: #16a34a;
-}
-
-.resultStatusWarning {
-	background: #ea580c;
-}
-
-.resultStatusError {
-	background: #dc2626;
-}
-
-.resultStatusInfo {
-	background: #475569;
-}
-
-.resultMessage {
-	margin: 0;
-	font-size: 13px;
-	font-weight: 600;
-}
-
-.resultGrid {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 8px;
-	border: 1px solid var(--color-border-dark);
-	border-radius: 6px;
-	padding: 8px;
-}
-
-.resultGrid div {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-}
-
-.resultGrid span {
-	font-size: 11px;
-	color: var(--color-text-maxcontrast);
-}
-
-.resultGrid strong {
-	font-size: 12px;
-	word-break: break-all;
-}
-
-.debugSubtitle {
-	margin: 0;
-	font-size: 11px;
-	color: var(--color-text-maxcontrast);
-}
-
-.debugTimeline {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-}
-
-.debugStep {
-	border: 1px solid var(--color-border-dark);
-	border-radius: 6px;
-	padding: 6px 8px;
-	background: color-mix(in srgb, var(--color-main-background) 96%, white 4%);
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-}
-
-.debugStepHeader {
-	margin: 0;
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	font-size: 12px;
-}
-
-.debugStepIndex {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	min-width: 20px;
-	height: 20px;
-	border-radius: 9999px;
-	font-weight: 700;
-	font-size: 11px;
-	padding: 0 6px;
-	background: var(--color-primary-element);
-	color: var(--color-primary-element-text);
-}
-
-.debugStepStage {
-	font-weight: 600;
-}
-
-.debugStepDetails {
-	margin: 0;
-}
-
-.debugStepSummary {
-	font-size: 12px;
-	color: var(--color-text-maxcontrast);
-	cursor: pointer;
-}
-
-.debugOutput {
-	list-style: none;
-	max-height: 260px;
-	overflow: auto;
-	margin: 4px 0 0;
-	padding: 8px;
-	background: #0f172a;
-	color: #e2e8f0;
-	border-radius: 4px;
-	border: 1px solid #1e293b;
-	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-	font-size: 12px;
-	line-height: 1.35;
-}
-
-.debugOutputLine {
-	margin: 0;
-	padding: 0;
-	line-height: 1.35;
-	white-space: pre;
-	font-family: inherit;
-}
-
-.debugNoData {
-	margin: 0;
-	font-size: 12px;
-	color: var(--color-text-maxcontrast);
 }
 
 .versionDegradeSummary {
