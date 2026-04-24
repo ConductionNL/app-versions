@@ -49,6 +49,8 @@ class InstallerService {
 	 * Returns installed apps enriched with metadata for frontend cards.
 	 *
 	 * @return array<int, array{id:string,label:string,description:string,summary:string,preview:string,isCore:bool}>
+	 *
+	 * @spec openspec/specs/version-management/spec.md#requirement-list-installed-apps
 	 */
 	public function getInstalledApps(): array {
 		$installedApps = array_values(array_filter(
@@ -100,6 +102,8 @@ class InstallerService {
 	 *
 	 * @param string $appId
 	 * @return array{installedVersion: ?string, availableVersions: array<int, array{version:string}>, versions: array<int, array{version:string}>, source: string, statusCode: int, hasError: bool}
+	 *
+	 * @spec openspec/specs/version-management/spec.md#requirement-fetch-available-versions
 	 */
 	public function getAppVersions(string $appId): array {
 		$appId = trim($appId);
@@ -176,6 +180,8 @@ class InstallerService {
 	 * @param string $targetVersion
 	 * @param bool $includeDebug
 	 * @return array{statusCode:int,payload:array}
+	 *
+	 * @spec openspec/specs/version-management/spec.md#requirement-install-specific-version
 	 */
 	public function installAppVersion(string $appId, string $targetVersion, bool $includeDebug): array {
 		$appId = trim($appId);

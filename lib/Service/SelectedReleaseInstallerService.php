@@ -48,6 +48,8 @@ class SelectedReleaseInstallerService {
 	 * Returns internal debug logs for the last operation.
 	 *
 	 * @return array<int, mixed>
+	 *
+	 * @spec openspec/specs/version-management/spec.md#requirement-debug-mode
 	 */
 	public function getDebugLog(): array {
 		return $this->debug;
@@ -245,6 +247,8 @@ class SelectedReleaseInstallerService {
 	 * @param bool $dryRun
 	 * @return array<string, mixed>
 	 * @throws Exception
+	 *
+	 * @spec openspec/specs/version-management/spec.md#requirement-install-specific-version
 	 */
 	public function installFromSelectedRelease(string $appId, array $release, bool $dryRun = false): array {
 		$this->resetDebug();
@@ -344,6 +348,8 @@ class SelectedReleaseInstallerService {
 	 * @param bool $dryRun
 	 * @return void
 	 * @throws Exception
+	 *
+	 * @spec openspec/specs/version-management/spec.md#requirement-install-specific-version
 	 */
 	public function replaceWithSelectedRelease(string $appId, array $release, bool $dryRun): void {
 		$downloadUrl = $release['download'] ?? '';

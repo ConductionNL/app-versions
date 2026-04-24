@@ -82,6 +82,8 @@ class ApiController extends OCSController {
 	 * Returns installed apps for the select dropdown.
 	 *
 	 * @return DataResponse
+	 *
+	 * @spec openspec/specs/version-management/spec.md#requirement-list-installed-apps
 	 */
 	#[NoAdminRequired]
 	public function apps(): DataResponse {
@@ -121,6 +123,8 @@ class ApiController extends OCSController {
 	 *
 	 * @param string $appId
 	 * @return DataResponse
+	 *
+	 * @spec openspec/specs/version-management/spec.md#requirement-fetch-available-versions
 	 */
 	#[NoAdminRequired]
 	public function appVersions(string $appId): DataResponse {
@@ -143,6 +147,8 @@ class ApiController extends OCSController {
 	 * @param string $appId
 	 * @param string $version
 	 * @return DataResponse
+	 *
+	 * @spec openspec/specs/version-management/spec.md#requirement-install-specific-version
 	 */
 	#[NoAdminRequired]
 	#[PasswordConfirmationRequired(strict: false)]
