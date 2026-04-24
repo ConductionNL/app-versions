@@ -1,0 +1,46 @@
+{
+  "generated_at": "2026-04-24T10:30:00Z",
+  "app": "app-versions",
+  "branch": "feature/template-and-adr-cleanup",
+  "scanner_version": "1",
+  "scanner_note": "Manual drive of opsx-coverage-scan on an app with a Requirement-style spec (status: idea) rather than REQ-numbered specs. Pass A classification only; Bucket 3 + Bucket 4 skipped — scope is testing reverse-spec downstream.",
+  "buckets": {
+    "annotated": [],
+    "plumbing": [
+      {"file": "lib/AppInfo/Application.php", "method": "register", "reason": "empty body"},
+      {"file": "lib/AppInfo/Application.php", "method": "boot", "reason": "stylesheet-inject only"},
+      {"file": "lib/Controller/PageController.php", "method": "index", "reason": "template-render only"}
+    ],
+    "bucket_1": [
+      {"file": "lib/Controller/ApiController.php", "method": "apps", "capability": "version-management", "requirement": "List Installed Apps", "confidence": 0.92, "needs_review": false, "signal": "scenario noun+verb match"},
+      {"file": "lib/Controller/ApiController.php", "method": "appVersions", "capability": "version-management", "requirement": "Fetch Available Versions", "confidence": 0.92, "needs_review": false, "signal": "scenario noun+verb match"},
+      {"file": "lib/Controller/ApiController.php", "method": "installVersion", "capability": "version-management", "requirement": "Install Specific Version", "confidence": 0.95, "needs_review": false, "signal": "direct title match"},
+      {"file": "lib/Service/InstallerService.php", "method": "getInstalledApps", "capability": "version-management", "requirement": "List Installed Apps", "confidence": 0.92, "needs_review": false, "signal": "service backing for Req 1"},
+      {"file": "lib/Service/InstallerService.php", "method": "getAppVersions", "capability": "version-management", "requirement": "Fetch Available Versions", "confidence": 0.92, "needs_review": false, "signal": "service backing for Req 2"},
+      {"file": "lib/Service/InstallerService.php", "method": "installAppVersion", "capability": "version-management", "requirement": "Install Specific Version", "confidence": 0.92, "needs_review": false, "signal": "service backing for Req 3"},
+      {"file": "lib/Service/SelectedReleaseInstallerService.php", "method": "getDebugLog", "capability": "version-management", "requirement": "Debug Mode", "confidence": 0.92, "needs_review": false, "signal": "direct title match"},
+      {"file": "lib/Service/SelectedReleaseInstallerService.php", "method": "installFromSelectedRelease", "capability": "version-management", "requirement": "Install Specific Version", "confidence": 0.85, "needs_review": false, "signal": "internal install step for Req 3"},
+      {"file": "lib/Service/SelectedReleaseInstallerService.php", "method": "replaceWithSelectedRelease", "capability": "version-management", "requirement": "Install Specific Version", "confidence": 0.85, "needs_review": false, "signal": "internal replace step for Req 3"}
+    ],
+    "bucket_2a": {},
+    "bucket_2b": {
+      "frontend-context-endpoints": {
+        "reason": "Two thin admin-guarded read-only endpoints that the Vue UI calls at bootstrap to contextualise what it renders. Neither is described in version-management/spec.md — they are UI-support endpoints rather than feature behaviours. adminCheck returns the caller's admin status so the UI can show/hide admin controls; updateChannel returns the Nextcloud server's update channel (stable/beta/etc.) so version lists can be labelled accordingly. Related to but distinct from Req 'Fetch Available Versions' (whose 'Respect update channel' scenario is about filtering, not about exposing the channel to the UI).",
+        "methods": [
+          {"file": "lib/Controller/ApiController.php", "method": "adminCheck", "observed_behavior": "Returns {isAdmin: bool} derived from isAdmin() helper. Always 200 (never 403) — the UI uses the boolean to decide which controls to render, not to gate access. Uses #[NoAdminRequired] because non-admins need a non-error response."},
+          {"file": "lib/Controller/ApiController.php", "method": "updateChannel", "observed_behavior": "Returns {updateChannel: string} from IServerVersion::getChannel(). Admin-only inside the method (returns 403 'Forbidden' to non-admins despite the #[NoAdminRequired] attribute). Consumed by the UI's version filter."}
+        ],
+        "branch": "feature/template-and-adr-cleanup"
+      }
+    },
+    "bucket_3a": [],
+    "bucket_3b": [],
+    "bucket_4": {}
+  },
+  "ignored": 0,
+  "notes": [
+    "Spec uses 'Requirement: Title [Tier]' format (not REQ-NNN) with 'status: idea' frontmatter — a forward-building feature-spec format rather than the retrofit REQ format used by mydash/openregister. The reverse-spec output in this run matches the existing format so the spec remains internally consistent.",
+    "The spec's 'status: idea' frontmatter is stale — the 4 Requirements are implemented in code. Flagged for a follow-up: once reverse-spec-extended + Bucket 1 annotated, consider updating status to 'in-progress' or 'done'.",
+    "Bucket 1 methods (9) are not annotated by this run; that belongs to a separate /opsx-annotate pass. This run only retrofits the 2-method Bucket 2b cluster."
+  ]
+}

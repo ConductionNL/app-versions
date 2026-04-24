@@ -15,6 +15,8 @@
  * @license   EUPL-1.2 https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12
  *
  * @link https://conduction.nl
+ *
+ * @spec openspec/changes/retrofit-frontend-context-endpoints-2026-04-24/tasks.md#task-1
  */
 
 declare(strict_types=1);
@@ -60,6 +62,8 @@ class ApiController extends OCSController {
 	 * Checks whether the currently signed in user is an admin.
 	 *
 	 * @return DataResponse
+	 *
+	 * @spec openspec/changes/retrofit-frontend-context-endpoints-2026-04-24/tasks.md#task-1
 	 */
 	#[NoAdminRequired]
 	public function adminCheck(): DataResponse {
@@ -96,6 +100,8 @@ class ApiController extends OCSController {
 	 * Returns the currently configured Nextcloud update channel.
 	 *
 	 * @return DataResponse
+	 *
+	 * @spec openspec/changes/retrofit-frontend-context-endpoints-2026-04-24/tasks.md#task-1
 	 */
 	#[NoAdminRequired]
 	public function updateChannel(): DataResponse {
