@@ -54,11 +54,38 @@
         "Dry-run": "Proefrun",
         "Live install": "Live installatie",
         "Result": "Resultaat",
-        "Install debug": "Installatie-debug",
-        "step": "stap",
-        "steps": "stappen",
         "No details": "Geen details",
-        "View details": "Details bekijken"
+        "View details": "Details bekijken",
+        "Install debug (%n step)": {
+            "plurals": [
+                "Installatie-debug (%n stap)",
+                "Installatie-debug (%n stappen)"
+            ]
+        },
+        "Upgrade stays within major/minor and changes %n patch version step.": {
+            "plurals": [
+                "Upgrade blijft binnen major/minor en wijzigt %n patch-versiestap.",
+                "Upgrade blijft binnen major/minor en wijzigt %n patch-versiestappen."
+            ]
+        },
+        "Downgrade stays within major/minor and changes %n patch version step.": {
+            "plurals": [
+                "Downgrade blijft binnen major/minor en wijzigt %n patch-versiestap.",
+                "Downgrade blijft binnen major/minor en wijzigt %n patch-versiestappen."
+            ]
+        },
+        "Upgrade crosses {major} major and %n minor version step.": {
+            "plurals": [
+                "Upgrade overschrijdt {major} major- en %n minor-versiestap.",
+                "Upgrade overschrijdt {major} major- en %n minor-versiestappen."
+            ]
+        },
+        "Downgrade crosses {major} major and %n minor version step.": {
+            "plurals": [
+                "Downgrade overschrijdt {major} major- en %n minor-versiestap.",
+                "Downgrade overschrijdt {major} major- en %n minor-versiestappen."
+            ]
+        }
     },
     "pluralForm": "nplurals=2; plural=(n != 1);"
 }

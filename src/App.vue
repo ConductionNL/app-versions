@@ -4,7 +4,7 @@
   -->
 <script setup lang="ts">
 import { NcAppContent, NcContent, NcDialog } from '@conduction/nextcloud-vue'
-import { translate as t } from '@nextcloud/l10n'
+import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import { computed, onMounted, ref, watch } from 'vue'
 
 const APP_ID = 'app_versions'
@@ -715,11 +715,43 @@ const versionRangeText = (summary: VersionRangeInfo | null): string => {
 		return ''
 	}
 
+	const isUpgrade = summary.direction === 'upgrade'
+
 	if (summary.major === 0 && summary.minor === 0 && summary.patch > 0) {
-		return `${summary.direction === 'upgrade' ? 'Upgrade' : 'Downgrade'} stays within major/minor and changes ${summary.patch} patch version step${summary.patch === 1 ? '' : 's'}.`
+		return isUpgrade
+			? n(
+				APP_ID,
+				'Upgrade stays within major/minor and changes %n patch version step.',
+				'Upgrade stays within major/minor and changes %n patch version steps.',
+				summary.patch,
+			)
+			: n(
+				APP_ID,
+				'Downgrade stays within major/minor and changes %n patch version step.',
+				'Downgrade stays within major/minor and changes %n patch version steps.',
+				summary.patch,
+			)
 	}
 
-	return `${summary.direction === 'upgrade' ? 'Upgrade' : 'Downgrade'} crosses ${summary.major} major and ${summary.minor} minor version step${summary.minor === 1 ? '' : 's'}.`
+	// Two counts (major + minor) in one sentence. translatePlural only picks
+	// a plural form for one count — the trailing "minor version step(s)" —
+	// so the major count is passed as a {major} substitution. Dutch uses the
+	// same sentence shape, so this keeps the full sentence in one string.
+	return isUpgrade
+		? n(
+			APP_ID,
+			'Upgrade crosses {major} major and %n minor version step.',
+			'Upgrade crosses {major} major and %n minor version steps.',
+			summary.minor,
+			{ major: summary.major },
+		)
+		: n(
+			APP_ID,
+			'Downgrade crosses {major} major and %n minor version step.',
+			'Downgrade crosses {major} major and %n minor version steps.',
+			summary.minor,
+			{ major: summary.major },
+		)
 }
 
 	const downgradeConfirmButtons = computed(() => [
@@ -1206,7 +1238,7 @@ watch(debugModeEnabled, () => {
 									v-if="debugModeEnabled && lastInstallDebug.length > 0"
 									:class="$style.debugPanel"
 								>
-									<p :class="$style.debugSubtitle">{{ t('app_versions', 'Install debug') }} ({{ lastInstallDebug.length }} {{ lastInstallDebug.length === 1 ? t('app_versions', 'step') : t('app_versions', 'steps') }})</p>
+									<p :class="$style.debugSubtitle">{{ n('app_versions', 'Install debug (%n step)', 'Install debug (%n steps)', lastInstallDebug.length) }}</p>
 									<div :class="$style.debugTimeline">
 										<article
 											v-for="(entry, entryIndex) in lastInstallDebug"

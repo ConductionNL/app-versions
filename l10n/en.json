@@ -54,11 +54,38 @@
         "Dry-run": "Dry-run",
         "Live install": "Live install",
         "Result": "Result",
-        "Install debug": "Install debug",
-        "step": "step",
-        "steps": "steps",
         "No details": "No details",
-        "View details": "View details"
+        "View details": "View details",
+        "Install debug (%n step)": {
+            "plurals": [
+                "Install debug (%n step)",
+                "Install debug (%n steps)"
+            ]
+        },
+        "Upgrade stays within major/minor and changes %n patch version step.": {
+            "plurals": [
+                "Upgrade stays within major/minor and changes %n patch version step.",
+                "Upgrade stays within major/minor and changes %n patch version steps."
+            ]
+        },
+        "Downgrade stays within major/minor and changes %n patch version step.": {
+            "plurals": [
+                "Downgrade stays within major/minor and changes %n patch version step.",
+                "Downgrade stays within major/minor and changes %n patch version steps."
+            ]
+        },
+        "Upgrade crosses {major} major and %n minor version step.": {
+            "plurals": [
+                "Upgrade crosses {major} major and %n minor version step.",
+                "Upgrade crosses {major} major and %n minor version steps."
+            ]
+        },
+        "Downgrade crosses {major} major and %n minor version step.": {
+            "plurals": [
+                "Downgrade crosses {major} major and %n minor version step.",
+                "Downgrade crosses {major} major and %n minor version steps."
+            ]
+        }
     },
     "pluralForm": "nplurals=2; plural=(n != 1);"
 }
