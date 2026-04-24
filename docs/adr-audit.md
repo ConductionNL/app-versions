@@ -63,9 +63,22 @@ domain data — many ADRs are legitimately N/A.
 - **Gaps:** 0
 - **N/A (infrastructure / domain-less):** 14 rules
 
-## Follow-ups (tracked separately)
+## Follow-ups
 
-1. **`SelectedReleaseInstallerService` unit coverage.** The service touches `OC\Archive\TAR`, `OC\DB\MigrationService`, `OC\AppFramework\Bootstrap\Coordinator` — too many NC internals to mock without a Nextcloud integration-test harness. Integration coverage via Newman is the realistic path.
-2. **Deep WCAG AA audit.** Form controls are labelled and focusable, but a structured a11y pass (screen-reader traversal, colour-contrast ratios, keyboard trap check) has not been run.
-3. **`NcAppContent` wrapper review (ADR-017).** Switching to `CnDetailPage` / `CnIndexPage` from `@conduction/nextcloud-vue` would align with the composition rule but risks visual regressions — warrants a dedicated UI-refactor PR.
-4. **ADR-002 RPC-style POST clarification.** Document whether operational POSTs on existing resources (e.g., `POST /apps/{id}/versions/{v}/install`) fall within ADR-002's scope, or flag in the ADR next time it's refined.
+The three partial items each have a dedicated OpenSpec change in
+[`openspec/changes/`](../openspec/changes/) and a GitHub issue for Hydra
+to pick up:
+
+1. **`SelectedReleaseInstallerService` integration-test coverage** —
+   [`release-installer-tests-2026-04-24`](../openspec/changes/release-installer-tests-2026-04-24/proposal.md).
+   Integration coverage via a dry-run scenario + recorded release fixture.
+2. **Deep WCAG AA audit** —
+   [`wcag-aa-audit-2026-04-24`](../openspec/changes/wcag-aa-audit-2026-04-24/proposal.md).
+   Axe-core + manual screen-reader traversal + remediation.
+3. **`CnIndexPage` composition (ADR-017)** —
+   [`cn-detail-page-composition-2026-04-24`](../openspec/changes/cn-detail-page-composition-2026-04-24/proposal.md).
+   Replace `NcContent` / `NcAppContent` wrappers with `CnIndexPage`.
+
+The ADR-002 question (RPC-style POST on existing resources) is an ADR
+refinement, not an app change — no openspec change here; raise it on
+`hydra/openspec/architecture/adr-002-api.md` when it's next edited.
