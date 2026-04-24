@@ -3,8 +3,9 @@
   - SPDX-License-Identifier: EUPL-1.2
   -->
 <script setup lang="ts">
-import { NcAppContent, NcContent, NcDialog } from '@conduction/nextcloud-vue'
+import axios from '@nextcloud/axios'
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
+import { NcAppContent, NcContent, NcDialog } from '@conduction/nextcloud-vue'
 import { computed, onMounted, ref, watch } from 'vue'
 
 const APP_ID = 'app_versions'
@@ -222,12 +223,7 @@ const withOcsJson = (path: string, query: Record<string, string | number | boole
 	return `${path}${separator}${params.toString()}`
 }
 
-const unwrapOcsResponse = async <T>(response: Response): Promise<T> => {
-	if (!response.ok) {
-		// Keep payload-based failures parseable for callers that return useful data with 4xx.
-	}
-
-	const raw = await response.json()
+const unwrapOcsResponse = <T>(raw: unknown): T => {
 	if (typeof raw !== 'object' || raw === null) {
 		throw new Error('Unexpected response format')
 	}
@@ -237,7 +233,7 @@ const unwrapOcsResponse = async <T>(response: Response): Promise<T> => {
 		throw new Error(meta.message || 'OCS request failed')
 	}
 
-	return (raw.ocs?.data ?? raw) as T
+	return ((raw as { ocs?: { data?: T } }).ocs?.data ?? raw) as T
 }
 
 type OcsWrapped<T> = {
@@ -252,14 +248,14 @@ type OcsWrapped<T> = {
 	data?: T
 }
 
-const unwrapOcsResponseWithMeta = async <T>(response: Response): Promise<{ payload: T, metaMessage?: string }> => {
-	const raw = (await response.json()) as OcsWrapped<T>
+const unwrapOcsResponseWithMeta = <T>(raw: unknown): { payload: T, metaMessage?: string } => {
 	if (typeof raw !== 'object' || raw === null) {
 		throw new Error('Unexpected response format')
 	}
 
-	const data = (raw.ocs?.data ?? raw.data ?? raw) as T
-	const meta = raw.ocs?.meta
+	const typed = raw as OcsWrapped<T>
+	const data = (typed.ocs?.data ?? typed.data ?? typed) as T
+	const meta = typed.ocs?.meta
 	if (meta && (meta.status === 'failure' || (typeof meta.statuscode === 'number' && meta.statuscode >= 400))) {
 		return {
 			payload: data,
@@ -340,8 +336,11 @@ const installStatusLabel = computed(() => {
 const checkAdmin = async (): Promise<void> => {
 	errorMessage.value = ''
 	try {
-		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/admin-check')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
-		const payload = await unwrapOcsResponse<{ isAdmin: boolean }>(response)
+		const response = await axios.get(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/admin-check')), {
+			headers: { ...ocsHeaders, Accept: 'application/json' },
+			validateStatus: () => true,
+		})
+		const payload = unwrapOcsResponse<{ isAdmin: boolean }>(response.data)
 		isAdmin.value = Boolean(payload.isAdmin)
 	} catch {
 		isAdmin.value = false
@@ -358,8 +357,11 @@ const checkUpdateChannel = async (): Promise<void> => {
 	}
 
 	try {
-		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/update-channel')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
-		const payload = await unwrapOcsResponse<{ updateChannel: string }>(response)
+		const response = await axios.get(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/update-channel')), {
+			headers: { ...ocsHeaders, Accept: 'application/json' },
+			validateStatus: () => true,
+		})
+		const payload = unwrapOcsResponse<{ updateChannel: string }>(response.data)
 		updateChannel.value = payload.updateChannel || ''
 	} catch {
 		updateChannel.value = ''
@@ -372,8 +374,11 @@ const loadApps = async (): Promise<void> => {
 	}
 
 	try {
-		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/apps')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
-		const payload = await unwrapOcsResponse<{ apps: AppOption[] }>(response)
+		const response = await axios.get(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/apps')), {
+			headers: { ...ocsHeaders, Accept: 'application/json' },
+			validateStatus: () => true,
+		})
+		const payload = unwrapOcsResponse<{ apps: AppOption[] }>(response.data)
 		apps.value = payload.apps || []
 	} catch (error) {
 		errorMessage.value = error instanceof Error ? error.message : 'Could not fetch app list.'
@@ -413,14 +418,17 @@ const checkVersions = async (preserveInstallResult = false): Promise<void> => {
 
 		try {
 			const url = withOcsJson(`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(appId)}/versions`)
-			const response = await fetch(apiUrl(url), { headers: { ...ocsHeaders, Accept: 'application/json' } })
-		const payload = await unwrapOcsResponse<{
+			const response = await axios.get(apiUrl(url), {
+				headers: { ...ocsHeaders, Accept: 'application/json' },
+				validateStatus: () => true,
+			})
+		const payload = unwrapOcsResponse<{
 			availableVersions?: AppVersion[]
 			versions?: AppVersion[]
 			installedVersion: string | null
 			source?: string
 			error?: string
-		}>(response)
+		}>(response.data)
 		versions.value = payload.availableVersions || payload.versions || []
 		installedVersion.value = payload.installedVersion || ''
 		availableSource.value = payload.source || ''
@@ -850,18 +858,19 @@ const endpoint = withOcsJson(
 		targetVersion: selectedVersionValue,
 	}
 )
-		const response = await fetch(apiUrl(endpoint), {
-			method: 'POST',
-			headers: {
-				...ocsHeaders,
-				Accept: 'application/json',
-				'Content-Type': 'application/json',
+		const response = await axios.post(
+			apiUrl(endpoint),
+			{ version: selectedVersionValue },
+			{
+				headers: {
+					...ocsHeaders,
+					Accept: 'application/json',
+					'Content-Type': 'application/json',
+				},
+				validateStatus: () => true,
 			},
-			body: JSON.stringify({
-				version: selectedVersionValue,
-			}),
-		})
-		const { payload, metaMessage } = await unwrapOcsResponseWithMeta<{
+		)
+		const { payload, metaMessage } = unwrapOcsResponseWithMeta<{
 			appId: string
 			toVersion: string
 			fromVersion?: string
@@ -871,7 +880,7 @@ const endpoint = withOcsJson(
 			dryRun?: boolean
 			installStatus?: string
 			debug?: unknown
-		}>(response)
+		}>(response.data)
 		const result = normalizeInstallResult(payload)
 		const requestedFrom = installRequestFromVersion.value
 		const requestedTo = installRequestToVersion.value
