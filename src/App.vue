@@ -3,9 +3,7 @@
   - SPDX-License-Identifier: EUPL-1.2
   -->
 <script setup lang="ts">
-import NcAppContent from '@nextcloud/vue/components/NcAppContent'
-import NcContent from '@nextcloud/vue/components/NcContent'
-import NcDialog from '@nextcloud/vue/components/NcDialog'
+import { NcAppContent, NcContent, NcDialog } from '@conduction/nextcloud-vue'
 import { translate as t } from '@nextcloud/l10n'
 import { computed, onMounted, ref, watch } from 'vue'
 
