@@ -159,32 +159,10 @@ class ApiController extends OCSController {
 			], Http::STATUS_FORBIDDEN);
 		}
 
-		$requestedVersion = $this->request->getParam('targetVersion');
-		if (!is_string($requestedVersion)) {
-			$requestedVersion = '';
-		}
+		$requestedVersion = $this->resolveRequestedVersion($version);
+		$includeDebug = $this->readBinaryBool($this->request->getParam('debug', '0'), false);
 
-		$requestedVersion = trim($requestedVersion);
-		if ($requestedVersion === '') {
-			$requestedVersion = $this->request->getParam('version');
-			if (!is_string($requestedVersion)) {
-				$requestedVersion = '';
-			}
-
-			$requestedVersion = trim($requestedVersion);
-			if ($requestedVersion === '') {
-				$requestedVersion = $version;
-			}
-		}
-
-		$rawDebug = $this->request->getParam('debug', '0');
-		$includeDebug = $this->readBinaryBool($rawDebug, false);
-
-		$result = $this->installerService->installAppVersion(
-			$appId,
-			$requestedVersion,
-			$includeDebug
-		);
+		$result = $this->installerService->installAppVersion($appId, $requestedVersion, $includeDebug);
 		$result['payload']['requestedVersion'] = $requestedVersion;
 		$result['payload']['routeVersion'] = $version;
 
@@ -192,6 +170,28 @@ class ApiController extends OCSController {
 			$result['payload'] ?? [],
 			$result['statusCode'] ?? Http::STATUS_INTERNAL_SERVER_ERROR
 		);
+	}
+
+	/**
+	 * Resolves the version to install from the request body, falling back to
+	 * the URL parameter when none is provided.
+	 *
+	 * Preference order: `targetVersion` body param → `version` body param →
+	 * `$routeVersion` from the URL. Empty / non-string values at any tier
+	 * fall through to the next.
+	 *
+	 * @param string $routeVersion Version extracted from the URL path.
+	 * @return string Non-empty version string (may equal $routeVersion).
+	 */
+	private function resolveRequestedVersion(string $routeVersion): string {
+		foreach (['targetVersion', 'version'] as $field) {
+			$value = $this->request->getParam($field);
+			if (is_string($value) && trim($value) !== '') {
+				return trim($value);
+			}
+		}
+
+		return $routeVersion;
 	}
 
 	/**
