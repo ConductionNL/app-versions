@@ -28,16 +28,26 @@ use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\TemplateResponse;
 
 /**
+ * Renders the admin SPA container template. All interactive work happens
+ * client-side via the Vue app mounted into `#app_versions`.
+ *
  * @psalm-suppress UnusedClass
  */
-class PageController extends Controller {
+class PageController extends Controller
+{
+	/**
+	 * Renders the admin UI shell.
+	 *
+	 * @return TemplateResponse
+	 */
 	#[NoCSRFRequired]
 	#[NoAdminRequired]
 	#[OpenAPI(OpenAPI::SCOPE_IGNORE)]
-	public function index(): TemplateResponse {
+	public function index(): TemplateResponse
+	{
 		return new TemplateResponse(
 			Application::APP_ID,
 			'index',
 		);
-	}
-}
+	}//end index()
+}//end class
