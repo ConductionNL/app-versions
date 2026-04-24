@@ -1,0 +1,91 @@
+{
+    "translations": {
+        "App Versions": "App Versions",
+        "Install": "Install",
+        "Update": "Update",
+        "Degrade": "Degrade",
+        "Select an app from store": "Select an app from store",
+        "Loading…": "Loading…",
+        "Dry run": "Dry run",
+        "Failed": "Failed",
+        "Done": "Done",
+        "Could not verify admin permissions.": "Could not verify admin permissions.",
+        "Safe mode is enabled. Disable it to downgrade.": "Safe mode is enabled. Disable it to downgrade.",
+        "Install completed.": "Install completed.",
+        "App downgraded.": "App downgraded.",
+        "Cancel": "Cancel",
+        "Downgrade": "Downgrade",
+        "Confirm downgrade": "Confirm downgrade",
+        "Downgrade info:": "Downgrade info:",
+        "Downgrading can break database schema assumptions if migrations were already applied in newer versions. Continue only if you are sure no incompatible schema changes are involved.": "Downgrading can break database schema assumptions if migrations were already applied in newer versions. Continue only if you are sure no incompatible schema changes are involved.",
+        "Update channel:": "Update channel:",
+        "Safe mode (block downgrades and respects update channel)": "Safe mode (block downgrades and respects update channel)",
+        "Enable install dry-run (show debug output)": "Enable install dry-run (show debug output)",
+        "Pick an installed App": "Pick an installed App",
+        "Hide filters": "Hide filters",
+        "Show filters": "Show filters",
+        "Core apps": "Core apps",
+        "Show core apps": "Show core apps",
+        "Hide core apps": "Hide core apps",
+        "Search apps": "Search apps",
+        "CORE": "CORE",
+        "Choose app": "Choose app",
+        "No apps match your filter.": "No apps match your filter.",
+        "Selected app": "Selected app",
+        "Choose another app": "Choose another app",
+        "Current installed": "Current installed",
+        "Selected version": "Selected version",
+        "Downgrade path detected.": "Downgrade path detected.",
+        "Filter versions": "Filter versions",
+        "Select": "Select",
+        "Selected": "Selected",
+        "Warning! Downgrading can result in breaking the database if earlier updates or migrations added database columns. Only do this when you can fix the database or are sure no migrations have been executed since the version you downgrade to!": "Warning! Downgrading can result in breaking the database if earlier updates or migrations added database columns. Only do this when you can fix the database or are sure no migrations have been executed since the version you downgrade to!",
+        "Installing…": "Installing…",
+        "Pick other": "Pick other",
+        "No versions match your filter.": "No versions match your filter.",
+        "Versions source:": "Versions source:",
+        "No versions available for this app.": "No versions available for this app.",
+        "Install result": "Install result",
+        "App": "App",
+        "Transition": "Transition",
+        "N/A": "N/A",
+        "Mode": "Mode",
+        "Dry-run (no write)": "Dry-run (no write)",
+        "Dry-run": "Dry-run",
+        "Live install": "Live install",
+        "Result": "Result",
+        "No details": "No details",
+        "View details": "View details",
+        "Install debug (%n step)": {
+            "plurals": [
+                "Install debug (%n step)",
+                "Install debug (%n steps)"
+            ]
+        },
+        "Upgrade stays within major/minor and changes %n patch version step.": {
+            "plurals": [
+                "Upgrade stays within major/minor and changes %n patch version step.",
+                "Upgrade stays within major/minor and changes %n patch version steps."
+            ]
+        },
+        "Downgrade stays within major/minor and changes %n patch version step.": {
+            "plurals": [
+                "Downgrade stays within major/minor and changes %n patch version step.",
+                "Downgrade stays within major/minor and changes %n patch version steps."
+            ]
+        },
+        "Upgrade crosses {major} major and %n minor version step.": {
+            "plurals": [
+                "Upgrade crosses {major} major and %n minor version step.",
+                "Upgrade crosses {major} major and %n minor version steps."
+            ]
+        },
+        "Downgrade crosses {major} major and %n minor version step.": {
+            "plurals": [
+                "Downgrade crosses {major} major and %n minor version step.",
+                "Downgrade crosses {major} major and %n minor version steps."
+            ]
+        }
+    },
+    "pluralForm": "nplurals=2; plural=(n != 1);"
+}

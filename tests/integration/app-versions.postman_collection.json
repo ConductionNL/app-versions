@@ -1,0 +1,176 @@
+{
+	"info": {
+		"_postman_id": "app-versions-collection",
+		"name": "App Versions Integration Tests",
+		"description": "Integration test collection for the app_versions Nextcloud app. Covers the five read-side OCS endpoints consumed by the admin UI. Destructive install is intentionally not exercised here.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "basic",
+		"basic": [
+			{ "key": "username", "value": "{{admin_user}}", "type": "string" },
+			{ "key": "password", "value": "{{admin_password}}", "type": "string" }
+		]
+	},
+	"variable": [
+		{ "key": "base_url", "value": "http://localhost:8080", "type": "string" },
+		{ "key": "admin_user", "value": "admin", "type": "string" },
+		{ "key": "admin_password", "value": "admin", "type": "string" },
+		{ "key": "sample_app_id", "value": "files", "type": "string" }
+	],
+	"item": [
+		{
+			"name": "Health Check",
+			"item": [
+				{
+					"name": "Nextcloud status",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/status.php",
+						"description": "Verify Nextcloud is running before exercising the app."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Nextcloud is running', function () {",
+									"    pm.response.to.have.status(200);",
+									"    const json = pm.response.json();",
+									"    pm.expect(json.installed).to.be.true;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Admin Check",
+			"request": {
+				"method": "GET",
+				"url": "{{base_url}}/ocs/v2.php/apps/app_versions/api/admin-check",
+				"header": [
+					{ "key": "OCS-APIRequest", "value": "true" },
+					{ "key": "Accept", "value": "application/json" }
+				],
+				"description": "Admin user should receive isAdmin: true."
+			},
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+							"pm.test('OCS envelope', function () {",
+							"    const json = pm.response.json();",
+							"    pm.expect(json).to.have.nested.property('ocs.data.isAdmin');",
+							"    pm.expect(json.ocs.data.isAdmin).to.be.true;",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			]
+		},
+		{
+			"name": "Update Channel",
+			"request": {
+				"method": "GET",
+				"url": "{{base_url}}/ocs/v2.php/apps/app_versions/api/update-channel",
+				"header": [
+					{ "key": "OCS-APIRequest", "value": "true" },
+					{ "key": "Accept", "value": "application/json" }
+				],
+				"description": "Returns the configured Nextcloud update channel for admins."
+			},
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+							"pm.test('updateChannel is a non-empty string', function () {",
+							"    const json = pm.response.json();",
+							"    pm.expect(json).to.have.nested.property('ocs.data.updateChannel');",
+							"    pm.expect(json.ocs.data.updateChannel).to.be.a('string').and.not.empty;",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			]
+		},
+		{
+			"name": "List Installed Apps",
+			"request": {
+				"method": "GET",
+				"url": "{{base_url}}/ocs/v2.php/apps/app_versions/api/apps",
+				"header": [
+					{ "key": "OCS-APIRequest", "value": "true" },
+					{ "key": "Accept", "value": "application/json" }
+				],
+				"description": "Returns installed apps enriched with name/version/icon metadata."
+			},
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+							"pm.test('apps is an array with at least one entry', function () {",
+							"    const json = pm.response.json();",
+							"    pm.expect(json).to.have.nested.property('ocs.data.apps');",
+							"    pm.expect(json.ocs.data.apps).to.be.an('array').with.length.above(0);",
+							"});",
+							"pm.test('entries have required fields', function () {",
+							"    const apps = pm.response.json().ocs.data.apps;",
+							"    const first = apps[0];",
+							"    pm.expect(first).to.have.property('id').that.is.a('string');",
+							"    pm.expect(first).to.have.property('label').that.is.a('string');",
+							"    pm.expect(first).to.have.property('isCore').that.is.a('boolean');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			]
+		},
+		{
+			"name": "Fetch Available Versions",
+			"request": {
+				"method": "GET",
+				"url": "{{base_url}}/ocs/v2.php/apps/app_versions/api/app/{{sample_app_id}}/versions",
+				"header": [
+					{ "key": "OCS-APIRequest", "value": "true" },
+					{ "key": "Accept", "value": "application/json" }
+				],
+				"description": "Returns available versions for a stable app id. Uses `files` (always installed) as the sample."
+			},
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test('200 OK (app store reachable)', function () {",
+							"    // App store can be 503 from within CI with no egress — skip the hard status check in that case.",
+							"    pm.expect([200, 502, 503]).to.include(pm.response.code);",
+							"});",
+							"if (pm.response.code === 200) {",
+							"    pm.test('payload shape for a reachable store', function () {",
+							"        const data = pm.response.json().ocs.data;",
+							"        pm.expect(data).to.have.property('installedVersion');",
+							"        pm.expect(data).to.have.property('source').that.is.a('string');",
+							"        pm.expect(data).to.have.property('versions').that.is.an('array');",
+							"    });",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			]
+		}
+	]
+}

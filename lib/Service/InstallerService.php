@@ -1,5 +1,22 @@
 <?php
 
+/**
+ * AppVersions Installer Service
+ *
+ * Discovers installed apps, resolves available versions from the Nextcloud app
+ * store (scoped to the current update channel) and orchestrates the download
+ * + install of a selected release.
+ *
+ * @category Service
+ * @package  OCA\AppVersions\Service
+ *
+ * @author    Conduction Development Team <info@conduction.nl>
+ * @copyright 2026 Conduction B.V.
+ * @license   EUPL-1.2 https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12
+ *
+ * @link https://conduction.nl
+ */
+
 declare(strict_types=1);
 
 namespace OCA\AppVersions\Service;
@@ -11,14 +28,20 @@ use OCP\AppFramework\Http;
 use OCP\Http\Client\IClientService;
 use OCP\IConfig;
 
-class InstallerService {
+/**
+ * Discovery + install-orchestration service for the admin picker. All
+ * Nextcloud touchpoints go through injected OCP interfaces so the behaviour
+ * is testable without a live server.
+ */
+class InstallerService
+{
 	/**
-	 * Stores dependencies required for app discovery, metadata fetching and install flow.
+	 * Constructor.
 	 *
-	 * @param IAppManager $appManager
-	 * @param IConfig $config
-	 * @param IClientService $clientService
-	 * @param SelectedReleaseInstallerService $releaseInstaller
+	 * @param IAppManager                     $appManager       Resolves installed-app metadata.
+	 * @param IConfig                         $config           Reads the Nextcloud platform config.
+	 * @param IClientService                  $clientService    Builds HTTP clients for store calls.
+	 * @param SelectedReleaseInstallerService $releaseInstaller Performs the actual release install.
 	 */
 	public function __construct(
 		private IAppManager $appManager,
@@ -26,44 +49,41 @@ class InstallerService {
 		private IClientService $clientService,
 		private SelectedReleaseInstallerService $releaseInstaller,
 	) {
-	}
+	}//end __construct()
 
 	/**
 	 * Returns installed apps enriched with metadata for frontend cards.
 	 *
 	 * @return array<int, array{id:string,label:string,description:string,summary:string,preview:string,isCore:bool}>
+	 *
+	 * @spec openspec/specs/version-management/spec.md#requirement-list-installed-apps
 	 */
-	public function getInstalledApps(): array {
+	public function getInstalledApps(): array
+	{
 		$installedApps = array_values(array_filter(
 			$this->appManager->getInstalledApps(),
 			fn (string $appId): bool => !$this->isSelfManagedApp($appId)
 		));
 		sort($installedApps);
 		$alwaysEnabledApps = $this->appManager->getAlwaysEnabledApps();
-		$appList = [];
-		foreach ((new \OC_App())->listAllApps() as $app) {
-			if (!isset($app['id']) || !is_string($app['id'])) {
-				continue;
-			}
-
-			$appList[$app['id']] = $app;
-		}
 
 		return array_map(
-			static function(string $appId) use ($appList, $alwaysEnabledApps): array {
-				$app = $appList[$appId] ?? [];
-				$name = isset($app['name']) && is_string($app['name']) && trim($app['name']) !== ''
-					? trim($app['name'])
+			function (string $appId) use ($alwaysEnabledApps): array {
+				$info = ($this->appManager->getAppInfo($appId) ?? []);
+				$name = (isset($info['name']) === true && is_string($info['name']) === true && trim($info['name']) !== '')
+					? trim($info['name'])
 					: $appId;
-				$description = isset($app['description']) && is_string($app['description'])
-					? trim($app['description'])
+				$description = (isset($info['description']) === true && is_string($info['description']) === true)
+					? trim($info['description'])
 					: '';
-				$summary = isset($app['summary']) && is_string($app['summary'])
-					? trim($app['summary'])
+				$summary = (isset($info['summary']) === true && is_string($info['summary']) === true)
+					? trim($info['summary'])
 					: '';
-				$preview = isset($app['preview']) && is_string($app['preview'])
-					? trim($app['preview'])
-					: '';
+				// Per-app preview URL is rebuilt by the frontend from the app
+				// id (the picker falls back to a letter tile when no preview
+				// is available) — OCP's getAppInfo() does not expose the
+				// enriched preview URL that \OC_App::listAllApps() injects.
+				$preview = '';
 
 				return [
 					'id' => $appId,
@@ -76,15 +96,19 @@ class InstallerService {
 			},
 			$installedApps
 		);
-	}
+	}//end getInstalledApps()
 
 	/**
 	 * Returns installed version and available versions for an app id.
 	 *
-	 * @param string $appId
+	 * @param string $appId The Nextcloud app id to resolve versions for.
+	 *
 	 * @return array{installedVersion: ?string, availableVersions: array<int, array{version:string}>, versions: array<int, array{version:string}>, source: string, statusCode: int, hasError: bool}
+	 *
+	 * @spec openspec/specs/version-management/spec.md#requirement-fetch-available-versions
 	 */
-	public function getAppVersions(string $appId): array {
+	public function getAppVersions(string $appId): array
+	{
 		$appId = trim($appId);
 		if ($appId === '') {
 			return [
@@ -96,13 +120,14 @@ class InstallerService {
 				'hasError' => true,
 			];
 		}
-		if ($this->isSelfManagedApp($appId) || $this->isCoreProtectedApp($appId)) {
+
+		if ($this->isSelfManagedApp($appId) === true || $this->isCoreProtectedApp($appId) === true) {
 			return [
 				'installedVersion' => null,
 				'availableVersions' => [],
 				'versions' => [],
 				'source' => 'none',
-				'error' => $this->isCoreProtectedApp($appId)
+				'error' => ($this->isCoreProtectedApp($appId) === true)
 					? 'This core app cannot be managed from App Versions.'
 					: 'This app cannot be managed from App Versions.',
 				'statusCode' => Http::STATUS_FORBIDDEN,
@@ -123,14 +148,14 @@ class InstallerService {
 		$installedVersion = null;
 		try {
 			$installed = $this->appManager->getAppVersion($appId);
-			if (is_string($installed) && $installed !== '') {
+			if (is_string($installed) === true && $installed !== '') {
 				$installedVersion = $installed;
 			}
 		} catch (Exception) {
 			$installedVersion = null;
 		}
 
-		if (!empty($availableVersions)) {
+		if (empty($availableVersions) === false) {
 			return [
 				'installedVersion' => $installedVersion,
 				'availableVersions' => $availableVersions,
@@ -144,23 +169,27 @@ class InstallerService {
 		return [
 			'installedVersion' => $installedVersion,
 			'error' => 'No available versions found.',
-			'source' => $installedVersion !== null ? 'installed' : 'none',
+			'source' => ($installedVersion !== null) ? 'installed' : 'none',
 			'availableVersions' => [],
 			'versions' => [],
 			'statusCode' => Http::STATUS_OK,
 			'hasError' => true,
 		];
-	}
+	}//end getAppVersions()
 
 	/**
 	 * Installs the selected release version.
 	 *
-	 * @param string $appId
-	 * @param string $targetVersion
-	 * @param bool $includeDebug
+	 * @param string $appId         App id to install.
+	 * @param string $targetVersion Specific version to install.
+	 * @param bool   $includeDebug  When true, runs in dry-run mode and returns per-step debug output.
+	 *
 	 * @return array{statusCode:int,payload:array}
+	 *
+	 * @spec openspec/specs/version-management/spec.md#requirement-install-specific-version
 	 */
-	public function installAppVersion(string $appId, string $targetVersion, bool $includeDebug): array {
+	public function installAppVersion(string $appId, string $targetVersion, bool $includeDebug): array
+	{
 		$appId = trim($appId);
 		$targetVersion = trim($targetVersion);
 		if ($appId === '' || $targetVersion === '') {
@@ -171,13 +200,14 @@ class InstallerService {
 				],
 			];
 		}
-		if ($this->isSelfManagedApp($appId) || $this->isCoreProtectedApp($appId)) {
+
+		if ($this->isSelfManagedApp($appId) === true || $this->isCoreProtectedApp($appId) === true) {
 			return [
 				'statusCode' => Http::STATUS_FORBIDDEN,
 				'payload' => [
 					'appId' => $appId,
 					'toVersion' => $targetVersion,
-					'message' => $this->isCoreProtectedApp($appId)
+					'message' => ($this->isCoreProtectedApp($appId) === true)
 						? 'This core app cannot be installed or updated from App Versions.'
 						: 'This app cannot be installed or updated from App Versions.',
 				],
@@ -198,7 +228,7 @@ class InstallerService {
 				'toVersion' => $targetVersion,
 				'message' => 'App already has this version installed.',
 			];
-			if ($includeDebug) {
+			if ($includeDebug === true) {
 				$payload['debug'] = [];
 			}
 
@@ -215,7 +245,7 @@ class InstallerService {
 				'toVersion' => $targetVersion,
 				'message' => 'Requested version not found in app store metadata.',
 			];
-			if ($includeDebug) {
+			if ($includeDebug === true) {
 				$payload['debug'] = [];
 			}
 
@@ -231,15 +261,15 @@ class InstallerService {
 		$dryRun = $includeDebug;
 
 		try {
-			if (!$this->config->getSystemValueBool('maintenance', false)) {
+			if ($this->config->getSystemValueBool('maintenance', false) === false) {
 				$maintenanceWasSet = true;
 				$this->config->setSystemValue('maintenance', true);
 			}
 
 			$result = $this->releaseInstaller->installFromSelectedRelease($appId, $release, $dryRun);
-			$debug = $result['debug'] ?? [];
-			$installStatus = $result['status'] ?? 'unknown';
-			if (!$dryRun) {
+			$debug = ($result['debug'] ?? []);
+			$installStatus = ($result['status'] ?? 'unknown');
+			if ($dryRun === false) {
 				$this->appManager->clearAppsCache();
 			}
 
@@ -248,7 +278,7 @@ class InstallerService {
 			try {
 				$appPath = $this->appManager->getAppPath($appId, true);
 				$appInfo = $this->appManager->getAppInfoByPath($appPath . '/appinfo/info.xml');
-				if (is_array($appInfo) && isset($appInfo['version']) && is_string($appInfo['version'])) {
+				if (is_array($appInfo) === true && isset($appInfo['version']) === true && is_string($appInfo['version']) === true) {
 					$appVersion = $appInfo['version'];
 				}
 			} catch (Exception) {
@@ -260,7 +290,7 @@ class InstallerService {
 				$appVersion = $this->appManager->getAppVersion($appId, false);
 			}
 
-			$configuredVersion = (string) $this->config->getAppValue($appId, 'installed_version', $appVersion ?? '');
+			$configuredVersion = (string) $this->config->getAppValue($appId, 'installed_version', ($appVersion ?? ''));
 			if ($configuredVersion !== '') {
 				$appVersion = $configuredVersion;
 			}
@@ -268,7 +298,7 @@ class InstallerService {
 			if ($appVersion !== $targetVersion) {
 				$payload = [
 					'appId' => $appId,
-					'fromVersion' => $installedVersion === '' ? null : $installedVersion,
+					'fromVersion' => ($installedVersion === '') ? null : $installedVersion,
 					'toVersion' => $targetVersion,
 					'installedVersion' => $appVersion,
 					'updateType' => ($installedVersion === '' ? 'install' : ($appVersion !== $installedVersion
@@ -278,7 +308,7 @@ class InstallerService {
 					'dryRun' => $dryRun,
 					'installStatus' => $installStatus,
 				];
-				if ($includeDebug) {
+				if ($includeDebug === true) {
 					$payload['debug'] = $debug;
 				}
 
@@ -290,7 +320,7 @@ class InstallerService {
 
 			$payload = [
 				'appId' => $appId,
-				'fromVersion' => $installedVersion === '' ? null : $installedVersion,
+				'fromVersion' => ($installedVersion === '') ? null : $installedVersion,
 				'toVersion' => $dryRun ? $targetVersion : $appVersion,
 				'installedVersion' => $appVersion,
 				'updateType' => $dryRun ? 'dry-run' : ($installedVersion === '' ? 'install' : ($appVersion !== $installedVersion
@@ -304,7 +334,7 @@ class InstallerService {
 				'dryRun' => $dryRun,
 				'installStatus' => $installStatus,
 			];
-			if ($includeDebug) {
+			if ($includeDebug === true) {
 				$payload['debug'] = $debug;
 			}
 
@@ -315,12 +345,12 @@ class InstallerService {
 		} catch (Exception $e) {
 			$payload = [
 				'appId' => $appId,
-				'fromVersion' => $installedVersion === '' ? null : $installedVersion,
+				'fromVersion' => ($installedVersion === '') ? null : $installedVersion,
 				'toVersion' => $targetVersion,
 				'message' => $e->getMessage(),
 				'installStatus' => $installStatus,
 			];
-			if ($includeDebug) {
+			if ($includeDebug === true) {
 				$payload['debug'] = $this->releaseInstaller->getDebugLog();
 			}
 
@@ -329,53 +359,75 @@ class InstallerService {
 				'payload' => $payload,
 			];
 		} finally {
-			if ($maintenanceWasSet) {
+			if ($maintenanceWasSet === true) {
 				$this->config->setSystemValue('maintenance', false);
 			}
 		}
-	}
+	}//end installAppVersion()
 
-	private function isSelfManagedApp(string $appId): bool {
+	/**
+	 * Tests whether the given app id points at the app-versions app itself.
+	 *
+	 * @param string $appId App id to test.
+	 *
+	 * @return bool
+	 */
+	private function isSelfManagedApp(string $appId): bool
+	{
 		return trim($appId) === Application::APP_ID;
-	}
+	}//end isSelfManagedApp()
 
-	private function isCoreProtectedApp(string $appId): bool {
+	/**
+	 * Tests whether the given app id is part of Nextcloud's always-enabled
+	 * core apps list (must not be managed by this app).
+	 *
+	 * @param string $appId App id to test.
+	 *
+	 * @return bool
+	 */
+	private function isCoreProtectedApp(string $appId): bool
+	{
 		return in_array(trim($appId), $this->appManager->getAlwaysEnabledApps(), true);
-	}
+	}//end isCoreProtectedApp()
 
 	/**
 	 * Locates the release payload for the requested version.
 	 *
-	 * @param string $appId
-	 * @param string $version
+	 * @param string $appId   App id to look up.
+	 * @param string $version Target release version.
+	 *
 	 * @return array<string, mixed>|null
 	 */
-	private function findReleaseByVersion(string $appId, string $version): ?array {
+	private function findReleaseByVersion(string $appId, string $version): ?array
+	{
 		$appPayload = $this->getAppPayloadFromStore($appId);
-		if (!is_array($appPayload) || !isset($appPayload['releases']) || !is_array($appPayload['releases'])) {
+		if (is_array($appPayload) === false || isset($appPayload['releases']) === false || is_array($appPayload['releases']) === false) {
 			return null;
 		}
 
 		foreach ($appPayload['releases'] as $release) {
-			if (!is_array($release)) {
+			if (is_array($release) === false) {
 				continue;
 			}
+
 			if (($release['version'] ?? null) === $version) {
-				$release['certificate'] = $appPayload['certificate'] ?? null;
+				$release['certificate'] = ($appPayload['certificate'] ?? null);
 				return $release;
 			}
 		}
 
 		return null;
-	}
+	}//end findReleaseByVersion()
 
 	/**
 	 * Fetches full app payload from app store endpoints.
 	 *
-	 * @param string $appId
+	 * @param string $appId App id to look up.
+	 *
 	 * @return array<string, mixed>|null
 	 */
-	private function getAppPayloadFromStore(string $appId): ?array {
+	private function getAppPayloadFromStore(string $appId): ?array
+	{
 		$endpoints = ['https://garm3.nextcloud.com/api/v1/apps.json'];
 		$maxPages = 20;
 		$client = $this->clientService->newClient();
@@ -396,16 +448,16 @@ class InstallerService {
 					}
 
 					$decoded = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
-					if (!is_array($decoded)) {
+					if (is_array($decoded) === false) {
 						return null;
 					}
 
 					$appPayload = $this->extractAppPayloadFromPlatform($decoded, $appId);
-					if (is_array($appPayload)) {
+					if (is_array($appPayload) === true) {
 						return $appPayload;
 					}
 
-					if (!$this->hasPossibleNextPage($decoded, $page)) {
+					if ($this->hasPossibleNextPage($decoded, $page) === false) {
 						break;
 					}
 				} catch (Exception) {
@@ -432,16 +484,16 @@ class InstallerService {
 				}
 
 				$decoded = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
-				if (!is_array($decoded)) {
+				if (is_array($decoded) === false) {
 					continue;
 				}
 
 				$appPayload = $this->extractAppPayloadFromPlatform($decoded, $appId);
-				if (is_array($appPayload)) {
+				if (is_array($appPayload) === true) {
 					return $appPayload;
 				}
 
-				if (!$this->hasPossibleNextPage($decoded, $page)) {
+				if ($this->hasPossibleNextPage($decoded, $page) === false) {
 					break;
 				}
 			} catch (Exception) {
@@ -450,15 +502,17 @@ class InstallerService {
 		}
 
 		return null;
-	}
+	}//end getAppPayloadFromStore()
 
 	/**
 	 * Fetches available release versions from app-store payloads.
 	 *
-	 * @param string $appId
+	 * @param string $appId App id to look up.
+	 *
 	 * @return array{0: array<int, array{version: string}>, 1: string}
 	 */
-	private function tryAppStoreVersions(string $appId): array {
+	private function tryAppStoreVersions(string $appId): array
+	{
 		$endpoints = ['https://garm3.nextcloud.com/api/v1/apps.json'];
 		$maxPages = 20;
 		$client = $this->clientService->newClient();
@@ -480,21 +534,21 @@ class InstallerService {
 					}
 
 					$decoded = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
-					if (!is_array($decoded)) {
+					if (is_array($decoded) === false) {
 						break;
 					}
 
-						$versions = $this->extractVersionsFromFilteredPayload($decoded, $appId);
+					$versions = $this->extractVersionsFromFilteredPayload($decoded, $appId);
 
-					if ($this->hasAppInPayload($decoded, $appId)) {
-						if (!empty($versions)) {
+					if ($this->hasAppInPayload($decoded, $appId) === true) {
+						if (empty($versions) === false) {
 							return [$versions, 'app-store'];
 						}
 
 						return [[], 'app-store'];
 					}
 
-					if (!$this->hasPossibleNextPage($decoded, $page)) {
+					if ($this->hasPossibleNextPage($decoded, $page) === false) {
 						break;
 					}
 				} catch (Exception) {
@@ -522,17 +576,17 @@ class InstallerService {
 				}
 
 				$decoded = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
-				if (!is_array($decoded)) {
+				if (is_array($decoded) === false) {
 					continue;
 				}
 
-				if (str_contains($endpoint, '/platform/')) {
-						$versions = $this->extractVersionsFromPlatformPayload($decoded, $appId);
+				if (str_contains($endpoint, '/platform/') === true) {
+					$versions = $this->extractVersionsFromPlatformPayload($decoded, $appId);
 				} else {
 					$versions = $this->normalizeVersions($decoded);
 				}
 
-				if (!empty($versions)) {
+				if (empty($versions) === false) {
 					return [$versions, 'app-store'];
 				}
 			} catch (Exception) {
@@ -541,130 +595,141 @@ class InstallerService {
 		}
 
 		return [[], 'app-store'];
-	}
+	}//end tryAppStoreVersions()
 
 	/**
 	 * Evaluates whether a payload has a next page to continue polling.
 	 *
-	 * @param array<mixed> $payload
-	 * @param int $currentPage
+	 * @param array<mixed> $payload     Raw decoded payload.
+	 * @param int          $currentPage Page index that produced this payload.
+	 *
 	 * @return bool
 	 */
-	private function hasPossibleNextPage(array $payload, int $currentPage): bool {
-		if (!is_array($payload)) {
+	private function hasPossibleNextPage(array $payload, int $currentPage): bool
+	{
+		if (is_array($payload) === false) {
 			return false;
 		}
 
-		if (isset($payload['page'])) {
+		if (isset($payload['page']) === true) {
 			$current = (int) $payload['page'];
 			if ($current > 0 && $current !== $currentPage) {
 				return false;
 			}
 		}
 
-		if (isset($payload['pages'], $payload['pages']['next']) && is_bool($payload['pages']['next'])) {
+		if (isset($payload['pages'], $payload['pages']['next']) === true && is_bool($payload['pages']['next']) === true) {
 			return $payload['pages']['next'];
 		}
 
-		if (isset($payload['pagination']['next_page'], $payload['pagination']['next_page'])) {
+		if (isset($payload['pagination']['next_page'], $payload['pagination']['next_page']) === true) {
 			return $payload['pagination']['next_page'] !== null;
 		}
 
-		if (isset($payload['nextPage']) && is_string($payload['nextPage'])) {
+		if (isset($payload['nextPage']) === true && is_string($payload['nextPage']) === true) {
 			return $payload['nextPage'] !== '';
 		}
 
-		if (is_array($payload['apps'] ?? null)) {
+		if (is_array($payload['apps'] ?? null) === true) {
 			return count($payload['apps']) > 0;
 		}
 
-		if (is_array($payload['data'] ?? null)) {
+		if (is_array($payload['data'] ?? null) === true) {
 			return count($payload['data']) > 0;
 		}
 
 		return false;
-	}
+	}//end hasPossibleNextPage()
 
 	/**
 	 * Checks whether the given app id appears in a store payload.
 	 *
-	 * @param array<mixed> $payload
-	 * @param string $appId
+	 * @param array<mixed> $payload Decoded store payload.
+	 * @param string       $appId   App id to find.
+	 *
 	 * @return bool
 	 */
-	private function hasAppInPayload(array $payload, string $appId): bool {
+	private function hasAppInPayload(array $payload, string $appId): bool
+	{
 		return $this->extractAppPayloadFromPlatform($payload, $appId) !== null;
-	}
+	}//end hasAppInPayload()
 
 	/**
 	 * Returns major.minor.0 server version for platform-specific requests.
 	 *
 	 * @return string
 	 */
-	private function getPlatformVersion(): string {
+	private function getPlatformVersion(): string
+	{
 		$version = $this->config->getSystemValueString('version');
 		$parts = explode('.', $version);
-		$major = $parts[0] ?? '0';
-		$minor = $parts[1] ?? '0';
+		$major = ($parts[0] ?? '0');
+		$minor = ($parts[1] ?? '0');
 
-		if (!ctype_digit((string) $major) || !ctype_digit((string) $minor)) {
+		if (ctype_digit((string) $major) === false || ctype_digit((string) $minor) === false) {
 			return '0.0.0';
 		}
 
 		return $major . '.' . $minor . '.0';
-	}
+	}//end getPlatformVersion()
 
 	/**
 	 * Extracts release versions from platform endpoint payload.
 	 *
-	 * @param array<mixed> $payload
-	 * @param string $appId
+	 * @param array<mixed> $payload Decoded store payload.
+	 * @param string       $appId   App id to find.
+	 *
 	 * @return array<int, array{version: string}>
 	 */
-	private function extractVersionsFromPlatformPayload(array $payload, string $appId): array {
+	private function extractVersionsFromPlatformPayload(array $payload, string $appId): array
+	{
 		$appPayload = $this->extractAppPayloadFromPlatform($payload, $appId);
-		if ($appPayload === null || !isset($appPayload['releases']) || !is_array($appPayload['releases'])) {
+		if ($appPayload === null || isset($appPayload['releases']) === false || is_array($appPayload['releases']) === false) {
 			return [];
 		}
 
 		return $this->normalizeVersions($appPayload['releases']);
-	}
+	}//end extractVersionsFromPlatformPayload()
 
 	/**
 	 * Extracts release versions from filtered endpoint payload.
 	 *
-	 * @param array<mixed> $payload
-	 * @param string $appId
+	 * @param array<mixed> $payload Decoded store payload.
+	 * @param string       $appId   App id to find.
+	 *
 	 * @return array<int, array{version: string}>
 	 */
-	private function extractVersionsFromFilteredPayload(array $payload, string $appId): array {
+	private function extractVersionsFromFilteredPayload(array $payload, string $appId): array
+	{
 		$appPayload = $this->extractAppPayloadFromPlatform($payload, $appId);
-		if (is_array($appPayload) && isset($appPayload['releases']) && is_array($appPayload['releases'])) {
+		if (is_array($appPayload) === true && isset($appPayload['releases']) === true && is_array($appPayload['releases']) === true) {
 			return $this->normalizeVersions($appPayload['releases']);
 		}
 
 		return [];
-	}
+	}//end extractVersionsFromFilteredPayload()
 
 	/**
 	 * Extracts app payload by id from known payload shapes.
 	 *
-	 * @param array<mixed> $payload
-	 * @param string $appId
+	 * @param array<mixed> $payload Decoded store payload.
+	 * @param string       $appId   App id to find.
+	 *
 	 * @return array<string, mixed>|null
 	 */
-	private function extractAppPayloadFromPlatform(array $payload, string $appId): ?array {
-		if (is_array($payload['data'] ?? null) && array_is_list($payload['data'])) {
+	private function extractAppPayloadFromPlatform(array $payload, string $appId): ?array
+	{
+		if (is_array($payload['data'] ?? null) === true && array_is_list($payload['data']) === true) {
 			foreach ($payload['data'] as $entry) {
-				if (is_array($entry) && ($entry['id'] ?? null) === $appId) {
+				if (is_array($entry) === true && ($entry['id'] ?? null) === $appId) {
 					return $entry;
 				}
 			}
 		}
 
-		if (array_is_list($payload)) {
+		if (array_is_list($payload) === true) {
 			foreach ($payload as $entry) {
-				if (is_array($entry) && ($entry['id'] ?? null) === $appId) {
+				if (is_array($entry) === true && ($entry['id'] ?? null) === $appId) {
 					return $entry;
 				}
 			}
@@ -672,33 +737,36 @@ class InstallerService {
 			return null;
 		}
 
-		if (!is_array($payload['apps'] ?? null)) {
+		if (is_array($payload['apps'] ?? null) === false) {
 			return null;
 		}
 
 		foreach ($payload['apps'] as $entry) {
-			if (!is_array($entry)) {
+			if (is_array($entry) === false) {
 				continue;
 			}
+
 			if (($entry['id'] ?? null) === $appId) {
 				return $entry;
 			}
 		}
 
 		return null;
-	}
+	}//end extractAppPayloadFromPlatform()
 
 	/**
 	 * Normalizes version payloads into unique version labels.
 	 *
-	 * @param array<mixed> $payload
+	 * @param array<mixed> $payload Version list payload.
+	 *
 	 * @return array<int, array{version: string}>
 	 */
-	private function normalizeVersions(array $payload): array {
+	private function normalizeVersions(array $payload): array
+	{
 		$releasePayload = [];
-		if (array_is_list($payload)) {
+		if (array_is_list($payload) === true) {
 			$releasePayload = $payload;
-		} elseif (array_key_exists('data', $payload) && is_array($payload['data'])) {
+		} elseif (array_key_exists('data', $payload) === true && is_array($payload['data']) === true) {
 			$releasePayload = $this->extractVersionPayload($payload['data']);
 		} else {
 			$releasePayload = $this->extractVersionPayload($payload);
@@ -706,17 +774,17 @@ class InstallerService {
 
 		$normalizedVersions = [];
 		foreach ($releasePayload as $release) {
-			if (is_string($release)) {
+			if (is_string($release) === true) {
 				$normalizedVersions[] = ['version' => $release];
 				continue;
 			}
 
-			if (!is_array($release)) {
+			if (is_array($release) === false) {
 				continue;
 			}
 
-			$version = $release['version'] ?? $release['ver'] ?? $release['name'] ?? $release['tag_name'] ?? null;
-			if (is_string($version) && $version !== '') {
+			$version = ($release['version'] ?? $release['ver'] ?? $release['name'] ?? $release['tag_name'] ?? null);
+			if (is_string($version) === true && $version !== '') {
 				$normalizedVersions[] = ['version' => $version];
 			}
 		}
@@ -727,35 +795,37 @@ class InstallerService {
 		}
 
 		$flattened = array_values(array_unique($flattened));
-		usort($flattened, static function(string $a, string $b): int {
+		usort($flattened, static function (string $a, string $b): int {
 			return version_compare($b, $a);
 		});
 
-		return array_map(static fn(string $version): array => ['version' => $version], $flattened);
-	}
+		return array_map(static fn (string $version): array => ['version' => $version], $flattened);
+	}//end normalizeVersions()
 
 	/**
 	 * Returns release list from nested payload structures.
 	 *
-	 * @param array<mixed> $payload
+	 * @param array<mixed> $payload Nested payload to probe for releases.
+	 *
 	 * @return array<int, mixed>
 	 */
-	private function extractVersionPayload(array $payload): array {
-		if (is_array($payload['releases'] ?? null)) {
+	private function extractVersionPayload(array $payload): array
+	{
+		if (is_array($payload['releases'] ?? null) === true) {
 			return $payload['releases'];
 		}
 
-		if (is_array($payload['apps'] ?? null) && is_array($payload['apps'][0] ?? null)) {
+		if (is_array($payload['apps'] ?? null) === true && is_array($payload['apps'][0] ?? null) === true) {
 			$firstApp = $payload['apps'][0];
-			if (is_array($firstApp['releases'] ?? null)) {
+			if (is_array($firstApp['releases'] ?? null) === true) {
 				return $firstApp['releases'];
 			}
 		}
 
-		if (is_array($payload['versions'] ?? null)) {
+		if (is_array($payload['versions'] ?? null) === true) {
 			return $payload['versions'];
 		}
 
 		return [];
-	}
-}
+	}//end extractVersionPayload()
+}//end class
