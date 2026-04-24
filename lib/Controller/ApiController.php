@@ -27,13 +27,34 @@ use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
 use OCP\AppFramework\OCSController;
-use OCP\ServerVersion;
 use OCP\IGroupManager;
+use OCP\IRequest;
+use OCP\IUserSession;
+use OCP\ServerVersion;
 
 /**
  * @psalm-suppress UnusedClass
  */
 class ApiController extends OCSController {
+
+	/**
+	 * @param string $appName
+	 * @param IRequest $request
+	 * @param InstallerService $installerService
+	 * @param IGroupManager $groupManager
+	 * @param IUserSession $userSession
+	 * @param ServerVersion $serverVersion
+	 */
+	public function __construct(
+		string $appName,
+		IRequest $request,
+		private readonly InstallerService $installerService,
+		private readonly IGroupManager $groupManager,
+		private readonly IUserSession $userSession,
+		private readonly ServerVersion $serverVersion,
+	) {
+		parent::__construct($appName, $request);
+	}
 
 	/**
 	 * Checks whether the currently signed in user is an admin.
@@ -67,7 +88,7 @@ class ApiController extends OCSController {
 		}
 
 		return new DataResponse([
-			'apps' => $this->getInstallerService()->getInstalledApps(),
+			'apps' => $this->installerService->getInstalledApps(),
 		]);
 	}
 
@@ -85,7 +106,7 @@ class ApiController extends OCSController {
 		}
 
 		return new DataResponse([
-			'updateChannel' => \OC::$server->get(ServerVersion::class)->getChannel(),
+			'updateChannel' => $this->serverVersion->getChannel(),
 		]);
 	}
 
@@ -103,7 +124,7 @@ class ApiController extends OCSController {
 			], Http::STATUS_FORBIDDEN);
 		}
 
-		$result = $this->getInstallerService()->getAppVersions($appId);
+		$result = $this->installerService->getAppVersions($appId);
 		$statusCode = $result['statusCode'] ?? Http::STATUS_OK;
 		unset($result['statusCode'], $result['hasError']);
 
@@ -147,7 +168,7 @@ class ApiController extends OCSController {
 		$rawDebug = $this->request->getParam('debug', '0');
 		$includeDebug = $this->readBinaryBool($rawDebug, false);
 
-		$result = $this->getInstallerService()->installAppVersion(
+		$result = $this->installerService->installAppVersion(
 			$appId,
 			$requestedVersion,
 			$includeDebug
@@ -198,20 +219,11 @@ class ApiController extends OCSController {
 	 * @return bool
 	 */
 	private function isAdmin(): bool {
-		$user = \OC::$server->getUserSession()->getUser();
+		$user = $this->userSession->getUser();
 		if ($user === null) {
 			return false;
 		}
 
-		return \OC::$server->get(IGroupManager::class)->isAdmin($user->getUID());
-	}
-
-	/**
-	 * Resolves installer service from container.
-	 *
-	 * @return InstallerService
-	 */
-	private function getInstallerService(): InstallerService {
-		return \OC::$server->get(InstallerService::class);
+		return $this->groupManager->isAdmin($user->getUID());
 	}
 }
