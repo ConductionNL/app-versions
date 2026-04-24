@@ -1,27 +1,76 @@
 <?xml version="1.0"?>
 <info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	  xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
-	<id>app_versions</id>
-	<name>App Versions</name>
-	<summary>Install any earlier or newer version of already installed Nextcloud apps</summary>
-	<description>App Versions gives Nextcloud administrators the ability to roll back apps to previous versions or install specific newer versions. Essential for debugging, testing compatibility, and recovering from broken updates.</description>
-	<version>1.0.0</version>
-	<licence>AGPL-3.0-or-later</licence>
-	<author mail="info@conduction.nl" homepage="https://conduction.nl">Conduction B.V.</author>
-	<namespace>AppVersions</namespace>
-	<category>tools</category>
-	<bugs>https://github.com/ConductionNL/app-versions/issues</bugs>
-	<repository>https://github.com/ConductionNL/app-versions</repository>
-	<dependencies>
-		<nextcloud min-version="31" max-version="33"/>
-	</dependencies>
-	<navigations>
-		<navigation>
-			<id>app_versions</id>
-			<name>App Versions</name>
-			<route>app_versions.page.index</route>
-			<icon>app.svg</icon>
-			<type>link</type>
-		</navigation>
-	</navigations>
+      xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
+    <id>app_versions</id>
+    <name lang="en">App Versions</name>
+    <name lang="nl">App-versies</name>
+    <summary lang="en">Install any earlier or newer version of already installed Nextcloud apps</summary>
+    <summary lang="nl">Installeer een oudere of nieuwere versie van reeds geïnstalleerde Nextcloud-apps</summary>
+    <description lang="en"><![CDATA[Roll back a broken update or pin a specific newer version of any installed Nextcloud app.
+
+**Key Features**
+
+- **Roll back** to a known-good earlier release when an update breaks compatibility or introduces regressions.
+- **Install a specific newer version** (beta, pre-stable) without changing the server's global update channel.
+- **Safe mode** (default on) blocks downgrades and refuses versions outside the current update channel.
+- **Dry-run mode** previews the full install pipeline — download, signature verification, extraction, migrations, repair steps — without writing anything to disk.
+- **Admin-only surface**: non-admin users never see the UI or the API.
+
+**Safety**
+
+Downgrading can corrupt the database if schema migrations from a newer version have already been applied. The UI surfaces an explicit downgrade warning and a confirmation dialog before any destructive operation.
+
+Free and open source under the EUPL-1.2 licence.
+
+**Support:** support@conduction.nl.
+    ]]></description>
+    <description lang="nl"><![CDATA[Draai een kapotte update terug of zet een specifieke nieuwere versie vast voor elke geïnstalleerde Nextcloud-app.
+
+**Belangrijkste functies**
+
+- **Rollback** naar een bekende werkende oudere versie wanneer een update de compatibiliteit breekt of regressies introduceert.
+- **Specifieke nieuwere versie installeren** (beta, pre-stable) zonder het globale update-kanaal van de server te wijzigen.
+- **Veilige modus** (standaard aan) blokkeert downgrades en weigert versies buiten het huidige update-kanaal.
+- **Proefrun** toont de volledige installatiepijplijn — download, handtekeningverificatie, extractie, migraties, repair-stappen — zonder iets naar schijf te schrijven.
+- **Alleen voor beheerders**: niet-beheerders zien de UI of de API nooit.
+
+**Veiligheid**
+
+Downgraden kan de database corrumperen als schema-migraties uit een nieuwere versie al zijn uitgevoerd. De UI toont expliciet een downgrade-waarschuwing en een bevestigingsdialoog voor elke destructieve operatie.
+
+Vrij en open source onder de EUPL-1.2-licentie.
+
+**Ondersteuning:** support@conduction.nl.
+    ]]></description>
+    <version>1.0.0</version>
+    <licence>agpl</licence>
+    <author mail="info@conduction.nl" homepage="https://www.conduction.nl/">Conduction B.V.</author>
+    <namespace>AppVersions</namespace>
+    <documentation>
+        <user>https://github.com/ConductionNL/app-versions/tree/main/docs/usage.md</user>
+        <admin>https://github.com/ConductionNL/app-versions/tree/main/docs/installation.md</admin>
+        <developer>https://github.com/ConductionNL/app-versions/tree/main/docs/architecture.md</developer>
+    </documentation>
+    <category>tools</category>
+    <website>https://github.com/ConductionNL/app-versions</website>
+    <discussion>https://github.com/ConductionNL/app-versions/discussions</discussion>
+    <bugs>https://github.com/ConductionNL/app-versions/issues</bugs>
+    <repository>https://github.com/ConductionNL/app-versions</repository>
+
+    <screenshot>https://raw.githubusercontent.com/ConductionNL/app-versions/main/img/app.svg</screenshot>
+
+    <dependencies>
+        <nextcloud min-version="31" max-version="33"/>
+        <php min-version="8.1"/>
+    </dependencies>
+
+    <navigations>
+        <navigation>
+            <id>app_versions</id>
+            <name>App Versions</name>
+            <route>app_versions.page.index</route>
+            <icon>app.svg</icon>
+            <type>link</type>
+        </navigation>
+    </navigations>
 </info>
