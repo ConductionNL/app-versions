@@ -6,7 +6,10 @@
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcContent from '@nextcloud/vue/components/NcContent'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
+import { translate as t } from '@nextcloud/l10n'
 import { computed, onMounted, ref, watch } from 'vue'
+
+const APP_ID = 'app_versions'
 
 type AppOption = {
 	id: string
@@ -185,8 +188,16 @@ const changeActionLabel = computed(() => {
 	return ''
 })
 
+const changeActionLabelText = computed(() => {
+	const key = changeActionLabel.value
+	if (key === 'Install') return t(APP_ID, 'Install')
+	if (key === 'Update') return t(APP_ID, 'Update')
+	if (key === 'Degrade') return t(APP_ID, 'Degrade')
+	return ''
+})
+
 const hasSidebarSelect = computed(() => isAdmin.value)
-const sidebarLabel = computed(() => hasSidebarSelect.value ? 'Select an app from store' : 'Loading…')
+const sidebarLabel = computed(() => hasSidebarSelect.value ? t(APP_ID, 'Select an app from store') : t(APP_ID, 'Loading…'))
 const hasInfoPanel = computed(() => selectedApp.value || installedVersion.value || versions.value.length > 0 || availableSource.value || errorMessage.value || hasCheckedVersions.value)
 const hasSplitLayout = computed(() => Boolean(selectedApp.value || installedVersion.value || hasInstallResult.value))
 const isSafeMode = computed(() => safeModeEnabled.value)
@@ -275,12 +286,15 @@ const normalizeInstallResult = (payload: {
 	const normalizedUpdateType = payload.updateType ?? 'none'
 	const normalizedFrom = payload.fromVersion ?? null
 	const normalizedTo = payload.toVersion || ''
-	const resolvedMessage = payload.message || 'Install completed.'
+	// Server-side messages (`App updated.`, etc.) arrive in English and are
+	// compared verbatim below; only the client-synthesised defaults go through
+	// t(). The server-message → localised-message mapping is follow-up work.
+	const resolvedMessage = payload.message || t(APP_ID, 'Install completed.')
 	const shouldForceDowngradeMessage = normalizedUpdateType === 'downgrade'
 		|| (normalizedFrom !== null && normalizedTo !== '' && compareVersions(normalizedTo, normalizedFrom) < 0)
 	const finalMessage = shouldForceDowngradeMessage
 		? (resolvedMessage === 'App updated.'
-			? 'App downgraded.'
+			? t(APP_ID, 'App downgraded.')
 			: resolvedMessage)
 		: resolvedMessage
 
@@ -317,11 +331,11 @@ const installStatusTone = computed<'success' | 'warning' | 'error' | 'info'>(() 
 const installStatusLabel = computed(() => {
 	switch (installStatusTone.value) {
 	case 'warning':
-		return 'Dry run'
+		return t(APP_ID, 'Dry run')
 	case 'error':
-		return 'Failed'
+		return t(APP_ID, 'Failed')
 	default:
-		return 'Done'
+		return t(APP_ID, 'Done')
 	}
 })
 
@@ -333,7 +347,7 @@ const checkAdmin = async (): Promise<void> => {
 		isAdmin.value = Boolean(payload.isAdmin)
 	} catch {
 		isAdmin.value = false
-		errorMessage.value = 'Could not verify admin permissions.'
+		errorMessage.value = t(APP_ID, 'Could not verify admin permissions.')
 	} finally {
 		isLoading.value = false
 	}
@@ -712,7 +726,7 @@ const versionRangeText = (summary: VersionRangeInfo | null): string => {
 
 	const downgradeConfirmButtons = computed(() => [
 	{
-		label: 'Cancel',
+		label: t(APP_ID, 'Cancel'),
 		type: 'tertiary',
 		disabled: isInstallingVersion.value,
 		callback: () => {
@@ -722,7 +736,7 @@ const versionRangeText = (summary: VersionRangeInfo | null): string => {
 		},
 	},
 	{
-		label: 'Downgrade',
+		label: t(APP_ID, 'Downgrade'),
 		variant: 'error',
 		disabled: isInstallingVersion.value,
 		callback: () => {
@@ -761,7 +775,7 @@ const onDowngradeDialogClose = (open: boolean) => {
 
 const onSelectVersion = (version: string): void => {
 	if (isDowngradeBlockedBySafeMode(version)) {
-		errorMessage.value = 'Safe mode is enabled. Disable it to downgrade.'
+		errorMessage.value = t(APP_ID, 'Safe mode is enabled. Disable it to downgrade.')
 		return
 	}
 
@@ -916,7 +930,7 @@ watch(debugModeEnabled, () => {
 		<NcAppContent :class="$style.content">
 			<NcDialog
 				:open="isDowngradeConfirmOpen"
-				name="Confirm downgrade"
+				:name="t('app_versions', 'Confirm downgrade')"
 				:buttons="downgradeConfirmButtons"
 				@update:open="onDowngradeDialogClose"
 			>
@@ -929,18 +943,18 @@ watch(debugModeEnabled, () => {
 					<span :class="$style.versionChip">{{ downgradeConfirmToVersion }}</span>
 				</p>
 				<p v-if="downgradeVersionRange" :class="$style.versionRangeSummary">
-					<strong>Downgrade info:</strong> {{ versionRangeText(downgradeVersionRange) }}
+					<strong>{{ t('app_versions', 'Downgrade info:') }}</strong> {{ versionRangeText(downgradeVersionRange) }}
 				</p>
 				<p :class="$style.versionItemDegradeMessage">
-					Downgrading can break database schema assumptions if migrations were already applied in newer versions. Continue only if you are sure no incompatible schema changes are involved.
+					{{ t('app_versions', 'Downgrading can break database schema assumptions if migrations were already applied in newer versions. Continue only if you are sure no incompatible schema changes are involved.') }}
 				</p>
 				</NcDialog>
 				<div :class="$style.layout">
 					<main :class="$style.mainContent">
-						<h2>App Versions!</h2>
+						<h2>{{ t('app_versions', 'App Versions') }}</h2>
 						<div :class="$style.settingsPanel">
 							<p v-if="updateChannel" :class="$style.updateChannel">
-								Update channel: <strong>{{ updateChannel }}</strong>
+								{{ t('app_versions', 'Update channel:') }} <strong>{{ updateChannel }}</strong>
 							</p>
 							<div :class="$style.settingsToggles">
 								<label :class="$style.safeMode">
@@ -950,7 +964,7 @@ watch(debugModeEnabled, () => {
 										:class="$style.safeModeCheckbox"
 										:disabled="isInstallingVersion"
 									/>
-									<span>Safe mode (block downgrades and respects update channel)</span>
+									<span>{{ t('app_versions', 'Safe mode (block downgrades and respects update channel)') }}</span>
 								</label>
 								<label :class="$style.safeMode">
 									<input
@@ -959,29 +973,29 @@ watch(debugModeEnabled, () => {
 										:class="$style.safeModeCheckbox"
 										:disabled="isInstallingVersion"
 									/>
-									<span>Enable install dry-run (show debug output)</span>
+									<span>{{ t('app_versions', 'Enable install dry-run (show debug output)') }}</span>
 								</label>
 							</div>
 						</div>
 						<div :class="[$style.contentRow, { [$style.contentRowSplit]: hasSplitLayout }]">
 							<div :class="[$style.leftColumn, { [$style.leftColumnFull]: !hasSplitLayout }]">
 								<div :class="$style.selectSection">
-									<label :class="$style.label" for="app-filter">Pick an installed App</label>
+									<label :class="$style.label" for="app-filter">{{ t('app_versions', 'Pick an installed App') }}</label>
 									<div :class="$style.filterToolbar">
 										<button
 											type="button"
 											:class="$style.filterToggleButton"
 											@click="showFilters = !showFilters"
 										>
-											{{ showFilters ? 'Hide filters' : 'Show filters' }}
+											{{ showFilters ? t('app_versions', 'Hide filters') : t('app_versions', 'Show filters') }}
 										</button>
 									</div>
 									<div v-if="showFilters" :class="$style.filterPanel">
 										<label :class="$style.filterField">
-											<span :class="$style.filterFieldLabel">Core apps</span>
+											<span :class="$style.filterFieldLabel">{{ t('app_versions', 'Core apps') }}</span>
 											<select v-model="coreAppsVisibility" :class="$style.filterSelect">
-												<option value="show">Show core apps</option>
-												<option value="hide">Hide core apps</option>
+												<option value="show">{{ t('app_versions', 'Show core apps') }}</option>
+												<option value="hide">{{ t('app_versions', 'Hide core apps') }}</option>
 											</select>
 										</label>
 									</div>
@@ -989,7 +1003,7 @@ watch(debugModeEnabled, () => {
 										id="app-filter"
 									v-model="appFilter"
 									type="text"
-									placeholder="Search apps"
+									:placeholder="t('app_versions', 'Search apps')"
 									:class="$style.appFilterInput"
 										:disabled="!hasSidebarSelect || isLoading || apps.length === 0 || isCheckingVersions || isInstallingVersion"
 										:aria-label="sidebarLabel"
@@ -1008,7 +1022,7 @@ watch(debugModeEnabled, () => {
 													<div :class="$style.appCardTitleBlock">
 														<div :class="$style.appCardTitleRow">
 															<p :class="$style.appCardTitle">{{ app.label }}</p>
-															<span v-if="app.isCore" :class="$style.appCardCoreFlag">CORE</span>
+															<span v-if="app.isCore" :class="$style.appCardCoreFlag">{{ t('app_versions', 'CORE') }}</span>
 														</div>
 														<p :class="$style.appCardMeta">{{ app.id }}</p>
 													</div>
@@ -1033,12 +1047,12 @@ watch(debugModeEnabled, () => {
 											:disabled="isCheckingVersions || isInstallingVersion"
 											@click="onPickApp(app.id)"
 										>
-											{{ selectedApp === app.id && isCheckingVersions ? 'Loading…' : 'Choose app' }}
+											{{ selectedApp === app.id && isCheckingVersions ? t('app_versions', 'Loading…') : t('app_versions', 'Choose app') }}
 										</button>
 										</article>
 									</div>
 									<p v-if="!selectedApp && filteredApps.length === 0" :class="$style.noFilterResult">
-										No apps match your filter.
+										{{ t('app_versions', 'No apps match your filter.') }}
 									</p>
 								</div>
 							<div
@@ -1046,7 +1060,7 @@ watch(debugModeEnabled, () => {
 							>
 								<div v-if="selectedApp || installedVersion" :class="$style.installed">
 									<div v-if="selectedApp" :class="$style.selectedApp">
-										<span :class="$style.installedLabel">Selected app</span>
+										<span :class="$style.installedLabel">{{ t('app_versions', 'Selected app') }}</span>
 										<span :class="$style.installedValue">{{ selectedAppOption?.label || selectedApp }}</span>
 										<span v-if="selectedAppOption?.label && selectedAppOption.id !== selectedAppOption.label" :class="$style.installedSubvalue">{{ selectedApp }}</span>
 										<button
@@ -1055,15 +1069,15 @@ watch(debugModeEnabled, () => {
 											:disabled="isCheckingVersions || isInstallingVersion"
 											@click="clearSelectedApp"
 										>
-											Choose another app
+											{{ t('app_versions', 'Choose another app') }}
 										</button>
 									</div>
 									<div v-if="installedVersion" :class="$style.installedCurrent">
-										<span :class="$style.installedLabel">Current installed</span>
+										<span :class="$style.installedLabel">{{ t('app_versions', 'Current installed') }}</span>
 										<span :class="$style.installedValue">{{ installedVersion }}</span>
 									</div>
 									<div v-if="selectedVersion" :class="$style.selectedVersion">
-										<span :class="$style.installedLabel">Selected version</span>
+										<span :class="$style.installedLabel">{{ t('app_versions', 'Selected version') }}</span>
 										<span :class="$style.versionTransition">
 											<span :class="$style.versionChip">{{ installedVersion || '—' }}</span>
 											<span :class="$style.versionArrow">→</span>
@@ -1080,7 +1094,7 @@ watch(debugModeEnabled, () => {
 										v-if="selectedVersionRange?.direction === 'degrade'"
 										:class="$style.versionDegradeSummary"
 									>
-										Downgrade path detected.
+										{{ t('app_versions', 'Downgrade path detected.') }}
 									</p>
 								</div>
 								<div v-if="versions.length > 0" :class="$style.versionListContainer">
@@ -1088,7 +1102,7 @@ watch(debugModeEnabled, () => {
 										v-if="!selectedVersion"
 										v-model="versionFilter"
 										type="text"
-										placeholder="Filter versions"
+										:placeholder="t('app_versions', 'Filter versions')"
 										:class="$style.versionFilterInput"
 										:disabled="isInstallingVersion"
 									/>
@@ -1108,13 +1122,13 @@ watch(debugModeEnabled, () => {
 														:disabled="isInstallingVersion"
 														@click="onSelectVersion(version.version)"
 													>
-														Select
+														{{ t('app_versions', 'Select') }}
 													</button>
 													<span
 														v-else
 														:class="$style.selectedVersionFlag"
 													>
-														Selected
+														{{ t('app_versions', 'Selected') }}
 													</span>
 												</div>
 												<div
@@ -1125,7 +1139,7 @@ watch(debugModeEnabled, () => {
 														v-if="changeActionLabel === 'Degrade'"
 														:class="$style.versionDegradeWarning"
 													>
-														Warning! Downgrading can result in breaking the database if earlier updates or migrations added database columns. Only do this when u can fix the database or are sure no migrations have been executed since the version u downgrade to!
+														{{ t('app_versions', 'Warning! Downgrading can result in breaking the database if earlier updates or migrations added database columns. Only do this when you can fix the database or are sure no migrations have been executed since the version you downgrade to!') }}
 													</p>
 													<div :class="$style.versionItemActions">
 														<button
@@ -1137,7 +1151,7 @@ watch(debugModeEnabled, () => {
 															@click="performInstall"
 														>
 															<span v-if="isInstallingVersion" :class="$style.spinner" aria-hidden="true" />
-															{{ isInstallingVersion ? 'Installing…' : changeActionLabel }}
+															{{ isInstallingVersion ? t('app_versions', 'Installing…') : changeActionLabelText }}
 														</button>
 														<button
 															type="button"
@@ -1145,48 +1159,48 @@ watch(debugModeEnabled, () => {
 															:disabled="isInstallingVersion"
 															@click="selectedVersion = ''"
 														>
-															Pick other
+															{{ t('app_versions', 'Pick other') }}
 														</button>
 													</div>
 												</div>
 											</li>
 										</transition-group>
 										<p v-if="filteredVersions.length === 0" :class="$style.noFilterResult">
-											No versions match your filter.
+											{{ t('app_versions', 'No versions match your filter.') }}
 										</p>
 									</div>
 								</div>
 								<p v-if="availableSource" :class="$style.note">
-									Versions source: {{ availableSource }}
+									{{ t('app_versions', 'Versions source:') }} {{ availableSource }}
 								</p>
 								<p v-else-if="hasCheckedVersions" :class="$style.note">
-									No versions available for this app.
+									{{ t('app_versions', 'No versions available for this app.') }}
 								</p>
 								<p v-if="errorMessage" :class="$style.error">{{ errorMessage }}</p>
 							</div>
 						</div>
 							<div v-if="hasSplitLayout" :class="$style.rightColumn">
 							<div v-if="hasInstallResult && lastInstallResult" :class="$style.resultPanel">
-								<p :class="$style.versionSummary">Install result</p>
+								<p :class="$style.versionSummary">{{ t('app_versions', 'Install result') }}</p>
 								<p :class="[$style.resultStatus, $style[`resultStatus${installStatusTone.charAt(0).toUpperCase() + installStatusTone.slice(1)}`]]">
 									{{ installStatusLabel }}
 								</p>
 								<p :class="$style.resultMessage">{{ lastInstallResult.message }}</p>
 								<div :class="$style.resultGrid">
 									<div>
-										<span>App</span>
+										<span>{{ t('app_versions', 'App') }}</span>
 										<strong>{{ lastInstallResult.appId || '-' }}</strong>
 									</div>
 									<div>
-										<span>Transition</span>
-										<strong>{{ lastInstallResult.fromVersion || 'N/A' }} → {{ lastInstallResult.toVersion }}</strong>
+										<span>{{ t('app_versions', 'Transition') }}</span>
+										<strong>{{ lastInstallResult.fromVersion || t('app_versions', 'N/A') }} → {{ lastInstallResult.toVersion }}</strong>
 									</div>
 									<div>
-										<span>Mode</span>
-										<strong>{{ lastInstallResult.installStatus === 'dry-run' ? 'Dry-run (no write)' : (lastInstallResult.dryRun ? 'Dry-run' : 'Live install') }}</strong>
+										<span>{{ t('app_versions', 'Mode') }}</span>
+										<strong>{{ lastInstallResult.installStatus === 'dry-run' ? t('app_versions', 'Dry-run (no write)') : (lastInstallResult.dryRun ? t('app_versions', 'Dry-run') : t('app_versions', 'Live install')) }}</strong>
 									</div>
 									<div>
-										<span>Result</span>
+										<span>{{ t('app_versions', 'Result') }}</span>
 										<strong>{{ lastInstallResult.installedVersion || lastInstallResult.toVersion }}</strong>
 									</div>
 								</div>
@@ -1194,7 +1208,7 @@ watch(debugModeEnabled, () => {
 									v-if="debugModeEnabled && lastInstallDebug.length > 0"
 									:class="$style.debugPanel"
 								>
-									<p :class="$style.debugSubtitle">Install debug ({{ lastInstallDebug.length }} step(s))</p>
+									<p :class="$style.debugSubtitle">{{ t('app_versions', 'Install debug') }} ({{ lastInstallDebug.length }} {{ lastInstallDebug.length === 1 ? t('app_versions', 'step') : t('app_versions', 'steps') }})</p>
 									<div :class="$style.debugTimeline">
 										<article
 											v-for="(entry, entryIndex) in lastInstallDebug"
@@ -1205,9 +1219,9 @@ watch(debugModeEnabled, () => {
 												<span :class="$style.debugStepIndex">{{ entryIndex + 1 }}</span>
 												<span :class="$style.debugStepStage">{{ entry.stage }}</span>
 											</p>
-											<p v-if="!debugHasData(entry.data)" :class="$style.debugNoData">No details</p>
+											<p v-if="!debugHasData(entry.data)" :class="$style.debugNoData">{{ t('app_versions', 'No details') }}</p>
 											<details v-else :class="$style.debugStepDetails" :open="entryIndex === 0">
-												<summary :class="$style.debugStepSummary">View details</summary>
+												<summary :class="$style.debugStepSummary">{{ t('app_versions', 'View details') }}</summary>
 												<ul :class="$style.debugOutput">
 													<li
 														v-for="(line, lineIndex) in debugToTextLines(entry.data)"
