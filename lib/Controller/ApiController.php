@@ -24,7 +24,6 @@ namespace OCA\AppVersions\Controller;
 use OCA\AppVersions\Service\InstallerService;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\DataResponse;
-use OCP\AppFramework\Http\Attribute\ApiRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
 use OCP\AppFramework\OCSController;
@@ -42,7 +41,6 @@ class ApiController extends OCSController {
 	 * @return DataResponse
 	 */
 	#[NoAdminRequired]
-	#[ApiRoute(verb: 'GET', url: '/api/admin-check')]
 	public function adminCheck(): DataResponse {
 		if (!$this->isAdmin()) {
 			return new DataResponse([
@@ -61,7 +59,6 @@ class ApiController extends OCSController {
 	 * @return DataResponse
 	 */
 	#[NoAdminRequired]
-	#[ApiRoute(verb: 'GET', url: '/api/apps')]
 	public function apps(): DataResponse {
 		if (!$this->isAdmin()) {
 			return new DataResponse([
@@ -80,7 +77,6 @@ class ApiController extends OCSController {
 	 * @return DataResponse
 	 */
 	#[NoAdminRequired]
-	#[ApiRoute(verb: 'GET', url: '/api/update-channel')]
 	public function updateChannel(): DataResponse {
 		if (!$this->isAdmin()) {
 			return new DataResponse([
@@ -100,7 +96,6 @@ class ApiController extends OCSController {
 	 * @return DataResponse
 	 */
 	#[NoAdminRequired]
-	#[ApiRoute(verb: 'GET', url: '/api/app/{appId}/versions')]
 	public function appVersions(string $appId): DataResponse {
 		if (!$this->isAdmin()) {
 			return new DataResponse([
@@ -124,7 +119,6 @@ class ApiController extends OCSController {
 	 */
 	#[NoAdminRequired]
 	#[PasswordConfirmationRequired(strict: false)]
-	#[ApiRoute(verb: 'POST', url: '/api/app/{appId}/versions/{version}/install')]
 	public function installVersion(string $appId, string $version): DataResponse {
 		if (!$this->isAdmin()) {
 			return new DataResponse([
