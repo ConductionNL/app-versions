@@ -7,11 +7,11 @@ import axios from '@nextcloud/axios'
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import { NcAppContent, NcContent } from '@conduction/nextcloud-vue'
 import { computed, onMounted, ref, watch } from 'vue'
-import AppCard from './components/AppCard.vue'
+import AppPicker from './components/AppPicker.vue'
 import DowngradeConfirmDialog from './components/DowngradeConfirmDialog.vue'
 import InstallResultPanel from './components/InstallResultPanel.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
-import VersionItem from './components/VersionItem.vue'
+import VersionPanel from './components/VersionPanel.vue'
 import type { AppOption, AppVersion, InstallDebugEntry, InstallResult, VersionRangeInfo } from './types'
 
 const APP_ID = 'app_versions'
@@ -836,138 +836,51 @@ watch(debugModeEnabled, () => {
 					/>
 					<div :class="[$style.contentRow, { [$style.contentRowSplit]: hasSplitLayout }]">
 							<div :class="[$style.leftColumn, { [$style.leftColumnFull]: !hasSplitLayout }]">
-								<div :class="$style.selectSection">
-									<label :class="$style.label" for="app-filter">{{ t('app_versions', 'Pick an installed App') }}</label>
-									<div :class="$style.filterToolbar">
-										<button
-											type="button"
-											:class="$style.filterToggleButton"
-											@click="showFilters = !showFilters"
-										>
-											{{ showFilters ? t('app_versions', 'Hide filters') : t('app_versions', 'Show filters') }}
-										</button>
-									</div>
-									<div v-if="showFilters" :class="$style.filterPanel">
-										<label :class="$style.filterField">
-											<span :class="$style.filterFieldLabel">{{ t('app_versions', 'Core apps') }}</span>
-											<select v-model="coreAppsVisibility" :class="$style.filterSelect">
-												<option value="show">{{ t('app_versions', 'Show core apps') }}</option>
-												<option value="hide">{{ t('app_versions', 'Hide core apps') }}</option>
-											</select>
-										</label>
-									</div>
-									<input
-										id="app-filter"
-									v-model="appFilter"
-									type="text"
-									:placeholder="t('app_versions', 'Search apps')"
-									:class="$style.appFilterInput"
-										:disabled="!hasSidebarSelect || isLoading || apps.length === 0 || isCheckingVersions || isInstallingVersion"
-										:aria-label="sidebarLabel"
-									/>
-									<div
-										v-if="!selectedApp"
-										:class="[$style.appCardList, { [$style.appCardListSplit]: hasSplitLayout }]"
-									>
-										<AppCard
-											v-for="app in filteredApps"
-											:key="app.id"
-											:app="app"
-											:selected="selectedApp === app.id"
-											:disabled="isCheckingVersions || isInstallingVersion"
-											:loading="selectedApp === app.id && isCheckingVersions"
-											:fallback-icon="appCardFallback(app)"
-											:description="appCardDescription(app)"
-											@pick="onPickApp"
-										/>
-									</div>
-									<p v-if="!selectedApp && filteredApps.length === 0" :class="$style.noFilterResult">
-										{{ t('app_versions', 'No apps match your filter.') }}
-									</p>
-								</div>
-							<div
-								:class="[$style.infoPanel, { [$style.infoPanelOpen]: hasInfoPanel }]"
-							>
-								<div v-if="selectedApp || installedVersion" :class="$style.installed">
-									<div v-if="selectedApp" :class="$style.selectedApp">
-										<span :class="$style.installedLabel">{{ t('app_versions', 'Selected app') }}</span>
-										<span :class="$style.installedValue">{{ selectedAppOption?.label || selectedApp }}</span>
-										<span v-if="selectedAppOption?.label && selectedAppOption.id !== selectedAppOption.label" :class="$style.installedSubvalue">{{ selectedApp }}</span>
-										<button
-											type="button"
-											:class="$style.changeAppButton"
-											:disabled="isCheckingVersions || isInstallingVersion"
-											@click="clearSelectedApp"
-										>
-											{{ t('app_versions', 'Choose another app') }}
-										</button>
-									</div>
-									<div v-if="installedVersion" :class="$style.installedCurrent">
-										<span :class="$style.installedLabel">{{ t('app_versions', 'Current installed') }}</span>
-										<span :class="$style.installedValue">{{ installedVersion }}</span>
-									</div>
-									<div v-if="selectedVersion" :class="$style.selectedVersion">
-										<span :class="$style.installedLabel">{{ t('app_versions', 'Selected version') }}</span>
-										<span :class="$style.versionTransition">
-											<span :class="$style.versionChip">{{ installedVersion || '—' }}</span>
-											<span :class="$style.versionArrow">→</span>
-											<span :class="$style.versionChip">{{ selectedVersion }}</span>
-										</span>
-									</div>
-									<p
-										v-if="selectedVersionRange"
-										:class="$style.versionSummary"
-									>
-										{{ versionRangeText(selectedVersionRange) }}
-									</p>
-									<p
-										v-if="selectedVersionRange?.direction === 'degrade'"
-										:class="$style.versionDegradeSummary"
-									>
-										{{ t('app_versions', 'Downgrade path detected.') }}
-									</p>
-								</div>
-								<div v-if="versions.length > 0" :class="$style.versionListContainer">
-									<input
-										v-if="!selectedVersion"
-										v-model="versionFilter"
-										type="text"
-										:placeholder="t('app_versions', 'Filter versions')"
-										:class="$style.versionFilterInput"
-										:disabled="isInstallingVersion"
-									/>
-									<div :class="$style.versionListWrapper">
-										<transition-group
-											name="versionFade"
-											tag="ul"
-											:class="$style.versionList"
-										>
-											<VersionItem
-												v-for="version in visibleVersions"
-												:key="version.version"
-												:version="version.version"
-												:selected="selectedVersion === version.version && selectedVersion !== ''"
-												:is-installing-version="isInstallingVersion"
-												:change-action-key="changeActionLabel as 'Install' | 'Update' | 'Degrade' | ''"
-												:change-action-label="changeActionLabelText"
-												@select="onSelectVersion"
-												@deselect="selectedVersion = ''"
-												@install="performInstall"
-											/>
-										</transition-group>
-										<p v-if="filteredVersions.length === 0" :class="$style.noFilterResult">
-											{{ t('app_versions', 'No versions match your filter.') }}
-										</p>
-									</div>
-								</div>
-								<p v-if="availableSource" :class="$style.note">
-									{{ t('app_versions', 'Versions source:') }} {{ availableSource }}
-								</p>
-								<p v-else-if="hasCheckedVersions" :class="$style.note">
-									{{ t('app_versions', 'No versions available for this app.') }}
-								</p>
-								<p v-if="errorMessage" :class="$style.error">{{ errorMessage }}</p>
-							</div>
+								<AppPicker
+									:filtered-apps="filteredApps"
+									:apps-length="apps.length"
+									:selected-app="selectedApp"
+									:app-filter="appFilter"
+									:show-filters="showFilters"
+									:core-apps-visibility="coreAppsVisibility"
+									:has-sidebar-select="hasSidebarSelect"
+									:has-split-layout="hasSplitLayout"
+									:is-loading="isLoading"
+									:is-checking-versions="isCheckingVersions"
+									:is-installing-version="isInstallingVersion"
+									:sidebar-label="sidebarLabel"
+									:fallback-icon-for="appCardFallback"
+									:description-for="appCardDescription"
+									@update:app-filter="appFilter = $event"
+									@update:show-filters="showFilters = $event"
+									@update:core-apps-visibility="coreAppsVisibility = $event"
+									@pick-app="onPickApp"
+								/>
+							<VersionPanel
+								:open="hasInfoPanel"
+								:selected-app="selectedApp"
+								:selected-app-option="selectedAppOption"
+								:installed-version="installedVersion"
+								:selected-version="selectedVersion"
+								:versions="versions"
+								:visible-versions="visibleVersions"
+								:filtered-versions="filteredVersions"
+								:version-filter="versionFilter"
+								:selected-version-range="selectedVersionRange"
+								:range-text="selectedVersionRange ? versionRangeText(selectedVersionRange) : ''"
+								:available-source="availableSource"
+								:has-checked-versions="hasCheckedVersions"
+								:error-message="errorMessage"
+								:is-checking-versions="isCheckingVersions"
+								:is-installing-version="isInstallingVersion"
+								:change-action-key="changeActionLabel as 'Install' | 'Update' | 'Degrade' | ''"
+								:change-action-label="changeActionLabelText"
+								@update:version-filter="versionFilter = $event"
+								@clear-selected-app="clearSelectedApp"
+								@select-version="onSelectVersion"
+								@deselect-version="selectedVersion = ''"
+								@install="performInstall"
+							/>
 						</div>
 							<div v-if="hasSplitLayout" :class="$style.rightColumn">
 							<InstallResultPanel
@@ -1003,89 +916,6 @@ watch(debugModeEnabled, () => {
 	box-sizing: border-box;
 }
 
-.selectSection {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	margin-top: 12px;
-}
-
-.filterToolbar {
-	display: flex;
-	align-items: center;
-	justify-content: flex-start;
-}
-
-.filterToggleButton {
-	align-self: flex-start;
-}
-
-.filterPanel {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-	padding: 10px 12px;
-	border: 1px solid var(--color-border-dark);
-	border-radius: 8px;
-	background: var(--color-main-background);
-}
-
-.filterField {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	max-width: 260px;
-}
-
-.filterFieldLabel {
-	font-size: 12px;
-	font-weight: 600;
-	color: var(--color-text-maxcontrast);
-}
-
-.filterSelect {
-	width: 100%;
-	box-sizing: border-box;
-	border: 1px solid var(--color-border-dark);
-	border-radius: 6px;
-	padding: 8px 10px;
-	background: var(--color-main-background);
-}
-
-.appFilterInput {
-	width: 100%;
-	box-sizing: border-box;
-	border: 1px solid var(--color-border-dark);
-	border-radius: 6px;
-	padding: 8px 10px;
-}
-
-.appCardList {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
-	gap: 16px;
-	overflow-y: visible;
-	overflow-x: hidden;
-	padding-inline-end: 4px;
-	align-content: start;
-}
-
-.appCardListSplit {
-	max-height: 360px;
-	overflow-y: auto;
-}
-
-.installedSubvalue {
-	font-size: 12px;
-	color: var(--color-text-maxcontrast);
-	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-
-.changeAppButton {
-	align-self: flex-start;
-	margin-top: 8px;
-}
-
 .contentRow {
 	display: block;
 	margin-top: 8px;
@@ -1107,204 +937,5 @@ watch(debugModeEnabled, () => {
 	width: 100%;
 }
 
-.installed {
-	border-left: 4px solid var(--color-border-dark);
-	padding: 8px 10px;
-	width: 100%;
-	margin: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-}
-
-.infoPanel {
-	margin-top: 8px;
-	width: 100%;
-	overflow: visible;
-	max-height: 0;
-	opacity: 0;
-	transform: scaleX(0);
-	transform-origin: right center;
-	pointer-events: none;
-	background: var(--color-main-background);
-	border: 1px solid var(--color-border-dark);
-	border-left-width: 4px;
-	border-radius: 6px;
-	padding: 10px;
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	box-sizing: border-box;
-	transition:
-		max-height 0.28s ease,
-		opacity 0.2s ease,
-		transform 0.28s ease;
-}
-
-.infoPanelOpen {
-	opacity: 1;
-	transform: scaleX(1);
-	max-height: calc(100vh - 160px);
-	pointer-events: auto;
-}
-
-.selectedApp,
-.installedCurrent {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-}
-
-.installedLabel {
-	font-size: 12px;
-	color: var(--color-text-maxcontrast);
-	margin-right: 6px;
-}
-
-.installedValue {
-	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-	font-weight: 600;
-	font-size: 14px;
-}
-
-.versionList {
-	padding-inline-start: 20px;
-	margin: 8px 0 0;
-}
-
-:global(.versionFade-move),
-:global(.versionFade-enter-active),
-:global(.versionFade-leave-active) {
-	transition: all 0.2s ease;
-}
-
-:global(.versionFade-enter-from),
-:global(.versionFade-leave-to) {
-	opacity: 0;
-	transform: translateY(-4px);
-}
-
-:global(.versionFade-leave-active) {
-	position: absolute;
-}
-
-.versionListContainer {
-	max-height: calc(100vh - 420px);
-	min-height: 120px;
-	overflow: hidden;
-	overflow-x: hidden;
-	width: 100%;
-	display: flex;
-	flex-direction: column;
-	padding-inline-end: 4px;
-}
-
-.versionListWrapper {
-	width: 100%;
-	max-height: calc(100vh - 460px);
-	min-height: 80px;
-	flex: 1;
-	overflow-y: scroll;
-	overflow-x: hidden;
-	scrollbar-gutter: stable;
-	scrollbar-width: thin;
-	scrollbar-color: var(--color-text-maxcontrast) var(--color-background-dark);
-}
-
-.versionFilterInput {
-	width: 100%;
-	box-sizing: border-box;
-	border: 1px solid var(--color-border-dark);
-	border-radius: 6px;
-	padding: 6px 8px;
-	margin-bottom: 8px;
-}
-
-.noFilterResult {
-	margin: 0;
-	font-size: 12px;
-	color: var(--color-text-maxcontrast);
-}
-
-.versionListWrapper::-webkit-scrollbar {
-	width: 8px;
-}
-
-.versionListWrapper::-webkit-scrollbar-track {
-	background: var(--color-background-dark);
-	border-radius: 4px;
-}
-
-.versionListWrapper::-webkit-scrollbar-thumb {
-	background: var(--color-text-maxcontrast);
-	border-radius: 4px;
-}
-
-.versionListWrapper::-webkit-scrollbar-thumb:hover {
-	background: var(--color-text-light);
-}
-
-:global(.versionFade-move) {
-	transition: transform 0.2s ease;
-}
-
-.label {
-	font-weight: 600;
-}
-
-.selectedVersion {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-}
-
-.versionTransition {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	font-size: 14px;
-}
-
-.versionChip {
-	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-	font-weight: 600;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	padding: 2px 8px;
-	border: 1px solid var(--color-border-dark);
-	border-radius: 9999px;
-	background: var(--color-main-background);
-}
-
-.versionArrow {
-	font-weight: 700;
-	color: var(--color-text-light);
-}
-
-.versionSummary {
-	margin: 0;
-	font-size: 12px;
-	color: var(--color-text-light);
-}
-
-.versionDegradeSummary {
-	margin: 2px 0 0;
-	color: #7c2d12;
-	font-size: 12px;
-	font-weight: 600;
-}
-
-.note {
-	font-size: 12px;
-	margin: 2px 0 0;
-	color: var(--color-text-maxcontrast);
-}
-
-.error {
-	margin: 12px 0 0;
-	color: var(--color-error);
-	font-size: 13px;
-}
 
 </style>
