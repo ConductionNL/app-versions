@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license AGPL-3.0-or-later
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ */
+
 
 namespace OCA\AppVersions\Service\Source;
 
@@ -18,7 +23,9 @@ class TrustedSourceList {
 	/** @var list<string> */
 	private const DEFAULT_PATTERNS = ['ConductionNL/*'];
 
-	public function __construct(private IConfig $config) {
+	public function __construct(
+		private IConfig $config
+	) {
 	}
 
 	/**
