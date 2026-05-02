@@ -6,6 +6,7 @@ namespace OCA\AppVersions\Tests\Unit\Controller;
 
 use OCA\AppVersions\Controller\ApiController;
 use OCA\AppVersions\Db\PatMapper;
+use OCA\AppVersions\Service\Discovery\DiscoveryAggregator;
 use OCA\AppVersions\Service\InstallerService;
 use OCA\AppVersions\Service\Pat\PatDeeplinkBuilder;
 use OCA\AppVersions\Service\Pat\PatManager;
@@ -37,6 +38,7 @@ final class ApiTest extends TestCase {
 			$this->createMock(PatManager::class),
 			$this->createMock(PatValidator::class),
 			$this->createMock(PatDeeplinkBuilder::class),
+			$this->createMock(DiscoveryAggregator::class),
 		);
 	}
 
