@@ -4,142 +4,186 @@ declare(strict_types=1);
 
 namespace OCA\AppVersions\Controller;
 
+use InvalidArgumentException;
+use OCA\AppVersions\Db\Pat;
+use OCA\AppVersions\Db\PatMapper;
+use OCA\AppVersions\Service\Discovery\DiscoveryAggregator;
 use OCA\AppVersions\Service\InstallerService;
+use OCA\AppVersions\Service\Pat\PatDeeplinkBuilder;
+use OCA\AppVersions\Service\Pat\PatManager;
+use OCA\AppVersions\Service\Pat\PatValidator;
+use OCA\AppVersions\Service\Source\SourceBinding;
+use OCA\AppVersions\Service\Source\SourceRegistry;
+use OCA\AppVersions\Service\Source\TrustedSourceList;
+use OCA\AppVersions\Service\Source\UntrustedSourceException;
+use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\Attribute\ApiRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
+use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\OCSController;
-use OCP\ServerVersion;
 use OCP\IGroupManager;
+use OCP\IRequest;
+use OCP\IUserSession;
+use OCP\ServerVersion;
 
 /**
  * @psalm-suppress UnusedClass
  */
 class ApiController extends OCSController {
+	public function __construct(
+		string $appName,
+		IRequest $request,
+		private InstallerService $installerService,
+		private IGroupManager $groupManager,
+		private IUserSession $userSession,
+		private ServerVersion $serverVersion,
+		private PatMapper $patMapper,
+		private PatManager $patManager,
+		private PatValidator $patValidator,
+		private PatDeeplinkBuilder $deeplinkBuilder,
+		private DiscoveryAggregator $discoveryAggregator,
+	) {
+		parent::__construct($appName, $request);
+	}
 
-	/**
-	 * Checks whether the currently signed in user is an admin.
-	 *
-	 * @return DataResponse
-	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/admin-check')]
 	public function adminCheck(): DataResponse {
-		if (!$this->isAdmin()) {
-			return new DataResponse([
-				'isAdmin' => false,
-			], Http::STATUS_OK);
-		}
-
-		return new DataResponse([
-			'isAdmin' => true,
-		], Http::STATUS_OK);
+		return new DataResponse(['isAdmin' => $this->isAdmin()], Http::STATUS_OK);
 	}
 
-	/**
-	 * Returns installed apps for the select dropdown.
-	 *
-	 * @return DataResponse
-	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/apps')]
 	public function apps(): DataResponse {
 		if (!$this->isAdmin()) {
-			return new DataResponse([
-				'message' => 'Forbidden',
-			], Http::STATUS_FORBIDDEN);
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
 		}
 
-		return new DataResponse([
-			'apps' => $this->getInstallerService()->getInstalledApps(),
-		]);
+		return new DataResponse(['apps' => $this->installerService->getInstalledApps()]);
 	}
 
-	/**
-	 * Returns the currently configured Nextcloud update channel.
-	 *
-	 * @return DataResponse
-	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/update-channel')]
 	public function updateChannel(): DataResponse {
 		if (!$this->isAdmin()) {
-			return new DataResponse([
-				'message' => 'Forbidden',
-			], Http::STATUS_FORBIDDEN);
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
 		}
 
 		return new DataResponse([
-			'updateChannel' => \OC::$server->get(ServerVersion::class)->getChannel(),
+			'updateChannel' => $this->serverVersion->getChannel(),
 		]);
 	}
 
-	/**
-	 * Returns available versions for a given app id.
-	 *
-	 * @param string $appId
-	 * @return DataResponse
-	 */
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/sources')]
+	public function sources(): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		return new DataResponse([
+			'sources' => $this->installerService->getSourceRegistry()->listAvailable(),
+			'trustedPatterns' => $this->installerService->getTrustedSources()->getPatterns(),
+		]);
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/source/{appId}/binding')]
+	public function getBinding(string $appId): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$binding = $this->installerService->getBinding($appId);
+
+		return new DataResponse([
+			'appId' => $appId,
+			'binding' => $binding?->toArray(),
+			'sourceId' => $binding?->getId() ?? 'appstore',
+		]);
+	}
+
+	#[NoAdminRequired]
+	#[PasswordConfirmationRequired(strict: false)]
+	#[ApiRoute(verb: 'POST', url: '/api/source/{appId}/bind')]
+	public function bindSource(string $appId): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$kind = $this->stringParam('kind', '');
+		try {
+			$binding = match ($kind) {
+				SourceBinding::KIND_APPSTORE => SourceBinding::appStore(),
+				SourceBinding::KIND_GITHUB_RELEASE => SourceBinding::github(
+					$this->stringParam('owner', ''),
+					$this->stringParam('repo', ''),
+					$this->stringParam('assetPattern', '*.tar.gz'),
+				),
+				default => throw new InvalidArgumentException('Unknown source kind: ' . $kind),
+			};
+		} catch (InvalidArgumentException $error) {
+			return new DataResponse(['message' => $error->getMessage()], Http::STATUS_BAD_REQUEST);
+		}
+
+		try {
+			$this->installerService->bindSource($appId, $binding);
+		} catch (UntrustedSourceException $error) {
+			return new DataResponse(['message' => $error->getMessage()], Http::STATUS_FORBIDDEN);
+		}
+
+		return new DataResponse([
+			'appId' => $appId,
+			'sourceId' => $binding->getId(),
+			'binding' => $binding->toArray(),
+		]);
+	}
+
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/app/{appId}/versions')]
 	public function appVersions(string $appId): DataResponse {
 		if (!$this->isAdmin()) {
-			return new DataResponse([
-				'message' => 'Forbidden',
-			], Http::STATUS_FORBIDDEN);
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
 		}
 
-		$result = $this->getInstallerService()->getAppVersions($appId);
+		$source = $this->request->getParam('source');
+		$sourceOverride = is_string($source) && trim($source) !== '' ? trim($source) : null;
+
+		$result = $this->installerService->getAppVersions($appId, $sourceOverride);
 		$statusCode = $result['statusCode'] ?? Http::STATUS_OK;
 		unset($result['statusCode'], $result['hasError']);
 
 		return new DataResponse($result, $statusCode);
 	}
 
-	/**
-	 * Installs a selected app version.
-	 *
-	 * @param string $appId
-	 * @param string $version
-	 * @return DataResponse
-	 */
 	#[NoAdminRequired]
 	#[PasswordConfirmationRequired(strict: false)]
 	#[ApiRoute(verb: 'POST', url: '/api/app/{appId}/versions/{version}/install')]
 	public function installVersion(string $appId, string $version): DataResponse {
 		if (!$this->isAdmin()) {
-			return new DataResponse([
-				'message' => 'Forbidden',
-			], Http::STATUS_FORBIDDEN);
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
 		}
 
-		$requestedVersion = $this->request->getParam('targetVersion');
-		if (!is_string($requestedVersion)) {
-			$requestedVersion = '';
-		}
-
-		$requestedVersion = trim($requestedVersion);
+		$requestedVersion = $this->stringParam('targetVersion', '');
 		if ($requestedVersion === '') {
-			$requestedVersion = $this->request->getParam('version');
-			if (!is_string($requestedVersion)) {
-				$requestedVersion = '';
-			}
-
-			$requestedVersion = trim($requestedVersion);
-			if ($requestedVersion === '') {
-				$requestedVersion = $version;
-			}
+			$requestedVersion = $this->stringParam('version', '');
+		}
+		if ($requestedVersion === '') {
+			$requestedVersion = $version;
 		}
 
-		$rawDebug = $this->request->getParam('debug', '0');
-		$includeDebug = $this->readBinaryBool($rawDebug, false);
+		$source = $this->request->getParam('source');
+		$sourceOverride = is_string($source) && trim($source) !== '' ? trim($source) : null;
 
-		$result = $this->getInstallerService()->installAppVersion(
+		$includeDebug = $this->readBinaryBool($this->request->getParam('debug', '0'), false);
+
+		$result = $this->installerService->installAppVersion(
 			$appId,
 			$requestedVersion,
-			$includeDebug
+			$includeDebug,
+			$sourceOverride,
 		);
 		$result['payload']['requestedVersion'] = $requestedVersion;
 		$result['payload']['routeVersion'] = $version;
@@ -150,24 +194,196 @@ class ApiController extends OCSController {
 		);
 	}
 
-	/**
-	 * Reads a request value into bool with safe defaults.
-	 *
-	 * Accepts "1", "0", "true", "false", integers and floats.
-	 *
-	 * @param mixed $value
-	 * @param bool $default
-	 * @return bool
-	 */
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/pats')]
+	public function listPats(): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$user = $this->userSession->getUser();
+		if ($user === null) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$pats = $this->patMapper->findVisibleTo($user->getUID());
+		$payload = array_map(
+			static fn (Pat $pat): array => $pat->toRedacted(),
+			$pats
+		);
+
+		return new DataResponse(['pats' => $payload]);
+	}
+
+	#[NoAdminRequired]
+	#[PasswordConfirmationRequired(strict: false)]
+	#[ApiRoute(verb: 'POST', url: '/api/pats')]
+	public function createPat(): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$user = $this->userSession->getUser();
+		if ($user === null) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$label = $this->stringParam('label', '');
+		$targetPattern = $this->stringParam('targetPattern', '');
+		$token = $this->stringParam('token', '');
+		if ($label === '' || $targetPattern === '' || $token === '') {
+			return new DataResponse(
+				['message' => 'label, targetPattern and token are required.'],
+				Http::STATUS_BAD_REQUEST
+			);
+		}
+
+		$result = $this->patValidator->validate($token);
+		if (!$result->ok) {
+			return new DataResponse(['message' => $result->error ?? 'PAT validation failed.'], Http::STATUS_BAD_REQUEST);
+		}
+
+		$pat = $this->patManager->create(
+			$user->getUID(),
+			$label,
+			$this->patValidator->detectKind($token),
+			$targetPattern,
+			$token,
+			$result->scopes,
+			$result->warnings,
+			$result->expiresAt,
+		);
+
+		return new DataResponse(['pat' => $pat->toRedacted(), 'warnings' => $result->warnings]);
+	}
+
+	#[NoAdminRequired]
+	#[PasswordConfirmationRequired(strict: false)]
+	#[ApiRoute(verb: 'PATCH', url: '/api/pats/{id}')]
+	public function patchPat(int $id): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$user = $this->userSession->getUser();
+		if ($user === null) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		try {
+			$pat = $this->patMapper->findById($id);
+		} catch (DoesNotExistException) {
+			return new DataResponse(['message' => 'PAT not found.'], Http::STATUS_NOT_FOUND);
+		}
+
+		if ($pat->getOwnerUid() !== $user->getUID()) {
+			return new DataResponse(['message' => 'Only the PAT owner can update it.'], Http::STATUS_FORBIDDEN);
+		}
+
+		$label = $this->request->getParam('label');
+		$shared = $this->request->getParam('sharedWithAdmins');
+		if (is_string($label) && trim($label) !== '') {
+			$pat->setLabel(trim($label));
+		}
+		if (is_bool($shared)) {
+			$pat->setSharedWithAdmins($shared);
+		} elseif (is_string($shared)) {
+			$pat->setSharedWithAdmins($this->readBinaryBool($shared, $pat->getSharedWithAdmins()));
+		}
+
+		return new DataResponse(['pat' => $this->patManager->update($pat)->toRedacted()]);
+	}
+
+	#[NoAdminRequired]
+	#[PasswordConfirmationRequired(strict: false)]
+	#[ApiRoute(verb: 'DELETE', url: '/api/pats/{id}')]
+	public function deletePat(int $id): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$user = $this->userSession->getUser();
+		if ($user === null) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		try {
+			$pat = $this->patMapper->findById($id);
+		} catch (DoesNotExistException) {
+			return new DataResponse(['message' => 'PAT not found.'], Http::STATUS_NOT_FOUND);
+		}
+
+		if ($pat->getOwnerUid() !== $user->getUID()) {
+			return new DataResponse(['message' => 'Only the PAT owner can delete it.'], Http::STATUS_FORBIDDEN);
+		}
+
+		$this->patManager->delete($pat);
+
+		return new DataResponse(['deleted' => $id]);
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/discover')]
+	public function discover(): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$query = $this->stringParam('q', '');
+		if (mb_strlen($query) < 2) {
+			return new DataResponse(
+				['message' => 'Query must be at least 2 characters.'],
+				Http::STATUS_BAD_REQUEST
+			);
+		}
+		if (mb_strlen($query) > 100) {
+			return new DataResponse(
+				['message' => 'Query must be at most 100 characters.'],
+				Http::STATUS_BAD_REQUEST
+			);
+		}
+
+		$sourcesParam = $this->stringParam('sources', '');
+		$sourceIds = null;
+		if ($sourcesParam !== '') {
+			$sourceIds = array_values(array_filter(array_map('trim', explode(',', $sourcesParam))));
+		}
+
+		$installedOnly = $this->readBinaryBool($this->request->getParam('installedOnly', '0'), false);
+
+		$result = $this->discoveryAggregator->search($query, $sourceIds, $installedOnly);
+
+		return new DataResponse($result);
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/pats/deeplink')]
+	public function patDeeplink(): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$kind = $this->stringParam('kind', Pat::KIND_FINE_GRAINED);
+		try {
+			return new DataResponse($this->deeplinkBuilder->build($kind));
+		} catch (InvalidArgumentException $error) {
+			return new DataResponse(['message' => $error->getMessage()], Http::STATUS_BAD_REQUEST);
+		}
+	}
+
+	private function stringParam(string $name, string $default): string {
+		$value = $this->request->getParam($name, $default);
+
+		return is_string($value) ? trim($value) : $default;
+	}
+
 	private function readBinaryBool(mixed $value, bool $default): bool {
 		if (is_bool($value)) {
 			return $value;
 		}
-
 		if (is_int($value) || is_float($value)) {
-			return (string) (int) $value === '1';
+			return (string)(int)$value === '1';
 		}
-
 		if (is_string($value)) {
 			$normalized = strtolower(trim($value));
 			if (in_array($normalized, ['1', 'true'], true)) {
@@ -181,26 +397,12 @@ class ApiController extends OCSController {
 		return $default;
 	}
 
-	/**
-	 * Checks if the current user is an admin user.
-	 *
-	 * @return bool
-	 */
 	private function isAdmin(): bool {
-		$user = \OC::$server->getUserSession()->getUser();
+		$user = $this->userSession->getUser();
 		if ($user === null) {
 			return false;
 		}
 
-		return \OC::$server->get(IGroupManager::class)->isAdmin($user->getUID());
-	}
-
-	/**
-	 * Resolves installer service from container.
-	 *
-	 * @return InstallerService
-	 */
-	private function getInstallerService(): InstallerService {
-		return \OC::$server->get(InstallerService::class);
+		return $this->groupManager->isAdmin($user->getUID());
 	}
 }

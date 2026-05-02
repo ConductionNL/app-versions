@@ -6,26 +6,26 @@ namespace OCA\AppVersions\Service;
 
 use Exception;
 use OC\Archive\TAR;
-use OC\AppFramework\Bootstrap\Coordinator;
-use OC\DB\Connection;
-use OC\DB\MigrationService;
 use OC\Files\FilenameValidator;
+use OCA\AppVersions\Service\Installer\InstallFinalizer;
 use phpseclib\File\X509;
 use OCP\App\AppPathNotFoundException;
 use OCP\App\IAppManager;
-use OCP\BackgroundJob\IJobList;
 use OCP\Files;
 use OCP\Http\Client\IClientService;
 use OCP\IConfig;
 use OCP\ITempManager;
 use OCP\L10N\IFactory;
-use OCP\Migration\IOutput;
 use OCP\Server;
-use Psr\Log\LoggerInterface;
 
 class SelectedReleaseInstallerService {
 	/** @var array<int, mixed> */
 	private array $debug = [];
+
+	public function __construct(
+		private InstallFinalizer $finalizer,
+	) {
+	}
 
 	/**
 	 * Returns internal debug logs for the last operation.
@@ -190,7 +190,7 @@ class SelectedReleaseInstallerService {
 	 * @return int
 	 */
 	private function getDownloadTimeout(): int {
-		return php_sapi_name() === 'cli' ? 0 : 120;
+		return PHP_SAPI === 'cli' ? 0 : 120;
 	}
 
 	/**
@@ -200,24 +200,6 @@ class SelectedReleaseInstallerService {
 	 */
 	private function getClientService(): IClientService {
 		return Server::get(IClientService::class);
-	}
-
-	/**
-	 * Returns background job list.
-	 *
-	 * @return IJobList
-	 */
-	private function getJobList(): IJobList {
-		return Server::get(IJobList::class);
-	}
-
-	/**
-	 * Returns logger service.
-	 *
-	 * @return LoggerInterface
-	 */
-	private function getLogger(): LoggerInterface {
-		return Server::get(LoggerInterface::class);
 	}
 
 	/**
@@ -279,15 +261,12 @@ class SelectedReleaseInstallerService {
 
 			\OC_App::checkAppDependencies($config, $l, $info, $ignoreMax);
 
-			$coordinator = Server::get(Coordinator::class);
-			$coordinator->runLazyRegistration($appId);
-
 			$enabled = $installedVersion === '' ? 'no' : $previousEnabled;
 			$this->addDebug('last-steps', [
 				'appPath' => $appPath,
 				'enabled' => $enabled,
 			]);
-			$installedApp = $this->installAppLastSteps($appPath, $info, null, $enabled);
+			$installedApp = $this->finalizer->finalize($appPath, $info, $enabled);
 			$this->addDebug('post-install-state', [
 				'appPath' => $appPath,
 				'installedVersionConfig' => $config->getAppValue($appId, 'installed_version', ''),
@@ -492,84 +471,6 @@ class SelectedReleaseInstallerService {
 			opcache_reset();
 		}
 		$this->addDebug('filesystem-updated', ['destination' => $destination]);
-	}
-
-	/**
-	 * Finalizes app install/upgrade steps (autoloading, migrations, hooks, cache/config updates).
-	 *
-	 * @param string $appPath
-	 * @param array<string, mixed> $info
-	 * @param IOutput|null $output
-	 * @param string $enabled
-	 * @return string
-	 * @throws Exception
-	 */
-	private function installAppLastSteps(string $appPath, array $info, ?IOutput $output = null, string $enabled = 'no'): string {
-		\OC_App::registerAutoloading($info['id'], $appPath);
-
-		$config = $this->getConfig();
-		$appManager = $this->getAppManager();
-		$previousVersion = $config->getAppValue($info['id'], 'installed_version', '');
-		$ms = new MigrationService($info['id'], Server::get(Connection::class));
-		if ($output instanceof IOutput) {
-			$ms->setOutput($output);
-		}
-		if ($previousVersion !== '') {
-			\OC_App::executeRepairSteps($info['id'], $info['repair-steps']['pre-migration']);
-		}
-
-		$ms->migrate('latest', $previousVersion === '');
-
-		if ($previousVersion !== '') {
-			\OC_App::executeRepairSteps($info['id'], $info['repair-steps']['post-migration']);
-		}
-
-		if ($output instanceof IOutput) {
-			$output->debug('Registering tasks of ' . $info['id']);
-		}
-
-		$queue = $this->getJobList();
-		foreach ($info['background-jobs'] as $job) {
-			$queue->add($job);
-		}
-
-		$appInstallScriptPath = $appPath . '/appinfo/install.php';
-		if (file_exists($appInstallScriptPath)) {
-			$this->getLogger()->warning('Using an appinfo/install.php file is deprecated. Application "{app}" still uses one.', [
-				'app' => $info['id'],
-			]);
-			self::includeAppScript($appInstallScriptPath);
-		}
-
-		\OC_App::executeRepairSteps($info['id'], $info['repair-steps']['install']);
-
-		$installedVersion = is_array($info) && is_string($info['version'] ?? null)
-			? $info['version']
-			: $appManager->getAppVersion($info['id'], false);
-		$config->setAppValue($info['id'], 'installed_version', $installedVersion);
-		$config->setAppValue($info['id'], 'enabled', $enabled);
-
-		foreach ($info['remote'] as $name => $path) {
-			$config->setAppValue('core', 'remote_' . $name, $info['id'] . '/' . $path);
-		}
-		foreach ($info['public'] as $name => $path) {
-			$config->setAppValue('core', 'public_' . $name, $info['id'] . '/' . $path);
-		}
-
-		\OC_App::setAppTypes($info['id']);
-		$appManager->clearAppsCache();
-		return $info['id'];
-	}
-
-	/**
-	 * Includes legacy install script when present.
-	 *
-	 * @param string $script
-	 */
-	private static function includeAppScript(string $script): void {
-		if (file_exists($script)) {
-			include $script;
-		}
 	}
 
 	/**
