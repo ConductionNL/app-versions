@@ -8,11 +8,13 @@
 		xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.4/phpunit.xsd">
 	<testsuite name="App Versions Unit Tests (no Nextcloud bootstrap)">
 		<directory suffix="Test.php">unit/Service/Source</directory>
+		<directory suffix="Test.php">unit/Service/Pat</directory>
 		<directory suffix="Test.php">unit/Controller</directory>
 	</testsuite>
 	<source>
 		<include>
 			<directory suffix=".php">../lib/Service/Source</directory>
+			<directory suffix=".php">../lib/Service/Pat</directory>
 			<directory suffix=".php">../lib/Controller</directory>
 		</include>
 	</source>
