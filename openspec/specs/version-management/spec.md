@@ -1,16 +1,18 @@
 ---
-status: idea
+status: implemented
 ---
 
 # Version Management Specification
 
-**Status**: idea
-**Standards**: Nextcloud App Store API v1, OCP\App\IAppManager
+**Status**: implemented
+**Standards**: Nextcloud App Store API v1, GitHub REST API v2022-11-28, OCP\App\IAppManager
 **Feature tier**: MVP
 
 ## Purpose
 
 Version management is the core capability of App Versions. It allows Nextcloud administrators to view all available versions of any installed app, select a specific version (older or newer), and install it — replacing the currently installed version. This enables rollback after broken updates, testing compatibility with specific versions, and controlled upgrades.
+
+Each app may be bound to a single source (App Store or external such as GitHub releases) that is authoritative for its version listings. See the companion [external-sources spec](../external-sources/spec.md) for how external sources are validated and installed.
 
 ## Requirements
 
@@ -38,13 +40,26 @@ The system MUST display all currently installed Nextcloud apps with their name, 
 
 ### Requirement: Fetch Available Versions [MVP]
 
-The system MUST query the Nextcloud App Store API to retrieve all available releases for a selected app. Versions MUST be filtered by compatibility with the current Nextcloud version and update channel.
+The system MUST query the **bound source** for an app to retrieve all available releases. If no source is bound, the App Store is queried by default. Versions MUST be filtered by compatibility with the current Nextcloud version and update channel.
+
+#### Scenario: Bound source is queried first
+
+- GIVEN an admin selects app `openregister` (bound to `github:ConductionNL/openregister`)
+- WHEN the version list loads
+- THEN the system MUST fetch from `https://api.github.com/repos/ConductionNL/openregister/releases`
+- AND the App Store MUST NOT be queried as a fallback in this request
+
+#### Scenario: Unbound app falls through to App Store
+
+- GIVEN an admin selects app `someapp` (no binding present)
+- WHEN the version list loads
+- THEN the system MUST fetch from the Nextcloud App Store endpoints
 
 #### Scenario: View versions for an app
 
 - GIVEN an admin selects app "OpenRegister" from the list
 - WHEN the version list loads
-- THEN the system MUST show all available versions from the app store
+- THEN the system MUST show all available versions from the bound source
 - AND the currently installed version MUST be highlighted
 - AND versions incompatible with the current Nextcloud version MUST be marked as incompatible
 - AND each version MUST show: version number, release date, minimum NC version, maximum NC version
@@ -61,6 +76,46 @@ The system MUST query the Nextcloud App Store API to retrieve all available rele
 - GIVEN the Nextcloud instance is on the "stable" update channel
 - WHEN fetching versions
 - THEN beta/nightly releases SHOULD be filtered out or marked as non-stable
+
+---
+
+### Requirement: Source binding [MVP]
+
+When an app is installed via the version manager, the source it was installed from MUST be persisted as a binding under app config key `source.{appId}`. Future version queries for that app MUST default to the bound source. Apps installed via Nextcloud's normal app-install flow (outside App Versions) have no binding and default to App Store.
+
+#### Scenario: Install from App Store leaves no GitHub binding
+
+- GIVEN an admin installs `someapp@1.2.0` from the App Store via App Versions
+- WHEN the install completes
+- THEN `app_versions.source.someapp` MUST either be unset or set to `{kind: "appstore"}`
+- AND future version queries for `someapp` MUST hit the App Store
+
+#### Scenario: Install from GitHub binds to that source
+
+- GIVEN an admin installs `openregister@2.5.0` from `github:ConductionNL/openregister`
+- WHEN the install completes
+- THEN `app_versions.source.openregister` MUST be set to `{kind: "github-release", owner: "ConductionNL", repo: "openregister", assetPattern: "*.tar.gz", boundAt: ISO-8601-timestamp}`
+- AND the next call to `GET /api/app/openregister/versions` MUST query the GitHub source, not the App Store
+
+#### Scenario: Re-binding overwrites previous binding
+
+- GIVEN `app_versions.source.openregister` is currently bound to `github:ConductionNL/openregister`
+- WHEN the admin installs `openregister@2.5.0` from the App Store via the source-picker
+- THEN `app_versions.source.openregister` MUST be updated to `{kind: "appstore"}`
+- AND the next version query MUST hit the App Store
+
+---
+
+### Requirement: Explicit source override [MVP]
+
+The version-list and install endpoints MUST accept an optional `source` parameter that overrides the bound source for that single request without changing the binding.
+
+#### Scenario: One-off query without binding change
+
+- GIVEN `openregister` is bound to `github:ConductionNL/openregister`
+- WHEN the admin calls `GET /api/app/openregister/versions?source=appstore`
+- THEN the response MUST contain App Store versions
+- AND `app_versions.source.openregister` MUST remain unchanged
 
 ---
 
