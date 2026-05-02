@@ -19,7 +19,7 @@ use OCP\IConfig;
  */
 class SourceBindingStore {
 	public function __construct(
-		private IConfig $config
+		private IConfig $config,
 	) {
 	}
 

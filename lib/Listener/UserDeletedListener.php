@@ -22,7 +22,7 @@ use OCP\User\Events\UserDeletedEvent;
  */
 class UserDeletedListener implements IEventListener {
 	public function __construct(
-		private PatMapper $mapper
+		private PatMapper $mapper,
 	) {
 	}
 

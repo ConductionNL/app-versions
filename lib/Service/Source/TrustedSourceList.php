@@ -24,7 +24,7 @@ class TrustedSourceList {
 	private const DEFAULT_PATTERNS = ['ConductionNL/*'];
 
 	public function __construct(
-		private IConfig $config
+		private IConfig $config,
 	) {
 	}
 

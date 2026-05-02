@@ -23,7 +23,7 @@ class PatDeeplinkBuilder {
 	private const FINE_GRAINED_BASE = 'https://github.com/settings/personal-access-tokens/new';
 
 	public function __construct(
-		private IRequest $request
+		private IRequest $request,
 	) {
 	}
 
