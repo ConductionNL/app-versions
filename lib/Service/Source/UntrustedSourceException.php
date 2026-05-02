@@ -18,7 +18,7 @@ use RuntimeException;
 final class UntrustedSourceException extends RuntimeException {
 	public function __construct(
 		public readonly string $sourceId,
-		?string $reason = null
+		?string $reason = null,
 	) {
 		parent::__construct(
 			$reason !== null
