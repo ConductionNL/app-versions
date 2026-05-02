@@ -7,6 +7,7 @@ namespace OCA\AppVersions\Controller;
 use InvalidArgumentException;
 use OCA\AppVersions\Db\Pat;
 use OCA\AppVersions\Db\PatMapper;
+use OCA\AppVersions\Service\Discovery\DiscoveryAggregator;
 use OCA\AppVersions\Service\InstallerService;
 use OCA\AppVersions\Service\Pat\PatDeeplinkBuilder;
 use OCA\AppVersions\Service\Pat\PatManager;
@@ -42,6 +43,7 @@ class ApiController extends OCSController {
 		private PatManager $patManager,
 		private PatValidator $patValidator,
 		private PatDeeplinkBuilder $deeplinkBuilder,
+		private DiscoveryAggregator $discoveryAggregator,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -318,6 +320,40 @@ class ApiController extends OCSController {
 		$this->patManager->delete($pat);
 
 		return new DataResponse(['deleted' => $id]);
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/discover')]
+	public function discover(): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$query = $this->stringParam('q', '');
+		if (mb_strlen($query) < 2) {
+			return new DataResponse(
+				['message' => 'Query must be at least 2 characters.'],
+				Http::STATUS_BAD_REQUEST
+			);
+		}
+		if (mb_strlen($query) > 100) {
+			return new DataResponse(
+				['message' => 'Query must be at most 100 characters.'],
+				Http::STATUS_BAD_REQUEST
+			);
+		}
+
+		$sourcesParam = $this->stringParam('sources', '');
+		$sourceIds = null;
+		if ($sourcesParam !== '') {
+			$sourceIds = array_values(array_filter(array_map('trim', explode(',', $sourcesParam))));
+		}
+
+		$installedOnly = $this->readBinaryBool($this->request->getParam('installedOnly', '0'), false);
+
+		$result = $this->discoveryAggregator->search($query, $sourceIds, $installedOnly);
+
+		return new DataResponse($result);
 	}
 
 	#[NoAdminRequired]
