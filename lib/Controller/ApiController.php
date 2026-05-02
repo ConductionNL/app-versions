@@ -4,142 +4,174 @@ declare(strict_types=1);
 
 namespace OCA\AppVersions\Controller;
 
+use InvalidArgumentException;
 use OCA\AppVersions\Service\InstallerService;
+use OCA\AppVersions\Service\Source\SourceBinding;
+use OCA\AppVersions\Service\Source\SourceRegistry;
+use OCA\AppVersions\Service\Source\TrustedSourceList;
+use OCA\AppVersions\Service\Source\UntrustedSourceException;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\Attribute\ApiRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
+use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\OCSController;
-use OCP\ServerVersion;
 use OCP\IGroupManager;
+use OCP\IRequest;
+use OCP\IUserSession;
+use OCP\ServerVersion;
 
 /**
  * @psalm-suppress UnusedClass
  */
 class ApiController extends OCSController {
+	public function __construct(
+		string $appName,
+		IRequest $request,
+		private InstallerService $installerService,
+		private IGroupManager $groupManager,
+		private IUserSession $userSession,
+		private ServerVersion $serverVersion,
+	) {
+		parent::__construct($appName, $request);
+	}
 
-	/**
-	 * Checks whether the currently signed in user is an admin.
-	 *
-	 * @return DataResponse
-	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/admin-check')]
 	public function adminCheck(): DataResponse {
-		if (!$this->isAdmin()) {
-			return new DataResponse([
-				'isAdmin' => false,
-			], Http::STATUS_OK);
-		}
-
-		return new DataResponse([
-			'isAdmin' => true,
-		], Http::STATUS_OK);
+		return new DataResponse(['isAdmin' => $this->isAdmin()], Http::STATUS_OK);
 	}
 
-	/**
-	 * Returns installed apps for the select dropdown.
-	 *
-	 * @return DataResponse
-	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/apps')]
 	public function apps(): DataResponse {
 		if (!$this->isAdmin()) {
-			return new DataResponse([
-				'message' => 'Forbidden',
-			], Http::STATUS_FORBIDDEN);
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
 		}
 
-		return new DataResponse([
-			'apps' => $this->getInstallerService()->getInstalledApps(),
-		]);
+		return new DataResponse(['apps' => $this->installerService->getInstalledApps()]);
 	}
 
-	/**
-	 * Returns the currently configured Nextcloud update channel.
-	 *
-	 * @return DataResponse
-	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/update-channel')]
 	public function updateChannel(): DataResponse {
 		if (!$this->isAdmin()) {
-			return new DataResponse([
-				'message' => 'Forbidden',
-			], Http::STATUS_FORBIDDEN);
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
 		}
 
 		return new DataResponse([
-			'updateChannel' => \OC::$server->get(ServerVersion::class)->getChannel(),
+			'updateChannel' => $this->serverVersion->getChannel(),
 		]);
 	}
 
-	/**
-	 * Returns available versions for a given app id.
-	 *
-	 * @param string $appId
-	 * @return DataResponse
-	 */
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/sources')]
+	public function sources(): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		return new DataResponse([
+			'sources' => $this->installerService->getSourceRegistry()->listAvailable(),
+			'trustedPatterns' => $this->installerService->getTrustedSources()->getPatterns(),
+		]);
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/source/{appId}/binding')]
+	public function getBinding(string $appId): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$binding = $this->installerService->getBinding($appId);
+
+		return new DataResponse([
+			'appId' => $appId,
+			'binding' => $binding?->toArray(),
+			'sourceId' => $binding?->getId() ?? 'appstore',
+		]);
+	}
+
+	#[NoAdminRequired]
+	#[PasswordConfirmationRequired(strict: false)]
+	#[ApiRoute(verb: 'POST', url: '/api/source/{appId}/bind')]
+	public function bindSource(string $appId): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$kind = $this->stringParam('kind', '');
+		try {
+			$binding = match ($kind) {
+				SourceBinding::KIND_APPSTORE => SourceBinding::appStore(),
+				SourceBinding::KIND_GITHUB_RELEASE => SourceBinding::github(
+					$this->stringParam('owner', ''),
+					$this->stringParam('repo', ''),
+					$this->stringParam('assetPattern', '*.tar.gz'),
+				),
+				default => throw new InvalidArgumentException('Unknown source kind: ' . $kind),
+			};
+		} catch (InvalidArgumentException $error) {
+			return new DataResponse(['message' => $error->getMessage()], Http::STATUS_BAD_REQUEST);
+		}
+
+		try {
+			$this->installerService->bindSource($appId, $binding);
+		} catch (UntrustedSourceException $error) {
+			return new DataResponse(['message' => $error->getMessage()], Http::STATUS_FORBIDDEN);
+		}
+
+		return new DataResponse([
+			'appId' => $appId,
+			'sourceId' => $binding->getId(),
+			'binding' => $binding->toArray(),
+		]);
+	}
+
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/app/{appId}/versions')]
 	public function appVersions(string $appId): DataResponse {
 		if (!$this->isAdmin()) {
-			return new DataResponse([
-				'message' => 'Forbidden',
-			], Http::STATUS_FORBIDDEN);
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
 		}
 
-		$result = $this->getInstallerService()->getAppVersions($appId);
+		$source = $this->request->getParam('source');
+		$sourceOverride = is_string($source) && trim($source) !== '' ? trim($source) : null;
+
+		$result = $this->installerService->getAppVersions($appId, $sourceOverride);
 		$statusCode = $result['statusCode'] ?? Http::STATUS_OK;
 		unset($result['statusCode'], $result['hasError']);
 
 		return new DataResponse($result, $statusCode);
 	}
 
-	/**
-	 * Installs a selected app version.
-	 *
-	 * @param string $appId
-	 * @param string $version
-	 * @return DataResponse
-	 */
 	#[NoAdminRequired]
 	#[PasswordConfirmationRequired(strict: false)]
 	#[ApiRoute(verb: 'POST', url: '/api/app/{appId}/versions/{version}/install')]
 	public function installVersion(string $appId, string $version): DataResponse {
 		if (!$this->isAdmin()) {
-			return new DataResponse([
-				'message' => 'Forbidden',
-			], Http::STATUS_FORBIDDEN);
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
 		}
 
-		$requestedVersion = $this->request->getParam('targetVersion');
-		if (!is_string($requestedVersion)) {
-			$requestedVersion = '';
-		}
-
-		$requestedVersion = trim($requestedVersion);
+		$requestedVersion = $this->stringParam('targetVersion', '');
 		if ($requestedVersion === '') {
-			$requestedVersion = $this->request->getParam('version');
-			if (!is_string($requestedVersion)) {
-				$requestedVersion = '';
-			}
-
-			$requestedVersion = trim($requestedVersion);
-			if ($requestedVersion === '') {
-				$requestedVersion = $version;
-			}
+			$requestedVersion = $this->stringParam('version', '');
+		}
+		if ($requestedVersion === '') {
+			$requestedVersion = $version;
 		}
 
-		$rawDebug = $this->request->getParam('debug', '0');
-		$includeDebug = $this->readBinaryBool($rawDebug, false);
+		$source = $this->request->getParam('source');
+		$sourceOverride = is_string($source) && trim($source) !== '' ? trim($source) : null;
 
-		$result = $this->getInstallerService()->installAppVersion(
+		$includeDebug = $this->readBinaryBool($this->request->getParam('debug', '0'), false);
+
+		$result = $this->installerService->installAppVersion(
 			$appId,
 			$requestedVersion,
-			$includeDebug
+			$includeDebug,
+			$sourceOverride,
 		);
 		$result['payload']['requestedVersion'] = $requestedVersion;
 		$result['payload']['routeVersion'] = $version;
@@ -150,24 +182,19 @@ class ApiController extends OCSController {
 		);
 	}
 
-	/**
-	 * Reads a request value into bool with safe defaults.
-	 *
-	 * Accepts "1", "0", "true", "false", integers and floats.
-	 *
-	 * @param mixed $value
-	 * @param bool $default
-	 * @return bool
-	 */
+	private function stringParam(string $name, string $default): string {
+		$value = $this->request->getParam($name, $default);
+
+		return is_string($value) ? trim($value) : $default;
+	}
+
 	private function readBinaryBool(mixed $value, bool $default): bool {
 		if (is_bool($value)) {
 			return $value;
 		}
-
 		if (is_int($value) || is_float($value)) {
-			return (string) (int) $value === '1';
+			return (string)(int)$value === '1';
 		}
-
 		if (is_string($value)) {
 			$normalized = strtolower(trim($value));
 			if (in_array($normalized, ['1', 'true'], true)) {
@@ -181,26 +208,12 @@ class ApiController extends OCSController {
 		return $default;
 	}
 
-	/**
-	 * Checks if the current user is an admin user.
-	 *
-	 * @return bool
-	 */
 	private function isAdmin(): bool {
-		$user = \OC::$server->getUserSession()->getUser();
+		$user = $this->userSession->getUser();
 		if ($user === null) {
 			return false;
 		}
 
-		return \OC::$server->get(IGroupManager::class)->isAdmin($user->getUID());
-	}
-
-	/**
-	 * Resolves installer service from container.
-	 *
-	 * @return InstallerService
-	 */
-	private function getInstallerService(): InstallerService {
-		return \OC::$server->get(InstallerService::class);
+		return $this->groupManager->isAdmin($user->getUID());
 	}
 }
