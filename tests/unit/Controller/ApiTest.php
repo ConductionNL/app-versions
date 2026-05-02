@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace OCA\AppVersions\Tests\Unit\Controller;
 
 use OCA\AppVersions\Controller\ApiController;
+use OCA\AppVersions\Db\PatMapper;
 use OCA\AppVersions\Service\InstallerService;
+use OCA\AppVersions\Service\Pat\PatDeeplinkBuilder;
+use OCA\AppVersions\Service\Pat\PatManager;
+use OCA\AppVersions\Service\Pat\PatValidator;
 use OCP\IGroupManager;
 use OCP\IRequest;
 use OCP\IUserSession;
@@ -21,14 +25,18 @@ final class ApiTest extends TestCase {
 		return (new ReflectionClass(ServerVersion::class))->newInstanceWithoutConstructor();
 	}
 
-	private function buildController(): ApiController {
+	private function buildController(?IRequest $request = null): ApiController {
 		return new ApiController(
 			'app_versions',
-			$this->createMock(IRequest::class),
+			$request ?? $this->createMock(IRequest::class),
 			$this->createMock(InstallerService::class),
 			$this->createMock(IGroupManager::class),
 			$this->createMock(IUserSession::class),
 			$this->fakeServerVersion(),
+			$this->createMock(PatMapper::class),
+			$this->createMock(PatManager::class),
+			$this->createMock(PatValidator::class),
+			$this->createMock(PatDeeplinkBuilder::class),
 		);
 	}
 
@@ -60,14 +68,7 @@ final class ApiTest extends TestCase {
 			}
 		);
 
-		$controller = new ApiController(
-			'app_versions',
-			$request,
-			$this->createMock(InstallerService::class),
-			$this->createMock(IGroupManager::class),
-			$this->createMock(IUserSession::class),
-			$this->fakeServerVersion(),
-		);
+		$controller = $this->buildController($request);
 
 		$method = new ReflectionMethod(ApiController::class, 'stringParam');
 

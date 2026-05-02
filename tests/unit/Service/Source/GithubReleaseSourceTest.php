@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace OCA\AppVersions\Tests\Unit\Service\Source;
 
 use Exception;
+use OCA\AppVersions\Service\Pat\PatManager;
+use OCA\AppVersions\Service\Pat\PatResolver;
 use OCA\AppVersions\Service\Source\GithubReleaseSource;
 use OCA\AppVersions\Service\Source\SourceBinding;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
+use OCP\IUserSession;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
@@ -20,7 +23,17 @@ final class GithubReleaseSourceTest extends TestCase {
 
 		$logger = $this->createMock(LoggerInterface::class);
 
-		return new GithubReleaseSource($clientService, $logger);
+		// PatResolver returns null (no PAT) so we exercise the unauthenticated public path.
+		$patResolver = $this->createMock(PatResolver::class);
+		$patResolver->method('findFor')->willReturn(null);
+
+		$patManager = $this->createMock(PatManager::class);
+
+		// Default: no logged-in user → no PAT lookup at all.
+		$userSession = $this->createMock(IUserSession::class);
+		$userSession->method('getUser')->willReturn(null);
+
+		return new GithubReleaseSource($clientService, $logger, $patResolver, $patManager, $userSession);
 	}
 
 	private function mockResponse(int $status, string $body): IResponse {
