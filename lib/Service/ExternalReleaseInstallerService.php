@@ -9,6 +9,8 @@ use OC\Archive\TAR;
 use OC\Archive\ZIP;
 use OC\Files\FilenameValidator;
 use OCA\AppVersions\Service\Installer\InstallFinalizer;
+use OCA\AppVersions\Service\Pat\PatManager;
+use OCA\AppVersions\Service\Pat\PatResolver;
 use OCA\AppVersions\Service\Source\SourceBinding;
 use OCA\AppVersions\Service\Source\TrustedSourceList;
 use OCP\App\AppPathNotFoundException;
@@ -17,6 +19,7 @@ use OCP\Files;
 use OCP\Http\Client\IClientService;
 use OCP\IConfig;
 use OCP\ITempManager;
+use OCP\IUserSession;
 use OCP\L10N\IFactory;
 use OCP\Server;
 use Psr\Log\LoggerInterface;
@@ -48,6 +51,9 @@ class ExternalReleaseInstallerService {
 		private InstallFinalizer $finalizer,
 		private TrustedSourceList $trustedSources,
 		private LoggerInterface $logger,
+		private PatResolver $patResolver,
+		private PatManager $patManager,
+		private IUserSession $userSession,
 	) {
 	}
 
@@ -104,20 +110,17 @@ class ExternalReleaseInstallerService {
 			throw new Exception('Could not allocate temporary download paths.');
 		}
 
+		$authResolution = $this->resolveAuth($binding);
+		$this->addDebug('auth-resolution', ['hasPat' => $authResolution !== null]);
+
 		try {
-			$this->clientService->newClient()->get($downloadUrl, [
-				'sink' => $tempFile,
-				'timeout' => $this->getDownloadTimeout(),
-				'headers' => [
-					'User-Agent' => 'Nextcloud-AppVersions',
-				],
-			]);
+			$this->authenticatedDownload($downloadUrl, $tempFile, $authResolution);
 		} catch (Exception $error) {
 			throw new Exception('Could not download selected release: ' . $error->getMessage());
 		}
 		$this->addDebug('downloaded', ['tempFile' => $tempFile, 'sourceUrl' => $downloadUrl]);
 
-		$integrityWarning = $this->verifyChecksum($tempFile, $shaUrl);
+		$integrityWarning = $this->verifyChecksum($tempFile, $shaUrl, $authResolution);
 		$this->addDebug('checksum', ['shaUrl' => $shaUrl, 'integrityWarning' => $integrityWarning]);
 
 		$archivePath = $this->extractArchive($tempFile, $tempFolder);
@@ -202,16 +205,58 @@ class ExternalReleaseInstallerService {
 		];
 	}
 
-	private function verifyChecksum(string $tempFile, ?string $shaUrl): ?string {
+	private function resolveAuth(SourceBinding $binding): ?\OCA\AppVersions\Db\Pat {
+		$ownerRepo = $binding->getOwnerRepo();
+		if ($ownerRepo === null) {
+			return null;
+		}
+		$user = $this->userSession->getUser();
+		if ($user === null) {
+			return null;
+		}
+
+		return $this->patResolver->findFor($ownerRepo, $user->getUID());
+	}
+
+	private function authenticatedDownload(string $url, string $sinkPath, ?\OCA\AppVersions\Db\Pat $pat): void {
+		$options = [
+			'sink' => $sinkPath,
+			'timeout' => $this->getDownloadTimeout(),
+			'headers' => ['User-Agent' => 'Nextcloud-AppVersions'],
+		];
+
+		if ($pat === null) {
+			$this->clientService->newClient()->get($url, $options);
+
+			return;
+		}
+
+		$this->patManager->useToken($pat, function (string $token) use ($url, $options): void {
+			$options['headers']['Authorization'] = 'Bearer ' . $token;
+			$this->clientService->newClient()->get($url, $options);
+		});
+	}
+
+	private function verifyChecksum(string $tempFile, ?string $shaUrl, ?\OCA\AppVersions\Db\Pat $pat): ?string {
 		if ($shaUrl === null) {
 			return 'No SHA-256 checksum available for this artifact.';
 		}
 
+		$options = [
+			'timeout' => 30,
+			'headers' => ['User-Agent' => 'Nextcloud-AppVersions'],
+		];
+
 		try {
-			$response = $this->clientService->newClient()->get($shaUrl, [
-				'timeout' => 30,
-				'headers' => ['User-Agent' => 'Nextcloud-AppVersions'],
-			]);
+			if ($pat === null) {
+				$response = $this->clientService->newClient()->get($shaUrl, $options);
+			} else {
+				$response = $this->patManager->useToken($pat, function (string $token) use ($shaUrl, $options) {
+					$options['headers']['Authorization'] = 'Bearer ' . $token;
+
+					return $this->clientService->newClient()->get($shaUrl, $options);
+				});
+			}
 		} catch (Exception $error) {
 			$this->logger->warning('External installer: could not fetch .sha256', [
 				'shaUrl' => $shaUrl,
