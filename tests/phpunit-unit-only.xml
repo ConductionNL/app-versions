@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		bootstrap="bootstrap-unit-only.php"
+		colors="true"
+		cacheDirectory=".phpunit.cache"
+		failOnWarning="true"
+		failOnRisky="true"
+		xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.4/phpunit.xsd">
+	<testsuite name="App Versions Unit Tests (no Nextcloud bootstrap)">
+		<directory suffix="Test.php">unit/Service/Source</directory>
+		<directory suffix="Test.php">unit/Service/Pat</directory>
+		<directory suffix="Test.php">unit/Service/Discovery</directory>
+		<directory suffix="Test.php">unit/Controller</directory>
+	</testsuite>
+	<source>
+		<include>
+			<directory suffix=".php">../lib/Service/Source</directory>
+			<directory suffix=".php">../lib/Service/Pat</directory>
+			<directory suffix=".php">../lib/Service/Discovery</directory>
+			<directory suffix=".php">../lib/Controller</directory>
+		</include>
+	</source>
+</phpunit>
