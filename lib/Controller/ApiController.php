@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license AGPL-3.0-or-later
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ */
+
 
 namespace OCA\AppVersions\Controller;
 
@@ -13,13 +18,10 @@ use OCA\AppVersions\Service\Pat\PatDeeplinkBuilder;
 use OCA\AppVersions\Service\Pat\PatManager;
 use OCA\AppVersions\Service\Pat\PatValidator;
 use OCA\AppVersions\Service\Source\SourceBinding;
-use OCA\AppVersions\Service\Source\SourceRegistry;
-use OCA\AppVersions\Service\Source\TrustedSourceList;
 use OCA\AppVersions\Service\Source\UntrustedSourceException;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\ApiRoute;
-use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\OCSController;
@@ -48,13 +50,11 @@ class ApiController extends OCSController {
 		parent::__construct($appName, $request);
 	}
 
-	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/admin-check')]
 	public function adminCheck(): DataResponse {
 		return new DataResponse(['isAdmin' => $this->isAdmin()], Http::STATUS_OK);
 	}
 
-	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/apps')]
 	public function apps(): DataResponse {
 		if (!$this->isAdmin()) {
@@ -64,7 +64,6 @@ class ApiController extends OCSController {
 		return new DataResponse(['apps' => $this->installerService->getInstalledApps()]);
 	}
 
-	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/update-channel')]
 	public function updateChannel(): DataResponse {
 		if (!$this->isAdmin()) {
@@ -76,7 +75,6 @@ class ApiController extends OCSController {
 		]);
 	}
 
-	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/sources')]
 	public function sources(): DataResponse {
 		if (!$this->isAdmin()) {
@@ -89,7 +87,6 @@ class ApiController extends OCSController {
 		]);
 	}
 
-	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/source/{appId}/binding')]
 	public function getBinding(string $appId): DataResponse {
 		if (!$this->isAdmin()) {
@@ -105,7 +102,6 @@ class ApiController extends OCSController {
 		]);
 	}
 
-	#[NoAdminRequired]
 	#[PasswordConfirmationRequired(strict: false)]
 	#[ApiRoute(verb: 'POST', url: '/api/source/{appId}/bind')]
 	public function bindSource(string $appId): DataResponse {
@@ -141,7 +137,6 @@ class ApiController extends OCSController {
 		]);
 	}
 
-	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/app/{appId}/versions')]
 	public function appVersions(string $appId): DataResponse {
 		if (!$this->isAdmin()) {
@@ -158,7 +153,6 @@ class ApiController extends OCSController {
 		return new DataResponse($result, $statusCode);
 	}
 
-	#[NoAdminRequired]
 	#[PasswordConfirmationRequired(strict: false)]
 	#[ApiRoute(verb: 'POST', url: '/api/app/{appId}/versions/{version}/install')]
 	public function installVersion(string $appId, string $version): DataResponse {
@@ -194,7 +188,6 @@ class ApiController extends OCSController {
 		);
 	}
 
-	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/pats')]
 	public function listPats(): DataResponse {
 		if (!$this->isAdmin()) {
@@ -215,7 +208,6 @@ class ApiController extends OCSController {
 		return new DataResponse(['pats' => $payload]);
 	}
 
-	#[NoAdminRequired]
 	#[PasswordConfirmationRequired(strict: false)]
 	#[ApiRoute(verb: 'POST', url: '/api/pats')]
 	public function createPat(): DataResponse {
@@ -257,7 +249,6 @@ class ApiController extends OCSController {
 		return new DataResponse(['pat' => $pat->toRedacted(), 'warnings' => $result->warnings]);
 	}
 
-	#[NoAdminRequired]
 	#[PasswordConfirmationRequired(strict: false)]
 	#[ApiRoute(verb: 'PATCH', url: '/api/pats/{id}')]
 	public function patchPat(int $id): DataResponse {
@@ -294,7 +285,6 @@ class ApiController extends OCSController {
 		return new DataResponse(['pat' => $this->patManager->update($pat)->toRedacted()]);
 	}
 
-	#[NoAdminRequired]
 	#[PasswordConfirmationRequired(strict: false)]
 	#[ApiRoute(verb: 'DELETE', url: '/api/pats/{id}')]
 	public function deletePat(int $id): DataResponse {
@@ -322,7 +312,6 @@ class ApiController extends OCSController {
 		return new DataResponse(['deleted' => $id]);
 	}
 
-	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/discover')]
 	public function discover(): DataResponse {
 		if (!$this->isAdmin()) {
@@ -356,7 +345,6 @@ class ApiController extends OCSController {
 		return new DataResponse($result);
 	}
 
-	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/pats/deeplink')]
 	public function patDeeplink(): DataResponse {
 		if (!$this->isAdmin()) {

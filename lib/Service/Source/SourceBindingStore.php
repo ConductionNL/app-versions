@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license AGPL-3.0-or-later
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ */
+
 
 namespace OCA\AppVersions\Service\Source;
 
@@ -13,7 +18,9 @@ use OCP\IConfig;
  * as unbound and the App Store is used as the fallback source.
  */
 class SourceBindingStore {
-	public function __construct(private IConfig $config) {
+	public function __construct(
+		private IConfig $config
+	) {
 	}
 
 	public function get(string $appId): ?SourceBinding {

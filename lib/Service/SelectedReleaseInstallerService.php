@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license AGPL-3.0-or-later
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ */
+
 
 namespace OCA\AppVersions\Service;
 
@@ -8,7 +13,6 @@ use Exception;
 use OC\Archive\TAR;
 use OC\Files\FilenameValidator;
 use OCA\AppVersions\Service\Installer\InstallFinalizer;
-use phpseclib\File\X509;
 use OCP\App\AppPathNotFoundException;
 use OCP\App\IAppManager;
 use OCP\Files;
@@ -17,6 +21,7 @@ use OCP\IConfig;
 use OCP\ITempManager;
 use OCP\L10N\IFactory;
 use OCP\Server;
+use phpseclib\File\X509;
 
 class SelectedReleaseInstallerService {
 	/** @var array<int, mixed> */
@@ -381,16 +386,16 @@ class SelectedReleaseInstallerService {
 			throw new Exception('Could not parse appinfo/info.xml from selected release.');
 		}
 
-		if ((string) $info->id !== $appId) {
+		if ((string)$info->id !== $appId) {
 			throw new Exception('Downloaded app id does not match requested app.');
 		}
 
-		$archiveVersion = (string) $info->version;
+		$archiveVersion = (string)$info->version;
 		if ($expectedVersion !== $archiveVersion) {
 			throw new Exception('Downloaded app version does not match requested version.');
 		}
 		$this->addDebug('info-xml', [
-			'appId' => (string) $info->id,
+			'appId' => (string)$info->id,
 			'archiveVersion' => $archiveVersion,
 		]);
 
@@ -487,7 +492,7 @@ class SelectedReleaseInstallerService {
 
 		$dirs = array_values(array_filter(
 			$entries,
-			static fn(string $entry): bool => $entry !== '.' && $entry !== '..' && is_dir($path . '/' . $entry)
+			static fn (string $entry): bool => $entry !== '.' && $entry !== '..' && is_dir($path . '/' . $entry)
 		));
 
 		if (count($dirs) !== 1) {
