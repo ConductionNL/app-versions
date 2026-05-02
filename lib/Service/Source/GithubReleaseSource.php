@@ -5,13 +5,17 @@ declare(strict_types=1);
 namespace OCA\AppVersions\Service\Source;
 
 use Exception;
+use OCA\AppVersions\Service\Pat\PatManager;
+use OCA\AppVersions\Service\Pat\PatResolver;
 use OCP\Http\Client\IClientService;
+use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 
 /**
  * Lists GitHub releases for an `owner/repo` and resolves a release into a
- * downloadable archive URL. Public repos only — PAT-authenticated requests
- * are added in proposal 2.
+ * downloadable archive URL. Falls back to unauthenticated requests when no
+ * applicable PAT exists; uses a PAT (resolved via `PatResolver`) when one
+ * matches the binding's `owner/repo` and is visible to the current admin.
  *
  * Source binding shape:
  *   {
@@ -28,6 +32,9 @@ class GithubReleaseSource implements SourceInterface {
 	public function __construct(
 		private IClientService $clientService,
 		private LoggerInterface $logger,
+		private PatResolver $patResolver,
+		private PatManager $patManager,
+		private IUserSession $userSession,
 	) {
 	}
 
@@ -45,49 +52,13 @@ class GithubReleaseSource implements SourceInterface {
 			return ['versions' => [], 'error' => 'Source binding is not a github-release binding.'];
 		}
 
-		$endpoint = sprintf('%s/repos/%s/releases?per_page=100', self::API_BASE, $ownerRepo);
-
-		try {
-			$response = $this->clientService->newClient()->get($endpoint, [
-				'headers' => [
-					'Accept' => 'application/vnd.github+json',
-					'User-Agent' => self::USER_AGENT,
-					'X-GitHub-Api-Version' => '2022-11-28',
-				],
-				'timeout' => 30,
-			]);
-		} catch (Exception $error) {
-			$this->logger->warning('GithubReleaseSource: list failed', [
-				'ownerRepo' => $ownerRepo,
-				'message' => $error->getMessage(),
-			]);
-
-			return ['versions' => [], 'error' => $this->humanizeError($error->getMessage())];
-		}
-
-		$status = $response->getStatusCode();
-		if ($status === 404) {
-			return ['versions' => [], 'error' => 'GitHub repository not found.'];
-		}
-		if ($status === 403) {
-			return ['versions' => [], 'error' => 'GitHub rate limit exceeded — try again later, or configure a PAT.'];
-		}
-		if ($status !== 200) {
-			return ['versions' => [], 'error' => sprintf('GitHub API returned HTTP %d.', $status)];
-		}
-
-		try {
-			$decoded = json_decode((string)$response->getBody(), true, 32, JSON_THROW_ON_ERROR);
-		} catch (\JsonException) {
-			return ['versions' => [], 'error' => 'GitHub API returned malformed JSON.'];
-		}
-
-		if (!is_array($decoded) || !array_is_list($decoded)) {
-			return ['versions' => [], 'error' => 'GitHub API returned an unexpected payload shape.'];
+		$result = $this->fetchReleases($ownerRepo);
+		if (!$result['ok']) {
+			return ['versions' => [], 'error' => $result['error']];
 		}
 
 		$versions = [];
-		foreach ($decoded as $release) {
+		foreach ($result['releases'] as $release) {
 			if (!is_array($release)) {
 				continue;
 			}
@@ -98,9 +69,7 @@ class GithubReleaseSource implements SourceInterface {
 			$versions[] = ['version' => $this->normalizeVersion($tag)];
 		}
 
-		$versions = $this->dedupeAndSort($versions);
-
-		return ['versions' => $versions, 'error' => null];
+		return ['versions' => $this->dedupeAndSort($versions), 'error' => null];
 	}
 
 	public function resolveRelease(string $appId, string $version, SourceBinding $binding): ?array {
@@ -109,42 +78,13 @@ class GithubReleaseSource implements SourceInterface {
 			return null;
 		}
 
+		$result = $this->fetchReleases($ownerRepo);
+		if (!$result['ok']) {
+			return null;
+		}
+
 		$assetPattern = $binding->getAssetPattern();
-		$endpoint = sprintf('%s/repos/%s/releases?per_page=100', self::API_BASE, $ownerRepo);
-
-		try {
-			$response = $this->clientService->newClient()->get($endpoint, [
-				'headers' => [
-					'Accept' => 'application/vnd.github+json',
-					'User-Agent' => self::USER_AGENT,
-					'X-GitHub-Api-Version' => '2022-11-28',
-				],
-				'timeout' => 30,
-			]);
-		} catch (Exception $error) {
-			$this->logger->warning('GithubReleaseSource: resolve failed', [
-				'ownerRepo' => $ownerRepo,
-				'message' => $error->getMessage(),
-			]);
-
-			return null;
-		}
-
-		if ($response->getStatusCode() !== 200) {
-			return null;
-		}
-
-		try {
-			$decoded = json_decode((string)$response->getBody(), true, 32, JSON_THROW_ON_ERROR);
-		} catch (\JsonException) {
-			return null;
-		}
-
-		if (!is_array($decoded) || !array_is_list($decoded)) {
-			return null;
-		}
-
-		foreach ($decoded as $release) {
+		foreach ($result['releases'] as $release) {
 			if (!is_array($release)) {
 				continue;
 			}
@@ -160,6 +100,81 @@ class GithubReleaseSource implements SourceInterface {
 		}
 
 		return null;
+	}
+
+	/**
+	 * @return array{ok: true, releases: array<int, mixed>}|array{ok: false, error: string}
+	 */
+	private function fetchReleases(string $ownerRepo): array {
+		$user = $this->userSession->getUser();
+		$uid = $user?->getUID();
+		$pat = $uid !== null ? $this->patResolver->findFor($ownerRepo, $uid) : null;
+
+		$endpoint = sprintf('%s/repos/%s/releases?per_page=100', self::API_BASE, $ownerRepo);
+
+		if ($pat === null) {
+			return $this->performFetch($endpoint, null);
+		}
+
+		/** @var array{ok: true, releases: array<int, mixed>}|array{ok: false, error: string} */
+		return $this->patManager->useToken($pat, fn (string $token): array => $this->performFetch($endpoint, $token));
+	}
+
+	/**
+	 * @return array{ok: true, releases: array<int, mixed>}|array{ok: false, error: string}
+	 */
+	private function performFetch(string $endpoint, ?string $token): array {
+		$headers = [
+			'Accept' => 'application/vnd.github+json',
+			'User-Agent' => self::USER_AGENT,
+			'X-GitHub-Api-Version' => '2022-11-28',
+		];
+		if ($token !== null) {
+			$headers['Authorization'] = 'Bearer ' . $token;
+		}
+
+		try {
+			$response = $this->clientService->newClient()->get($endpoint, [
+				'headers' => $headers,
+				'timeout' => 30,
+				// IClient throws on 4xx by default; we want to inspect the
+				// status code ourselves to produce useful errors.
+				'http_errors' => false,
+			]);
+		} catch (Exception $error) {
+			$this->logger->warning('GithubReleaseSource: fetch failed', [
+				'endpoint' => $endpoint,
+				'message' => $error->getMessage(),
+			]);
+
+			return ['ok' => false, 'error' => $this->humanizeError($error->getMessage())];
+		}
+
+		$status = $response->getStatusCode();
+		if ($status === 404) {
+			return ['ok' => false, 'error' => 'GitHub repository not found.'];
+		}
+		if ($status === 401) {
+			return ['ok' => false, 'error' => 'GitHub authentication failed — the configured PAT may be revoked or expired.'];
+		}
+		if ($status === 403) {
+			return ['ok' => false, 'error' => 'GitHub rate limit exceeded — try again later, or configure a PAT.'];
+		}
+		if ($status !== 200) {
+			return ['ok' => false, 'error' => sprintf('GitHub API returned HTTP %d.', $status)];
+		}
+
+		try {
+			$decoded = json_decode((string)$response->getBody(), true, 32, JSON_THROW_ON_ERROR);
+		} catch (\JsonException) {
+			return ['ok' => false, 'error' => 'GitHub API returned malformed JSON.'];
+		}
+
+		if (!is_array($decoded) || !array_is_list($decoded)) {
+			return ['ok' => false, 'error' => 'GitHub API returned an unexpected payload shape.'];
+		}
+
+		return ['ok' => true, 'releases' => $decoded];
 	}
 
 	/**
