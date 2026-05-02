@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license AGPL-3.0-or-later
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ */
+
 
 namespace OCA\AppVersions\Service\Source;
 
@@ -33,6 +38,16 @@ final class SourceBinding {
 			}
 			if (!isset($config['repo']) || !is_string($config['repo']) || $config['repo'] === '') {
 				throw new InvalidArgumentException('github-release binding requires non-empty repo');
+			}
+			// Reject path-traversal characters in owner/repo. fnmatch in
+			// TrustedSourceList lets `*` match `/`, so `ConductionNL/../../../x`
+			// would otherwise pass the allowlist. GitHub's own owner/repo
+			// charset is the same as below. CWE-22 / OWASP A01:2021.
+			if (!preg_match('/^[A-Za-z0-9_.\-]+$/', $config['owner'])) {
+				throw new InvalidArgumentException('github-release owner contains invalid characters');
+			}
+			if (!preg_match('/^[A-Za-z0-9_.\-]+$/', $config['repo'])) {
+				throw new InvalidArgumentException('github-release repo contains invalid characters');
 			}
 		}
 	}
