@@ -39,6 +39,16 @@ final class SourceBinding {
 			if (!isset($config['repo']) || !is_string($config['repo']) || $config['repo'] === '') {
 				throw new InvalidArgumentException('github-release binding requires non-empty repo');
 			}
+			// Reject path-traversal characters in owner/repo. fnmatch in
+			// TrustedSourceList lets `*` match `/`, so `ConductionNL/../../../x`
+			// would otherwise pass the allowlist. GitHub's own owner/repo
+			// charset is the same as below. CWE-22 / OWASP A01:2021.
+			if (!preg_match('/^[A-Za-z0-9_.\-]+$/', $config['owner'])) {
+				throw new InvalidArgumentException('github-release owner contains invalid characters');
+			}
+			if (!preg_match('/^[A-Za-z0-9_.\-]+$/', $config['repo'])) {
+				throw new InvalidArgumentException('github-release repo contains invalid characters');
+			}
 		}
 	}
 

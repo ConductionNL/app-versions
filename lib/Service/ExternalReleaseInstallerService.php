@@ -228,6 +228,10 @@ class ExternalReleaseInstallerService {
 			'sink' => $sinkPath,
 			'timeout' => $this->getDownloadTimeout(),
 			'headers' => ['User-Agent' => 'Nextcloud-AppVersions'],
+			// SSRF defence-in-depth: block fetches to internal addresses even
+			// though $url originates from a trusted-source GitHub release JSON.
+			// Mirrors PatValidator. See OWASP A10:2021.
+			'nextcloud' => ['allow_local_address' => false],
 		];
 
 		if ($pat === null) {
@@ -250,6 +254,8 @@ class ExternalReleaseInstallerService {
 		$options = [
 			'timeout' => 30,
 			'headers' => ['User-Agent' => 'Nextcloud-AppVersions'],
+			// SSRF defence-in-depth: same rationale as authenticatedDownload.
+			'nextcloud' => ['allow_local_address' => false],
 		];
 
 		try {
