@@ -1,0 +1,27 @@
+# App Versions
+
+> App Versions is an open-source app version manager for the Nextcloud workspace.
+
+App Versions is an open-source app version manager for the Nextcloud workspace. It pins and rolls back any installed Nextcloud app, lets administrators pick versions from multiple sources (the official store, GitHub releases, custom repositories), and keeps an audit trail of every install and upgrade. The app is in active development; consult the docs for the current release status. Released under EUPL-1.2 and maintained by Conduction since 2019.
+
+## Docs
+
+- [Tutorials](https://app-versions.conduction.nl/tutorials): step-by-step walkthroughs.
+- [Features](https://app-versions.conduction.nl/Features): what the app does, organised by capability.
+- [Use cases](https://app-versions.conduction.nl/UseCases): real customer scenarios.
+- [Integrations](https://app-versions.conduction.nl/Integrations): which external systems the app talks to.
+- [Technical](https://app-versions.conduction.nl/Technical): architecture, data model, security posture.
+- [User guide](https://app-versions.conduction.nl/user-guide): end-user documentation.
+- [API](https://app-versions.conduction.nl/api): OpenAPI reference.
+
+## Optional
+
+- [Install](https://app-versions.conduction.nl/installation): install from the Nextcloud app store.
+- [Source](https://app-versions.conduction.nl): repository and issue tracker.
+- [App page](https://www.conduction.nl/apps/app-versions): product positioning on conduction.nl.
+
+## Contact
+
+- Email: info@conduction.nl
+- GitHub: https://github.com/ConductionNL/app-versions
+- Conduction B.V. · KvK 76741850 · Lauriergracht 14h, Amsterdam, Netherlands
