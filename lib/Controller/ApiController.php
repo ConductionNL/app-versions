@@ -50,11 +50,21 @@ class ApiController extends OCSController {
 		parent::__construct($appName, $request);
 	}
 
+	/**
+	 * Reports whether the current user is an admin so the frontend can gate the UI.
+	 *
+	 * @spec openspec/specs/version-management/spec.md
+	 */
 	#[ApiRoute(verb: 'GET', url: '/api/admin-check')]
 	public function adminCheck(): DataResponse {
 		return new DataResponse(['isAdmin' => $this->isAdmin()], Http::STATUS_OK);
 	}
 
+	/**
+	 * Lists installed apps (admin-only); see "List Installed Apps".
+	 *
+	 * @spec openspec/specs/version-management/spec.md
+	 */
 	#[ApiRoute(verb: 'GET', url: '/api/apps')]
 	public function apps(): DataResponse {
 		if (!$this->isAdmin()) {
@@ -64,6 +74,11 @@ class ApiController extends OCSController {
 		return new DataResponse(['apps' => $this->installerService->getInstalledApps()]);
 	}
 
+	/**
+	 * Returns the server update channel so versions can be filtered; see "Respect update channel".
+	 *
+	 * @spec openspec/specs/version-management/spec.md
+	 */
 	#[ApiRoute(verb: 'GET', url: '/api/update-channel')]
 	public function updateChannel(): DataResponse {
 		if (!$this->isAdmin()) {
@@ -75,6 +90,11 @@ class ApiController extends OCSController {
 		]);
 	}
 
+	/**
+	 * Lists registered sources and trusted-source globs; see "Source management API".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	#[ApiRoute(verb: 'GET', url: '/api/sources')]
 	public function sources(): DataResponse {
 		if (!$this->isAdmin()) {
@@ -87,6 +107,11 @@ class ApiController extends OCSController {
 		]);
 	}
 
+	/**
+	 * Returns the active source binding for an app; see "Source binding".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	#[ApiRoute(verb: 'GET', url: '/api/source/{appId}/binding')]
 	public function getBinding(string $appId): DataResponse {
 		if (!$this->isAdmin()) {
@@ -102,6 +127,11 @@ class ApiController extends OCSController {
 		]);
 	}
 
+	/**
+	 * Binds a source to an app after allowlist validation; see "Source management API".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	#[PasswordConfirmationRequired(strict: false)]
 	#[ApiRoute(verb: 'POST', url: '/api/source/{appId}/bind')]
 	public function bindSource(string $appId): DataResponse {
@@ -137,6 +167,11 @@ class ApiController extends OCSController {
 		]);
 	}
 
+	/**
+	 * Fetches available versions from the bound (or overridden) source; see "Fetch Available Versions".
+	 *
+	 * @spec openspec/specs/version-management/spec.md
+	 */
 	#[ApiRoute(verb: 'GET', url: '/api/app/{appId}/versions')]
 	public function appVersions(string $appId): DataResponse {
 		if (!$this->isAdmin()) {
@@ -153,6 +188,11 @@ class ApiController extends OCSController {
 		return new DataResponse($result, $statusCode);
 	}
 
+	/**
+	 * Installs a specific version (password-confirmed); see "Install Specific Version".
+	 *
+	 * @spec openspec/specs/version-management/spec.md
+	 */
 	#[PasswordConfirmationRequired(strict: false)]
 	#[ApiRoute(verb: 'POST', url: '/api/app/{appId}/versions/{version}/install')]
 	public function installVersion(string $appId, string $version): DataResponse {
@@ -188,6 +228,11 @@ class ApiController extends OCSController {
 		);
 	}
 
+	/**
+	 * Lists PATs visible to the current admin, redacted; see "PAT management API".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
 	#[ApiRoute(verb: 'GET', url: '/api/pats')]
 	public function listPats(): DataResponse {
 		if (!$this->isAdmin()) {
@@ -208,6 +253,11 @@ class ApiController extends OCSController {
 		return new DataResponse(['pats' => $payload]);
 	}
 
+	/**
+	 * Validates and creates an encrypted PAT; see "PAT validation on upload" and "PAT storage".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
 	#[PasswordConfirmationRequired(strict: false)]
 	#[ApiRoute(verb: 'POST', url: '/api/pats')]
 	public function createPat(): DataResponse {
@@ -249,6 +299,11 @@ class ApiController extends OCSController {
 		return new DataResponse(['pat' => $pat->toRedacted(), 'warnings' => $result->warnings]);
 	}
 
+	/**
+	 * Updates a PAT's label / share flag, owner-only; see "PAT management API" and "PAT storage".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
 	#[PasswordConfirmationRequired(strict: false)]
 	#[ApiRoute(verb: 'PATCH', url: '/api/pats/{id}')]
 	public function patchPat(int $id): DataResponse {
@@ -285,6 +340,11 @@ class ApiController extends OCSController {
 		return new DataResponse(['pat' => $this->patManager->update($pat)->toRedacted()]);
 	}
 
+	/**
+	 * Deletes a PAT, restricted to its owner; see "PAT management API" ("Delete restricted to owner").
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
 	#[PasswordConfirmationRequired(strict: false)]
 	#[ApiRoute(verb: 'DELETE', url: '/api/pats/{id}')]
 	public function deletePat(int $id): DataResponse {
@@ -312,6 +372,11 @@ class ApiController extends OCSController {
 		return new DataResponse(['deleted' => $id]);
 	}
 
+	/**
+	 * Multi-source app search with query-length + filter handling; see "Discovery API".
+	 *
+	 * @spec openspec/specs/app-discovery/spec.md
+	 */
 	#[ApiRoute(verb: 'GET', url: '/api/discover')]
 	public function discover(): DataResponse {
 		if (!$this->isAdmin()) {
@@ -345,6 +410,11 @@ class ApiController extends OCSController {
 		return new DataResponse($result);
 	}
 
+	/**
+	 * Returns a prefilled GitHub PAT-creation deeplink; see "PAT management API" (deeplink scenarios).
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
 	#[ApiRoute(verb: 'GET', url: '/api/pats/deeplink')]
 	public function patDeeplink(): DataResponse {
 		if (!$this->isAdmin()) {

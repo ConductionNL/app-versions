@@ -35,6 +35,9 @@ final class DiscoveryHit {
 	}
 
 	/**
+	 * Serializes a discovery hit into the uniform result shape; see "Result aggregation".
+	 *
+	 * @spec openspec/specs/app-discovery/spec.md
 	 * @return array<string, mixed>
 	 */
 	public function toArray(): array {

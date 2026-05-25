@@ -50,6 +50,11 @@ class GithubSearchDiscovery implements DiscoveryProviderInterface {
 		return $this->config->getAppValue(Application::APP_ID, self::ENABLED_KEY, 'false') === 'true';
 	}
 
+	/**
+	 * Opt-in public GitHub topic search with rate-limit handling; see "GitHub public search (opt-in)".
+	 *
+	 * @spec openspec/specs/app-discovery/spec.md
+	 */
 	public function search(string $query): DiscoveryResult {
 		if (!$this->isEnabled()) {
 			return DiscoveryResult::empty();

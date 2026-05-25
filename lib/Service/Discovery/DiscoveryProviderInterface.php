@@ -25,5 +25,10 @@ interface DiscoveryProviderInterface {
 	 */
 	public function isEnabled(): bool;
 
+	/**
+	 * Searches this provider's source for apps matching the query; see "Provider interface".
+	 *
+	 * @spec openspec/specs/app-discovery/spec.md
+	 */
 	public function search(string $query): DiscoveryResult;
 }

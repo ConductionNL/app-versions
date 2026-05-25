@@ -49,6 +49,11 @@ class AppStoreDiscovery implements DiscoveryProviderInterface {
 		return true;
 	}
 
+	/**
+	 * Substring-searches the cached App Store catalog; see "App Store discovery".
+	 *
+	 * @spec openspec/specs/app-discovery/spec.md
+	 */
 	public function search(string $query): DiscoveryResult {
 		$catalog = $this->loadCatalog();
 		if ($catalog === null) {

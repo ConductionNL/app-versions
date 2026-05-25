@@ -23,6 +23,11 @@ class SourceBindingStore {
 	) {
 	}
 
+	/**
+	 * Reads the persisted source binding for an app (null if unbound/invalid); see "Source binding".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public function get(string $appId): ?SourceBinding {
 		$raw = $this->config->getAppValue(Application::APP_ID, $this->key($appId), '');
 		if ($raw === '') {
@@ -46,6 +51,11 @@ class SourceBindingStore {
 		}
 	}
 
+	/**
+	 * Persists a source binding under `source.{appId}`; see "Source binding".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public function set(string $appId, SourceBinding $binding): void {
 		$this->config->setAppValue(
 			Application::APP_ID,
@@ -54,6 +64,11 @@ class SourceBindingStore {
 		);
 	}
 
+	/**
+	 * Removes an app's source binding; see "Source binding".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public function clear(string $appId): void {
 		$this->config->deleteAppValue(Application::APP_ID, $this->key($appId));
 	}

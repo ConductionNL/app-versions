@@ -21,6 +21,11 @@ use OCP\AppFramework\Http\TemplateResponse;
  * @psalm-suppress UnusedClass
  */
 class PageController extends Controller {
+	/**
+	 * Renders the App Versions SPA shell; the admin-gating happens in the API layer.
+	 *
+	 * @spec openspec/specs/version-management/spec.md
+	 */
 	#[NoCSRFRequired]
 	#[NoAdminRequired]
 	#[OpenAPI(OpenAPI::SCOPE_IGNORE)]

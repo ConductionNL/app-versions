@@ -32,6 +32,7 @@ interface SourceInterface {
 	 * populated `error` field in the result envelope so the caller can
 	 * surface the message to the admin.
 	 *
+	 * @spec openspec/specs/external-sources/spec.md
 	 * @return array{versions: list<array{version: string}>, error: ?string}
 	 */
 	public function listVersions(string $appId, SourceBinding $binding): array;
@@ -43,6 +44,7 @@ interface SourceInterface {
 	 *   - App Store releases include `download`, `signature`, `certificate`, `version`
 	 *   - GitHub releases include `download`, `version`, optional `sha256Url`
 	 *
+	 * @spec openspec/specs/external-sources/spec.md
 	 * @return array<string, mixed>|null
 	 */
 	public function resolveRelease(string $appId, string $version, SourceBinding $binding): ?array;

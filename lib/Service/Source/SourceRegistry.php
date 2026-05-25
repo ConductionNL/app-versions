@@ -23,6 +23,11 @@ class SourceRegistry {
 	) {
 	}
 
+	/**
+	 * Resolves a binding to its concrete source driver; see "Source abstraction".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public function get(SourceBinding $binding): SourceInterface {
 		return match ($binding->kind) {
 			SourceBinding::KIND_APPSTORE => $this->appStore,
@@ -32,6 +37,9 @@ class SourceRegistry {
 	}
 
 	/**
+	 * Lists the registered source kinds for the UI; see "Source management API".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
 	 * @return list<array{id: string, kind: string, label: string}>
 	 */
 	public function listAvailable(): array {
@@ -49,6 +57,11 @@ class SourceRegistry {
 		];
 	}
 
+	/**
+	 * Parses a source-id string (`appstore` / `github:owner/repo`) into a binding; see "Explicit source override".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public static function parseSourceId(string $sourceId): SourceBinding {
 		$sourceId = trim($sourceId);
 		if ($sourceId === '' || $sourceId === 'appstore') {

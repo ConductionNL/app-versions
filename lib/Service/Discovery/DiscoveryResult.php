@@ -27,10 +27,20 @@ final class DiscoveryResult {
 	) {
 	}
 
+	/**
+	 * Builds an empty (no-hit, no-error) provider result; see "Provider interface".
+	 *
+	 * @spec openspec/specs/app-discovery/spec.md
+	 */
 	public static function empty(): self {
 		return new self([], null);
 	}
 
+	/**
+	 * Builds a failed provider result carrying a surfaced error; see "Provider interface".
+	 *
+	 * @spec openspec/specs/app-discovery/spec.md
+	 */
 	public static function failed(string $error): self {
 		return new self([], $error);
 	}

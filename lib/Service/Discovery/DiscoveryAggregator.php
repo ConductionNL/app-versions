@@ -35,6 +35,9 @@ class DiscoveryAggregator {
 	}
 
 	/**
+	 * Lists every provider with its enabled state; see "Provider interface".
+	 *
+	 * @spec openspec/specs/app-discovery/spec.md
 	 * @return list<array{id: string, label: string, enabled: bool}>
 	 */
 	public function listProviders(): array {
@@ -49,6 +52,10 @@ class DiscoveryAggregator {
 	}
 
 	/**
+	 * Runs active providers, de-duplicates hits by appId, annotates installed versions;
+	 * see "Result aggregation".
+	 *
+	 * @spec openspec/specs/app-discovery/spec.md
 	 * @param list<string>|null $sourceIds when null, all enabled providers run
 	 * @return array{results: list<array<string, mixed>>, providers: list<array{id: string, label: string, enabled: bool}>, errors: list<array{providerId: string, message: string}>}
 	 */
