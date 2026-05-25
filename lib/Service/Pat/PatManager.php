@@ -34,6 +34,9 @@ class PatManager {
 	}
 
 	/**
+	 * Encrypts and persists a new PAT with hint + validated scopes; see "PAT storage" and "Encryption at rest".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
 	 * @param list<string> $scopes
 	 * @param list<string> $warnings
 	 */
@@ -67,6 +70,9 @@ class PatManager {
 	}
 
 	/**
+	 * Decrypts a PAT only inside the callback, then updates last-used; see "Encryption at rest" and "Authenticated GitHub fetches".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
 	 * @template T
 	 * @param callable(string): T $callback
 	 * @return T
@@ -90,14 +96,29 @@ class PatManager {
 		return $result;
 	}
 
+	/**
+	 * Deletes a PAT row; see "PAT management API".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
 	public function delete(Pat $pat): Pat {
 		return $this->mapper->delete($pat);
 	}
 
+	/**
+	 * Persists mutations to a PAT (label / share flag); see "PAT management API".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
 	public function update(Pat $pat): Pat {
 		return $this->mapper->update($pat);
 	}
 
+	/**
+	 * Re-probes and refreshes a PAT's stored scopes/expiry; see "PAT validation on upload".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
 	public function refreshValidation(Pat $pat, ValidationResult $result): Pat {
 		$pat->setLastValidatedScopes(json_encode([
 			'scopes' => $result->scopes,
@@ -111,6 +132,11 @@ class PatManager {
 		return $this->mapper->update($pat);
 	}
 
+	/**
+	 * Builds the redacted token hint (first 4 + last 4 chars); see "PAT storage".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
 	public static function buildHint(string $token): string {
 		if (strlen($token) <= 8) {
 			return str_repeat('*', max(strlen($token), 4));

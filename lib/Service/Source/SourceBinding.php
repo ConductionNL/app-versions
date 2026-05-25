@@ -52,6 +52,11 @@ final class SourceBinding {
 		}
 	}
 
+	/**
+	 * Returns the canonical source id (`appstore` or `github:owner/repo`); see "Source binding".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public function getId(): string {
 		if ($this->kind === self::KIND_APPSTORE) {
 			return 'appstore';
@@ -60,6 +65,11 @@ final class SourceBinding {
 		return 'github:' . $this->config['owner'] . '/' . $this->config['repo'];
 	}
 
+	/**
+	 * Returns the `owner/repo` for github bindings, null otherwise; see "GitHub releases as a source".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public function getOwnerRepo(): ?string {
 		if ($this->kind !== self::KIND_GITHUB_RELEASE) {
 			return null;
@@ -75,6 +85,9 @@ final class SourceBinding {
 	}
 
 	/**
+	 * Serializes the binding to its persisted JSON shape; see "Source binding".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
 	 * @return array<string, mixed>
 	 */
 	public function toArray(): array {
@@ -90,6 +103,9 @@ final class SourceBinding {
 	}
 
 	/**
+	 * Reconstructs a binding from its persisted payload; see "Source binding".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
 	 * @param array<string, mixed> $payload
 	 */
 	public static function fromArray(array $payload): self {
@@ -106,10 +122,20 @@ final class SourceBinding {
 		return new self($kind, $config, $boundAt);
 	}
 
+	/**
+	 * Builds an App Store binding; see "Source abstraction".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public static function appStore(): self {
 		return new self(self::KIND_APPSTORE);
 	}
 
+	/**
+	 * Builds a validated github-release binding with a boundAt timestamp; see "Source binding".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public static function github(string $owner, string $repo, string $assetPattern = '*.tar.gz'): self {
 		return new self(
 			self::KIND_GITHUB_RELEASE,

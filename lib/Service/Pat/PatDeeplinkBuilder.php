@@ -28,6 +28,9 @@ class PatDeeplinkBuilder {
 	}
 
 	/**
+	 * Builds a prefilled GitHub PAT-creation deeplink per kind; see "PAT management API" (deeplink scenarios).
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
 	 * @return array{kind:string, url:string, instructions:list<string>}
 	 */
 	public function build(string $kind): array {

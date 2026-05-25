@@ -40,6 +40,11 @@ class AppStoreSource implements SourceInterface {
 		return self::INSTALLER_SIGNED;
 	}
 
+	/**
+	 * Lists App Store releases for an app, normalized newest-first; see "Fetch Available Versions".
+	 *
+	 * @spec openspec/specs/version-management/spec.md
+	 */
 	public function listVersions(string $appId, SourceBinding $binding): array {
 		try {
 			$payload = $this->fetchAppPayload($appId);
@@ -59,6 +64,11 @@ class AppStoreSource implements SourceInterface {
 		return ['versions' => $this->normalizeVersions($releases), 'error' => null];
 	}
 
+	/**
+	 * Resolves a single App Store release (with certificate) for install; see "Install Specific Version".
+	 *
+	 * @spec openspec/specs/version-management/spec.md
+	 */
 	public function resolveRelease(string $appId, string $version, SourceBinding $binding): ?array {
 		$payload = $this->fetchAppPayload($appId);
 		if (!is_array($payload) || !isset($payload['releases']) || !is_array($payload['releases'])) {
