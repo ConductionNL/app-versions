@@ -32,11 +32,19 @@ final class ValidationResult {
 	) {
 	}
 
+	/**
+	 * Builds a rejected validation outcome carrying an admin-readable error; see "PAT validation on upload".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
 	public static function rejected(string $error): self {
 		return new self(false, [], [], null, $error);
 	}
 
 	/**
+	 * Builds an accepted validation outcome with scopes/warnings/expiry; see "PAT validation on upload".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
 	 * @param list<string> $scopes
 	 * @param list<string> $warnings
 	 */
@@ -45,6 +53,9 @@ final class ValidationResult {
 	}
 
 	/**
+	 * Serializes the validation outcome for the API response; see "PAT validation on upload".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
 	 * @return array<string, mixed>
 	 */
 	public function toArray(): array {

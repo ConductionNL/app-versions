@@ -208,8 +208,9 @@ class SelectedReleaseInstallerService {
 	}
 
 	/**
-	 * Installs one selected release.
+	 * Installs one selected App Store release through the signed (code-signing) path; see "Install Specific Version".
 	 *
+	 * @spec openspec/specs/version-management/spec.md
 	 * @param string $appId
 	 * @param array{download?: mixed, signature?: mixed, certificate?: mixed, version?: mixed} $release
 	 * @param bool $dryRun
@@ -304,8 +305,10 @@ class SelectedReleaseInstallerService {
 	}
 
 	/**
-	 * Replaces existing app with selected release and validates download contents.
+	 * Verifies signature/certificate, downloads, validates appId+version, and replaces app files (with backup/restore);
+	 * see "Install Specific Version" ("Installation fails" — no partial installs).
 	 *
+	 * @spec openspec/specs/version-management/spec.md
 	 * @param string $appId
 	 * @param array<string, mixed> $release
 	 * @param bool $dryRun

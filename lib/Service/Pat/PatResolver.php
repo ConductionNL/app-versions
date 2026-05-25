@@ -23,6 +23,11 @@ class PatResolver {
 	) {
 	}
 
+	/**
+	 * Finds the highest-priority non-expired PAT matching owner/repo; see "Authenticated GitHub fetches" ("Expired PAT skipped").
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
 	public function findFor(string $ownerRepo, string $currentUid): ?Pat {
 		$now = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d H:i:s');
 		$candidates = $this->mapper->findVisibleTo($currentUid);

@@ -70,6 +70,10 @@ class ExternalReleaseInstallerService {
 	}
 
 	/**
+	 * Downloads, integrity-checks (allowlist, SHA-256, appId/version), and installs an external release;
+	 * see "External install integrity checks".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
 	 * @param array<string, mixed> $release
 	 * @return array{status: string, installedVersionBefore: ?string, installedApp?: string, integrityWarning?: ?string, dryRun: bool, debug: list<array{stage: string, data: mixed}>}
 	 * @throws Exception

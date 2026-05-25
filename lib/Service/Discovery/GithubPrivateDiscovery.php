@@ -53,6 +53,11 @@ class GithubPrivateDiscovery implements DiscoveryProviderInterface {
 		return 'GitHub (private, your PATs)';
 	}
 
+	/**
+	 * Enabled only when the current admin has at least one visible PAT; see "GitHub private discovery".
+	 *
+	 * @spec openspec/specs/app-discovery/spec.md
+	 */
 	public function isEnabled(): bool {
 		$user = $this->userSession->getUser();
 		if ($user === null) {
@@ -62,6 +67,11 @@ class GithubPrivateDiscovery implements DiscoveryProviderInterface {
 		return $this->patMapper->findVisibleTo($user->getUID()) !== [];
 	}
 
+	/**
+	 * Searches PAT-visible private GitHub repos, deduped by owner/repo; see "GitHub private discovery".
+	 *
+	 * @spec openspec/specs/app-discovery/spec.md
+	 */
 	public function search(string $query): DiscoveryResult {
 		$user = $this->userSession->getUser();
 		if ($user === null) {
