@@ -8,7 +8,7 @@
   "version": "1.0.0",
   "license": "AGPL-3.0-or-later",
   "author": "Conduction B.V.",
-  "repository": "https://github.com/ConductionNL/app-versions",
+  "repository": "https://codeberg.org/Conduction/app-versions",
   "dependencies": {
     "requiresOpenRegister": false,
     "additionalCiApps": []
