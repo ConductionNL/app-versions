@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license AGPL-3.0-or-later
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ */
+
 
 namespace OCA\AppVersions\Service\Pat;
 
@@ -17,10 +22,15 @@ class PatDeeplinkBuilder {
 	private const CLASSIC_BASE = 'https://github.com/settings/tokens/new';
 	private const FINE_GRAINED_BASE = 'https://github.com/settings/personal-access-tokens/new';
 
-	public function __construct(private IRequest $request) {
+	public function __construct(
+		private IRequest $request,
+	) {
 	}
 
 	/**
+	 * Builds a prefilled GitHub PAT-creation deeplink per kind; see "PAT management API" (deeplink scenarios).
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
 	 * @return array{kind:string, url:string, instructions:list<string>}
 	 */
 	public function build(string $kind): array {

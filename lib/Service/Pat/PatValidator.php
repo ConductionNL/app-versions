@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license AGPL-3.0-or-later
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ */
+
 
 namespace OCA\AppVersions\Service\Pat;
 
@@ -33,6 +38,11 @@ class PatValidator {
 	) {
 	}
 
+	/**
+	 * Classifies a token as classic vs fine-grained by prefix; see "PAT validation on upload".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
 	public function detectKind(string $token): string {
 		if (str_starts_with($token, 'ghp_')) {
 			return Pat::KIND_CLASSIC;
@@ -44,6 +54,11 @@ class PatValidator {
 		return Pat::KIND_FINE_GRAINED; // Conservative default; pure user-supplied strings get the safer code path.
 	}
 
+	/**
+	 * Probes the token against GitHub's user endpoint and enforces least-privilege scope; see "PAT validation on upload".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
 	public function validate(string $token): ValidationResult {
 		$kind = $this->detectKind($token);
 		$client = $this->clientService->newClient();

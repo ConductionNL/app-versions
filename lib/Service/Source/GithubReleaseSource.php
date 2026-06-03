@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license AGPL-3.0-or-later
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ */
+
 
 namespace OCA\AppVersions\Service\Source;
 
@@ -46,6 +51,11 @@ class GithubReleaseSource implements SourceInterface {
 		return self::INSTALLER_EXTERNAL;
 	}
 
+	/**
+	 * Lists GitHub release tags (PAT-authenticated when matched), deduped newest-first; see "GitHub releases as a source".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public function listVersions(string $appId, SourceBinding $binding): array {
 		$ownerRepo = $binding->getOwnerRepo();
 		if ($ownerRepo === null) {
@@ -72,6 +82,11 @@ class GithubReleaseSource implements SourceInterface {
 		return ['versions' => $this->dedupeAndSort($versions), 'error' => null];
 	}
 
+	/**
+	 * Resolves a GitHub release into a download payload, enforcing unambiguous asset selection; see "External install integrity checks".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public function resolveRelease(string $appId, string $version, SourceBinding $binding): ?array {
 		$ownerRepo = $binding->getOwnerRepo();
 		if ($ownerRepo === null) {

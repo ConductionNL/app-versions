@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license AGPL-3.0-or-later
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ */
+
 
 namespace OCA\AppVersions\Service\Pat;
 
@@ -18,6 +23,11 @@ class PatResolver {
 	) {
 	}
 
+	/**
+	 * Finds the highest-priority non-expired PAT matching owner/repo; see "Authenticated GitHub fetches" ("Expired PAT skipped").
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
 	public function findFor(string $ownerRepo, string $currentUid): ?Pat {
 		$now = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d H:i:s');
 		$candidates = $this->mapper->findVisibleTo($currentUid);

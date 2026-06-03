@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license AGPL-3.0-or-later
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ */
+
 
 namespace OCA\AppVersions\Service\Source;
 
@@ -18,10 +23,15 @@ class TrustedSourceList {
 	/** @var list<string> */
 	private const DEFAULT_PATTERNS = ['ConductionNL/*'];
 
-	public function __construct(private IConfig $config) {
+	public function __construct(
+		private IConfig $config,
+	) {
 	}
 
 	/**
+	 * Reads the allowlist globs, defaulting to `ConductionNL/*` when unset; see "Trusted-source allowlist".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
 	 * @return list<string>
 	 */
 	public function getPatterns(): array {
@@ -51,6 +61,9 @@ class TrustedSourceList {
 	}
 
 	/**
+	 * Persists a cleaned set of allowlist globs; see "Trusted-source allowlist".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
 	 * @param list<string> $patterns
 	 */
 	public function setPatterns(array $patterns): void {
@@ -68,6 +81,11 @@ class TrustedSourceList {
 		);
 	}
 
+	/**
+	 * Returns whether a source id matches the allowlist (glob-matched); see "Trusted-source allowlist".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public function isAllowed(string $sourceId): bool {
 		$ownerRepo = $this->extractOwnerRepo($sourceId);
 		if ($ownerRepo === null) {
@@ -84,6 +102,9 @@ class TrustedSourceList {
 	}
 
 	/**
+	 * Throws when a source id is not allowlisted, before any fetch/write; see "Trusted-source allowlist".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
 	 * @throws UntrustedSourceException
 	 */
 	public function assertAllowed(string $sourceId): void {
@@ -98,6 +119,11 @@ class TrustedSourceList {
 		}
 	}
 
+	/**
+	 * Asserts a binding's source id is allowlisted; see "Trusted-source allowlist".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public function assertBindingAllowed(SourceBinding $binding): void {
 		$this->assertAllowed($binding->getId());
 	}

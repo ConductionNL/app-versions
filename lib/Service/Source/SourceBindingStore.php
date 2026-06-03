@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license AGPL-3.0-or-later
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ */
+
 
 namespace OCA\AppVersions\Service\Source;
 
@@ -13,9 +18,16 @@ use OCP\IConfig;
  * as unbound and the App Store is used as the fallback source.
  */
 class SourceBindingStore {
-	public function __construct(private IConfig $config) {
+	public function __construct(
+		private IConfig $config,
+	) {
 	}
 
+	/**
+	 * Reads the persisted source binding for an app (null if unbound/invalid); see "Source binding".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public function get(string $appId): ?SourceBinding {
 		$raw = $this->config->getAppValue(Application::APP_ID, $this->key($appId), '');
 		if ($raw === '') {
@@ -39,6 +51,11 @@ class SourceBindingStore {
 		}
 	}
 
+	/**
+	 * Persists a source binding under `source.{appId}`; see "Source binding".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public function set(string $appId, SourceBinding $binding): void {
 		$this->config->setAppValue(
 			Application::APP_ID,
@@ -47,6 +64,11 @@ class SourceBindingStore {
 		);
 	}
 
+	/**
+	 * Removes an app's source binding; see "Source binding".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public function clear(string $appId): void {
 		$this->config->deleteAppValue(Application::APP_ID, $this->key($appId));
 	}

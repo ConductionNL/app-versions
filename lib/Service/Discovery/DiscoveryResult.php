@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license AGPL-3.0-or-later
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ */
+
 
 namespace OCA\AppVersions\Service\Discovery;
 
@@ -22,10 +27,20 @@ final class DiscoveryResult {
 	) {
 	}
 
+	/**
+	 * Builds an empty (no-hit, no-error) provider result; see "Provider interface".
+	 *
+	 * @spec openspec/specs/app-discovery/spec.md
+	 */
 	public static function empty(): self {
 		return new self([], null);
 	}
 
+	/**
+	 * Builds a failed provider result carrying a surfaced error; see "Provider interface".
+	 *
+	 * @spec openspec/specs/app-discovery/spec.md
+	 */
 	public static function failed(string $error): self {
 		return new self([], $error);
 	}

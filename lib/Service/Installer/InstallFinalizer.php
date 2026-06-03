@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license AGPL-3.0-or-later
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ */
+
 
 namespace OCA\AppVersions\Service\Installer;
 
@@ -35,6 +40,10 @@ class InstallFinalizer {
 	}
 
 	/**
+	 * Runs migrations, repair steps, job + route registration, and version/enabled writes after extraction;
+	 * see "Install Specific Version" ("any database migrations for the new version MUST be triggered").
+	 *
+	 * @spec openspec/specs/version-management/spec.md
 	 * @param array<string, mixed> $info Parsed `appinfo/info.xml` for the just-extracted version.
 	 * @throws Exception
 	 */

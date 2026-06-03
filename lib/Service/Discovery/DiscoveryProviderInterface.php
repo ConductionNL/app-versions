@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license AGPL-3.0-or-later
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ */
+
 
 namespace OCA\AppVersions\Service\Discovery;
 
@@ -20,5 +25,10 @@ interface DiscoveryProviderInterface {
 	 */
 	public function isEnabled(): bool;
 
+	/**
+	 * Searches this provider's source for apps matching the query; see "Provider interface".
+	 *
+	 * @spec openspec/specs/app-discovery/spec.md
+	 */
 	public function search(string $query): DiscoveryResult;
 }

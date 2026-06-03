@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license AGPL-3.0-or-later
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ */
+
 
 namespace OCA\AppVersions\Service;
 
@@ -37,8 +42,9 @@ class InstallerService {
 	}
 
 	/**
-	 * Returns installed apps enriched with metadata for frontend cards.
+	 * Returns installed apps enriched with metadata for frontend cards; see "List Installed Apps".
 	 *
+	 * @spec openspec/specs/version-management/spec.md
 	 * @return list<array{id:string,label:string,description:string,summary:string,preview:string,isCore:bool,boundSourceId:?string}>
 	 */
 	public function getInstalledApps(): array {
@@ -84,6 +90,9 @@ class InstallerService {
 	}
 
 	/**
+	 * Resolves the active source and lists versions for an app; see "Fetch Available Versions" and "Explicit source override".
+	 *
+	 * @spec openspec/specs/version-management/spec.md
 	 * @return array{installedVersion: ?string, availableVersions: list<array{version:string}>, versions: list<array{version:string}>, source: string, sourceId: string, statusCode: int, hasError: bool, error?: string}
 	 */
 	public function getAppVersions(string $appId, ?string $sourceOverride = null): array {
@@ -138,6 +147,9 @@ class InstallerService {
 	}
 
 	/**
+	 * Installs a target version via the matching installer and persists the binding on success; see "Install Specific Version" and "Source binding".
+	 *
+	 * @spec openspec/specs/version-management/spec.md
 	 * @return array{statusCode:int, payload:array<string, mixed>}
 	 */
 	public function installAppVersion(
@@ -312,11 +324,21 @@ class InstallerService {
 		}
 	}
 
+	/**
+	 * Validates against the allowlist and persists a source binding; see "Source management API".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public function bindSource(string $appId, SourceBinding $binding): void {
 		$this->trustedSources->assertBindingAllowed($binding);
 		$this->bindingStore->set($appId, $binding);
 	}
 
+	/**
+	 * Returns the persisted source binding for an app; see "Source binding".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public function getBinding(string $appId): ?SourceBinding {
 		return $this->bindingStore->get($appId);
 	}

@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license AGPL-3.0-or-later
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ */
+
 
 namespace OCA\AppVersions\Service\Source;
 
@@ -35,6 +40,11 @@ class AppStoreSource implements SourceInterface {
 		return self::INSTALLER_SIGNED;
 	}
 
+	/**
+	 * Lists App Store releases for an app, normalized newest-first; see "Fetch Available Versions".
+	 *
+	 * @spec openspec/specs/version-management/spec.md
+	 */
 	public function listVersions(string $appId, SourceBinding $binding): array {
 		try {
 			$payload = $this->fetchAppPayload($appId);
@@ -54,6 +64,11 @@ class AppStoreSource implements SourceInterface {
 		return ['versions' => $this->normalizeVersions($releases), 'error' => null];
 	}
 
+	/**
+	 * Resolves a single App Store release (with certificate) for install; see "Install Specific Version".
+	 *
+	 * @spec openspec/specs/version-management/spec.md
+	 */
 	public function resolveRelease(string $appId, string $version, SourceBinding $binding): ?array {
 		$payload = $this->fetchAppPayload($appId);
 		if (!is_array($payload) || !isset($payload['releases']) || !is_array($payload['releases'])) {

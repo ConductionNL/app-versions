@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license AGPL-3.0-or-later
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ */
+
 
 namespace OCA\AppVersions\Service\Source;
 
@@ -34,9 +39,24 @@ final class SourceBinding {
 			if (!isset($config['repo']) || !is_string($config['repo']) || $config['repo'] === '') {
 				throw new InvalidArgumentException('github-release binding requires non-empty repo');
 			}
+			// Reject path-traversal characters in owner/repo. fnmatch in
+			// TrustedSourceList lets `*` match `/`, so `ConductionNL/../../../x`
+			// would otherwise pass the allowlist. GitHub's own owner/repo
+			// charset is the same as below. CWE-22 / OWASP A01:2021.
+			if (!preg_match('/^[A-Za-z0-9_.\-]+$/', $config['owner'])) {
+				throw new InvalidArgumentException('github-release owner contains invalid characters');
+			}
+			if (!preg_match('/^[A-Za-z0-9_.\-]+$/', $config['repo'])) {
+				throw new InvalidArgumentException('github-release repo contains invalid characters');
+			}
 		}
 	}
 
+	/**
+	 * Returns the canonical source id (`appstore` or `github:owner/repo`); see "Source binding".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public function getId(): string {
 		if ($this->kind === self::KIND_APPSTORE) {
 			return 'appstore';
@@ -45,6 +65,11 @@ final class SourceBinding {
 		return 'github:' . $this->config['owner'] . '/' . $this->config['repo'];
 	}
 
+	/**
+	 * Returns the `owner/repo` for github bindings, null otherwise; see "GitHub releases as a source".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public function getOwnerRepo(): ?string {
 		if ($this->kind !== self::KIND_GITHUB_RELEASE) {
 			return null;
@@ -60,6 +85,9 @@ final class SourceBinding {
 	}
 
 	/**
+	 * Serializes the binding to its persisted JSON shape; see "Source binding".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
 	 * @return array<string, mixed>
 	 */
 	public function toArray(): array {
@@ -75,6 +103,9 @@ final class SourceBinding {
 	}
 
 	/**
+	 * Reconstructs a binding from its persisted payload; see "Source binding".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
 	 * @param array<string, mixed> $payload
 	 */
 	public static function fromArray(array $payload): self {
@@ -91,10 +122,20 @@ final class SourceBinding {
 		return new self($kind, $config, $boundAt);
 	}
 
+	/**
+	 * Builds an App Store binding; see "Source abstraction".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public static function appStore(): self {
 		return new self(self::KIND_APPSTORE);
 	}
 
+	/**
+	 * Builds a validated github-release binding with a boundAt timestamp; see "Source binding".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public static function github(string $owner, string $repo, string $assetPattern = '*.tar.gz'): self {
 		return new self(
 			self::KIND_GITHUB_RELEASE,

@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license AGPL-3.0-or-later
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ */
+
 
 namespace OCA\AppVersions\Service;
 
@@ -65,6 +70,10 @@ class ExternalReleaseInstallerService {
 	}
 
 	/**
+	 * Downloads, integrity-checks (allowlist, SHA-256, appId/version), and installs an external release;
+	 * see "External install integrity checks".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
 	 * @param array<string, mixed> $release
 	 * @return array{status: string, installedVersionBefore: ?string, installedApp?: string, integrityWarning?: ?string, dryRun: bool, debug: list<array{stage: string, data: mixed}>}
 	 * @throws Exception
@@ -223,6 +232,10 @@ class ExternalReleaseInstallerService {
 			'sink' => $sinkPath,
 			'timeout' => $this->getDownloadTimeout(),
 			'headers' => ['User-Agent' => 'Nextcloud-AppVersions'],
+			// SSRF defence-in-depth: block fetches to internal addresses even
+			// though $url originates from a trusted-source GitHub release JSON.
+			// Mirrors PatValidator. See OWASP A10:2021.
+			'nextcloud' => ['allow_local_address' => false],
 		];
 
 		if ($pat === null) {
@@ -245,6 +258,8 @@ class ExternalReleaseInstallerService {
 		$options = [
 			'timeout' => 30,
 			'headers' => ['User-Agent' => 'Nextcloud-AppVersions'],
+			// SSRF defence-in-depth: same rationale as authenticatedDownload.
+			'nextcloud' => ['allow_local_address' => false],
 		];
 
 		try {

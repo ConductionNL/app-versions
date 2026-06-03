@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license AGPL-3.0-or-later
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ */
+
 
 namespace OCA\AppVersions\Listener;
 
@@ -16,9 +21,16 @@ use OCP\User\Events\UserDeletedEvent;
  * @template-implements IEventListener<UserDeletedEvent>
  */
 class UserDeletedListener implements IEventListener {
-	public function __construct(private PatMapper $mapper) {
+	public function __construct(
+		private PatMapper $mapper,
+	) {
 	}
 
+	/**
+	 * On user deletion, sweeps every PAT owned by that uid; see "Admin removal cleans up PATs".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
 	public function handle(Event $event): void {
 		if (!($event instanceof UserDeletedEvent)) {
 			return;
