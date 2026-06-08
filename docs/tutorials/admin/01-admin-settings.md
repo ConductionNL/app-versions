@@ -12,7 +12,7 @@ source is wired up.
 
 > **This guide is being written as App Versions approaches feature-completeness.**
 > Bodies and screenshots fill in once the admin UI lands. Follow the
-> [GitHub repository](https://github.com/ConductionNL/app-versions) for
+> [Codeberg repository](https://codeberg.org/Conduction/app-versions) for
 > milestones.
 
 ## Goal
@@ -26,7 +26,7 @@ responds without an error banner.
 
 - A Nextcloud **admin** account on an instance where the App Versions
   app is installed and enabled. Non-admins are blocked at the API
-  level (see the [`version-management`](https://github.com/ConductionNL/app-versions/tree/development/openspec/specs/version-management) spec).
+  level (see the [`version-management`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/version-management) spec).
 - Outbound HTTPS to `apps.nextcloud.com` (the App Store source).
 
 ## Steps
@@ -54,4 +54,4 @@ than an error banner.
 ## Reference
 
 - [Roll back an app to a previous version](./02-rollback.md) — the next step.
-- [`version-management`](https://github.com/ConductionNL/app-versions/tree/development/openspec/specs/version-management) spec.
+- [`version-management`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/version-management) spec.

@@ -12,7 +12,7 @@ ship a fix.
 
 > **This guide is being written as App Versions approaches feature-completeness.**
 > Bodies and screenshots fill in once the admin UI lands. Follow the
-> [GitHub repository](https://github.com/ConductionNL/app-versions) for
+> [Codeberg repository](https://codeberg.org/Conduction/app-versions) for
 > milestones.
 
 ## Goal
@@ -33,7 +33,7 @@ confirmed that the app is now running the older version.
 ## Steps
 
 The numbered steps land here once the UI is built. The flow follows the
-spec scenarios in [`version-management`](https://github.com/ConductionNL/app-versions/tree/development/openspec/specs/version-management):
+spec scenarios in [`version-management`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/version-management):
 open the app card → version picker → pick a version → confirm →
 install → return to the list, the card now shows the older version.
 
@@ -53,5 +53,5 @@ the same version, and the rollback is recorded in the audit log.
 
 ## Reference
 
-- [`version-management`](https://github.com/ConductionNL/app-versions/tree/development/openspec/specs/version-management) spec — every scenario the UI implements.
+- [`version-management`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/version-management) spec — every scenario the UI implements.
 - [Connect a GitHub release source](./03-github-source.md) — for apps that live outside the App Store.

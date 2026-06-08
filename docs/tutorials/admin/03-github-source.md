@@ -12,7 +12,7 @@ GitHub repository so its release list lands in the version picker.
 
 > **This guide is being written as App Versions approaches feature-completeness.**
 > Bodies and screenshots fill in once the admin UI lands. Follow the
-> [GitHub repository](https://github.com/ConductionNL/app-versions) for
+> [Codeberg repository](https://codeberg.org/Conduction/app-versions) for
 > milestones.
 
 ## Goal
@@ -36,13 +36,13 @@ By the end of this guide you will have:
 - For private repos: a personal access token ready to paste in. App
   Versions encrypts it at rest via Nextcloud's `ICrypto` and never
   returns it in plaintext over the API (see the
-  [`pat-management`](https://github.com/ConductionNL/app-versions/tree/development/openspec/specs/pat-management) spec).
+  [`pat-management`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/pat-management) spec).
 
 ## Steps
 
 The numbered steps land here once the UI is built. The flow follows
-the spec scenarios in [`external-sources`](https://github.com/ConductionNL/app-versions/tree/development/openspec/specs/external-sources)
-and [`pat-management`](https://github.com/ConductionNL/app-versions/tree/development/openspec/specs/pat-management):
+the spec scenarios in [`external-sources`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/external-sources)
+and [`pat-management`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/pat-management):
 
 1. Open the app card and pick "Bind to GitHub release source".
 2. Enter `owner/repo` (e.g. `ConductionNL/openregister`).
@@ -72,6 +72,6 @@ install with the source recorded as `github`.
 
 ## Reference
 
-- [`external-sources`](https://github.com/ConductionNL/app-versions/tree/development/openspec/specs/external-sources) spec — the GitHub release source contract.
-- [`pat-management`](https://github.com/ConductionNL/app-versions/tree/development/openspec/specs/pat-management) spec — encrypted storage, redaction, scope validation.
+- [`external-sources`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/external-sources) spec — the GitHub release source contract.
+- [`pat-management`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/pat-management) spec — encrypted storage, redaction, scope validation.
 - [Roll back an app to a previous version](./02-rollback.md) — the App Store flow.
