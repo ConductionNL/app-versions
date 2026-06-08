@@ -12,6 +12,8 @@ namespace OCA\AppVersions\Service;
 use Exception;
 use OC\Archive\TAR;
 use OC\Files\FilenameValidator;
+use OCA\AppVersions\Service\Installer\FailureClassifier;
+use OCA\AppVersions\Service\Installer\InstallFailure;
 use OCA\AppVersions\Service\Installer\InstallFinalizer;
 use OCP\App\AppPathNotFoundException;
 use OCP\App\IAppManager;
@@ -262,41 +264,64 @@ class SelectedReleaseInstallerService {
 		$previousEnabled = $appConfig->getValueString($appId, 'enabled', 'no');
 		$installedApp = null;
 
-		$this->replaceWithSelectedRelease($appId, $release, $dryRun);
+		$backupDestination = $this->replaceWithSelectedRelease($appId, $release, $dryRun);
 
 		if (!$dryRun) {
 			$appPath = $appManager->getAppPath($appId, true);
 			$l = $this->getL10n()->get('core');
-			$info = $appManager->getAppInfoByPath($appPath . '/appinfo/info.xml', $l->getLanguageCode());
-			if (!is_array($info) || ($info['id'] ?? null) !== $appId) {
-				throw new Exception(
-					$l->t('App "%s" cannot be installed because appinfo file cannot be read.',
-						[$appId]
-					)
-				);
-			}
-			/** @var array<string, mixed> $info */
 
-			$ignoreMaxApps = (array)$config->getSystemValue('app_install_overwrite', []);
-			$ignoreMax = in_array($appId, $ignoreMaxApps, true);
-			$serverVersion = Server::get(\OCP\ServerVersion::class)->getVersionString();
-			if (!$appManager->isAppCompatible($serverVersion, $info, $ignoreMax)) {
-				$appName = isset($info['name']) && is_string($info['name']) ? $info['name'] : $appId;
-				throw new Exception(
-					$l->t('App "%s" cannot be installed because it is not compatible with this version of the server.',
-						[$appName]
-					)
-				);
-			}
+			// Pre-finalize validation (appinfo readable, compatible, deps met).
+			// On failure the files are restored from the retained backup and the
+			// outcome is a clean revert — the previous version is intact.
+			try {
+				$info = $appManager->getAppInfoByPath($appPath . '/appinfo/info.xml', $l->getLanguageCode());
+				if (!is_array($info) || ($info['id'] ?? null) !== $appId) {
+					throw new Exception(
+						$l->t('App "%s" cannot be installed because appinfo file cannot be read.',
+							[$appId]
+						)
+					);
+				}
+				/** @var array<string, mixed> $info */
 
-			\OC_App::checkAppDependencies($config, $l, $info, $ignoreMax);
+				$ignoreMaxApps = (array)$config->getSystemValue('app_install_overwrite', []);
+				$ignoreMax = in_array($appId, $ignoreMaxApps, true);
+				$serverVersion = Server::get(\OCP\ServerVersion::class)->getVersionString();
+				if (!$appManager->isAppCompatible($serverVersion, $info, $ignoreMax)) {
+					$appName = isset($info['name']) && is_string($info['name']) ? $info['name'] : $appId;
+					throw new Exception(
+						$l->t('App "%s" cannot be installed because it is not compatible with this version of the server.',
+							[$appName]
+						)
+					);
+				}
+
+				\OC_App::checkAppDependencies($config, $l, $info, $ignoreMax);
+			} catch (Exception $validationError) {
+				$this->restoreFromBackup($appPath, $backupDestination);
+				throw InstallFailure::reverted($validationError->getMessage(), FailureClassifier::STAGE_INFO_VALIDATED, $validationError);
+			}
 
 			$enabled = $installedVersion === '' ? 'no' : $previousEnabled;
 			$this->addDebug('last-steps', [
 				'appPath' => $appPath,
 				'enabled' => $enabled,
 			]);
-			$installedApp = $this->finalizer->finalize($appPath, $info, $enabled);
+
+			// Finalize (migrations + repair steps) is the last, unrecoverable
+			// phase. Keep the backup until it succeeds; on failure restore the
+			// previous files and report installed-but-broken.
+			try {
+				$installedApp = $this->finalizer->finalize($appPath, $info, $enabled);
+			} catch (Exception $finalizeError) {
+				$restoredCleanly = $this->restoreFromBackup($appPath, $backupDestination);
+				throw InstallFailure::finalizeFailed($finalizeError->getMessage(), $restoredCleanly, $finalizeError);
+			}
+
+			// Finalize succeeded — now it is safe to drop the backup.
+			if ($backupDestination !== null && is_dir($backupDestination)) {
+				$this->rmdirr($backupDestination);
+			}
 			$this->addDebug('post-install-state', [
 				'appPath' => $appPath,
 				'installedVersionConfig' => $appConfig->getValueString($appId, 'installed_version', ''),
@@ -332,14 +357,18 @@ class SelectedReleaseInstallerService {
 	 * Verifies signature/certificate, downloads, validates appId+version, and replaces app files (with backup/restore);
 	 * see "Install Specific Version" ("Installation fails" — no partial installs).
 	 *
+	 * Returns the retained backup path (or null when there was no previous
+	 * install / on dry run); the caller deletes it after `finalize()` succeeds
+	 * or restores from it on a finalize-phase failure.
+	 *
 	 * @spec openspec/specs/version-management/spec.md
 	 * @param string $appId
 	 * @param array<string, mixed> $release
 	 * @param bool $dryRun
-	 * @return void
+	 * @return ?string
 	 * @throws Exception
 	 */
-	public function replaceWithSelectedRelease(string $appId, array $release, bool $dryRun): void {
+	public function replaceWithSelectedRelease(string $appId, array $release, bool $dryRun): ?string {
 		$downloadUrl = $release['download'] ?? '';
 		$signature = $release['signature'] ?? '';
 		$certificate = $release['certificate'] ?? '';
@@ -480,7 +509,7 @@ class SelectedReleaseInstallerService {
 			if ($backupDestination !== null && is_dir($backupDestination)) {
 				rename($backupDestination, $destination);
 			}
-			return;
+			return null;
 		}
 
 		try {
@@ -489,22 +518,39 @@ class SelectedReleaseInstallerService {
 			}
 			$this->copyRecursive($extractedRoot, $destination);
 		} catch (Exception $error) {
-			if ($backupDestination !== null && is_dir($backupDestination)) {
-				if (is_dir($destination)) {
-					$this->rmdirr($destination);
-				}
-				rename($backupDestination, $destination);
-			}
-			throw $error;
+			// Pre-finalize failure: restore the previous files and report a clean
+			// revert (the previously installed version is intact).
+			$this->restoreFromBackup($destination, $backupDestination);
+			throw InstallFailure::reverted($error->getMessage(), 'copy', $error);
 		}
 
-		if ($backupDestination !== null && is_dir($backupDestination)) {
-			$this->rmdirr($backupDestination);
-		}
 		if (function_exists('opcache_reset')) {
 			opcache_reset();
 		}
 		$this->addDebug('filesystem-updated', ['destination' => $destination]);
+
+		// Backup is intentionally retained until finalize() succeeds; the caller
+		// owns its deletion (success) or restore (finalize-phase failure).
+		return $backupDestination;
+	}
+
+	/**
+	 * Restores the previous app files from the retained backup after a post-swap
+	 * failure. Returns whether the restore completed cleanly.
+	 */
+	private function restoreFromBackup(string $destination, ?string $backupDestination): bool {
+		if ($backupDestination === null || !is_dir($backupDestination)) {
+			return false;
+		}
+		try {
+			if (is_dir($destination)) {
+				$this->rmdirr($destination);
+			}
+
+			return rename($backupDestination, $destination);
+		} catch (\Throwable) {
+			return false;
+		}
 	}
 
 	/**

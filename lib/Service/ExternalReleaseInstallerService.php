@@ -13,6 +13,7 @@ use Exception;
 use OC\Archive\TAR;
 use OC\Archive\ZIP;
 use OC\Files\FilenameValidator;
+use OCA\AppVersions\Service\Installer\InstallFailure;
 use OCA\AppVersions\Service\Installer\InstallFinalizer;
 use OCA\AppVersions\Service\Pat\PatManager;
 use OCA\AppVersions\Service\Pat\PatResolver;
@@ -186,25 +187,33 @@ class ExternalReleaseInstallerService {
 			}
 			$this->copyRecursive($archivePath, $destination);
 		} catch (Exception $error) {
-			if ($backupDestination !== null && is_dir($backupDestination)) {
-				if (is_dir($destination)) {
-					$this->rmdirr($destination);
-				}
-				rename($backupDestination, $destination);
-			}
-			throw $error;
+			// Pre-finalize failure: restore the previous files and report a clean
+			// revert (the previously installed version is intact).
+			$this->restoreFromBackup($destination, $backupDestination);
+			throw InstallFailure::reverted($error->getMessage(), 'copy', $error);
 		}
 
-		if ($backupDestination !== null && is_dir($backupDestination)) {
-			$this->rmdirr($backupDestination);
-		}
 		if (function_exists('opcache_reset')) {
 			opcache_reset();
 		}
 		$this->addDebug('filesystem-updated', ['destination' => $destination]);
 
 		$enabled = $installedVersion === '' ? 'no' : $previousEnabled;
-		$installedApp = $this->finalizer->finalize($destination, $info, $enabled);
+
+		// Finalize (migrations + repair steps) is the last, unrecoverable phase.
+		// Keep the backup until it succeeds; on failure restore the previous
+		// files and report installed-but-broken.
+		try {
+			$installedApp = $this->finalizer->finalize($destination, $info, $enabled);
+		} catch (Exception $finalizeError) {
+			$restoredCleanly = $this->restoreFromBackup($destination, $backupDestination);
+			throw InstallFailure::finalizeFailed($finalizeError->getMessage(), $restoredCleanly, $finalizeError);
+		}
+
+		// Finalize succeeded — now it is safe to drop the backup.
+		if ($backupDestination !== null && is_dir($backupDestination)) {
+			$this->rmdirr($backupDestination);
+		}
 		$this->addDebug('finalized', ['appId' => $installedApp, 'enabled' => $enabled]);
 
 		return [
@@ -455,6 +464,25 @@ class ExternalReleaseInstallerService {
 
 	private function getDownloadTimeout(): int {
 		return PHP_SAPI === 'cli' ? 0 : 120;
+	}
+
+	/**
+	 * Restores the previous app files from the retained backup after a post-swap
+	 * failure. Returns whether the restore completed cleanly.
+	 */
+	private function restoreFromBackup(string $destination, ?string $backupDestination): bool {
+		if ($backupDestination === null || !is_dir($backupDestination)) {
+			return false;
+		}
+		try {
+			if (is_dir($destination)) {
+				$this->rmdirr($destination);
+			}
+
+			return rename($backupDestination, $destination);
+		} catch (\Throwable) {
+			return false;
+		}
 	}
 
 	/**

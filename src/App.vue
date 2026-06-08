@@ -11,6 +11,8 @@ type AppOption = {
 	summary: string
 	preview: string
 	isCore: boolean
+	manageable?: boolean
+	warning?: string | null
 }
 
 type AppVersion = {
@@ -31,6 +33,9 @@ type InstallResult = {
 	message: string
 	dryRun: boolean
 	installStatus: string
+	stage?: string | null
+	category?: string | null
+	hint?: string | null
 	debug?: InstallDebugEntry[]
 }
 
@@ -266,6 +271,9 @@ const normalizeInstallResult = (payload: {
 	message?: string
 	dryRun?: boolean
 	installStatus?: string
+	stage?: string | null
+	category?: string | null
+	hint?: string | null
 	debug?: unknown
 }): InstallResult => {
 	const normalizedUpdateType = payload.updateType ?? 'none'
@@ -289,6 +297,9 @@ const normalizeInstallResult = (payload: {
 		message: finalMessage,
 		dryRun: Boolean(payload.dryRun),
 		installStatus: payload.installStatus || 'failed',
+		stage: payload.stage ?? null,
+		category: payload.category ?? null,
+		hint: payload.hint ?? null,
 		debug: Array.isArray(payload.debug) ? payload.debug as InstallDebugEntry[] : [],
 	}
 }
@@ -299,11 +310,11 @@ const installStatusTone = computed<'success' | 'warning' | 'error' | 'info'>(() 
 		return 'info'
 	}
 
-	if (result.installStatus === 'dry-run') {
+	if (result.installStatus === 'dry-run' || result.installStatus === 'reverted') {
 		return 'warning'
 	}
 
-	if (result.installStatus === 'failed' || result.installStatus === 'error') {
+	if (result.installStatus === 'failed' || result.installStatus === 'error' || result.installStatus === 'installed-but-broken') {
 		return 'error'
 	}
 
@@ -311,6 +322,16 @@ const installStatusTone = computed<'success' | 'warning' | 'error' | 'info'>(() 
 })
 
 const installStatusLabel = computed(() => {
+	const status = lastInstallResult.value?.installStatus
+	if (status === 'dry-run') {
+		return 'Dry run'
+	}
+	if (status === 'reverted') {
+		return 'Reverted'
+	}
+	if (status === 'installed-but-broken') {
+		return 'Installed but broken'
+	}
 	switch (installStatusTone.value) {
 	case 'warning':
 		return 'Dry run'
@@ -839,12 +860,22 @@ const endpoint = withOcsJson(
 			hasInstallResult.value = true
 
 			if (metaMessage) {
-				errorMessage.value = metaMessage
-				if (lastInstallResult.value) {
+				// Failure: prefer the structured backend payload over the generic
+				// OCS meta message. Show the actionable hint first, then the
+				// "what happened" message; fall back to metaMessage only when the
+				// backend supplied neither. Preserve the backend installStatus
+				// (e.g. reverted / installed-but-broken) instead of forcing failed.
+				const structured = lastInstallResult.value
+				const backendMessage = structured && structured.message && structured.message !== 'Install completed.'
+					? structured.message
+					: ''
+				const hint = structured?.hint || ''
+				errorMessage.value = hint || backendMessage || metaMessage
+				if (structured) {
 					lastInstallResult.value = {
-						...lastInstallResult.value,
-						message: metaMessage,
-						installStatus: 'failed',
+						...structured,
+						message: backendMessage || metaMessage,
+						installStatus: structured.installStatus || 'failed',
 					}
 				}
 			} else {
@@ -1021,6 +1052,12 @@ watch(debugModeEnabled, () => {
 													</div>
 												</div>
 												<p :class="$style.appCardDescription">{{ appCardDescription(app) }}</p>
+												<p
+													v-if="app.warning"
+													:class="[$style.appCardWarning, { [$style.appCardWarningBlocking]: app.manageable === false }]"
+												>
+													⚠ {{ app.warning }}
+												</p>
 											</div>
 											<button
 											v-if="!app.isCore"
@@ -1168,6 +1205,7 @@ watch(debugModeEnabled, () => {
 									{{ installStatusLabel }}
 								</p>
 								<p :class="$style.resultMessage">{{ lastInstallResult.message }}</p>
+								<p v-if="lastInstallResult.hint" :class="$style.resultHint">{{ lastInstallResult.hint }}</p>
 								<div :class="$style.resultGrid">
 									<div>
 										<span>App</span>
@@ -1184,6 +1222,14 @@ watch(debugModeEnabled, () => {
 									<div>
 										<span>Result</span>
 										<strong>{{ lastInstallResult.installedVersion || lastInstallResult.toVersion }}</strong>
+									</div>
+									<div v-if="lastInstallResult.category">
+										<span>Failure category</span>
+										<strong>{{ lastInstallResult.category }}</strong>
+									</div>
+									<div v-if="lastInstallResult.stage">
+										<span>Failed at stage</span>
+										<strong>{{ lastInstallResult.stage }}</strong>
 									</div>
 								</div>
 								<div
@@ -1462,6 +1508,18 @@ watch(debugModeEnabled, () => {
 	font-size: 13px;
 	line-height: 1.35;
 	color: var(--color-text-maxcontrast);
+}
+
+.appCardWarning {
+	margin: 4px 0 0;
+	font-size: 12px;
+	line-height: 1.35;
+	color: var(--color-warning-text, var(--color-text-maxcontrast));
+}
+
+.appCardWarningBlocking {
+	color: var(--color-error-text, var(--color-error));
+	font-weight: 600;
 }
 
 .appCardButton {
@@ -1924,6 +1982,13 @@ watch(debugModeEnabled, () => {
 	margin: 0;
 	font-size: 13px;
 	font-weight: 600;
+}
+
+.resultHint {
+	margin: 4px 0 0;
+	font-size: 13px;
+	line-height: 1.4;
+	color: var(--color-text-maxcontrast);
 }
 
 .resultGrid {
