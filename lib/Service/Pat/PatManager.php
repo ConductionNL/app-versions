@@ -25,6 +25,8 @@ use OCP\Security\ICrypto;
  * No method on this class returns plaintext, no plaintext is stored on a
  * property, and `useToken()` discards its decrypted variable in `finally{}`
  * before returning.
+ *
+ * @psalm-api
  */
 class PatManager {
 	public function __construct(

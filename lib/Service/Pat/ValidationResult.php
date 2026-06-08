@@ -51,20 +51,4 @@ final class ValidationResult {
 	public static function accepted(array $scopes, array $warnings, ?string $expiresAt): self {
 		return new self(true, $scopes, $warnings, $expiresAt, null);
 	}
-
-	/**
-	 * Serializes the validation outcome for the API response; see "PAT validation on upload".
-	 *
-	 * @spec openspec/specs/pat-management/spec.md
-	 * @return array<string, mixed>
-	 */
-	public function toArray(): array {
-		return [
-			'ok' => $this->ok,
-			'scopes' => $this->scopes,
-			'warnings' => $this->warnings,
-			'expiresAt' => $this->expiresAt,
-			'error' => $this->error,
-		];
-	}
 }

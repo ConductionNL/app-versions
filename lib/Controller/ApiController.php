@@ -178,6 +178,7 @@ class ApiController extends OCSController {
 			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
 		}
 
+		/** @var mixed $source */
 		$source = $this->request->getParam('source');
 		$sourceOverride = is_string($source) && trim($source) !== '' ? trim($source) : null;
 
@@ -185,7 +186,7 @@ class ApiController extends OCSController {
 		$statusCode = $result['statusCode'] ?? Http::STATUS_OK;
 		unset($result['statusCode'], $result['hasError']);
 
-		return new DataResponse($result, $statusCode);
+		return new DataResponse($result, $this->toHttpStatus($statusCode, Http::STATUS_OK));
 	}
 
 	/**
@@ -208,6 +209,7 @@ class ApiController extends OCSController {
 			$requestedVersion = $version;
 		}
 
+		/** @var mixed $source */
 		$source = $this->request->getParam('source');
 		$sourceOverride = is_string($source) && trim($source) !== '' ? trim($source) : null;
 
@@ -224,7 +226,7 @@ class ApiController extends OCSController {
 
 		return new DataResponse(
 			$result['payload'] ?? [],
-			$result['statusCode'] ?? Http::STATUS_INTERNAL_SERVER_ERROR
+			$this->toHttpStatus($result['statusCode'] ?? Http::STATUS_INTERNAL_SERVER_ERROR, Http::STATUS_INTERNAL_SERVER_ERROR)
 		);
 	}
 
@@ -326,7 +328,9 @@ class ApiController extends OCSController {
 			return new DataResponse(['message' => 'Only the PAT owner can update it.'], Http::STATUS_FORBIDDEN);
 		}
 
+		/** @var mixed $label */
 		$label = $this->request->getParam('label');
+		/** @var mixed $shared */
 		$shared = $this->request->getParam('sharedWithAdmins');
 		if (is_string($label) && trim($label) !== '') {
 			$pat->setLabel(trim($label));
@@ -430,9 +434,30 @@ class ApiController extends OCSController {
 	}
 
 	private function stringParam(string $name, string $default): string {
+		/** @var mixed $value */
 		$value = $this->request->getParam($name, $default);
 
 		return is_string($value) ? trim($value) : $default;
+	}
+
+	/**
+	 * Coerces a service-provided integer status code into a valid HTTP status,
+	 * falling back to $fallback when the value is outside the known set.
+	 *
+	 * @param int $status
+	 * @param 100|101|102|200|201|202|203|204|205|206|207|208|226|300|301|302|303|304|305|306|307|400|401|402|403|404|405|406|407|408|409|410|411|412|413|414|415|416|417|418|422|423|424|426|428|429|431|500|501|502|503|504|505|506|507|508|509|510|511 $fallback
+	 * @return 100|101|102|200|201|202|203|204|205|206|207|208|226|300|301|302|303|304|305|306|307|400|401|402|403|404|405|406|407|408|409|410|411|412|413|414|415|416|417|418|422|423|424|426|428|429|431|500|501|502|503|504|505|506|507|508|509|510|511
+	 */
+	private function toHttpStatus(int $status, int $fallback): int {
+		$known = [
+			100, 101, 102, 200, 201, 202, 203, 204, 205, 206, 207, 208, 226,
+			300, 301, 302, 303, 304, 305, 306, 307,
+			400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411, 412,
+			413, 414, 415, 416, 417, 418, 422, 423, 424, 426, 428, 429, 431,
+			500, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511,
+		];
+
+		return in_array($status, $known, true) ? $status : $fallback;
 	}
 
 	private function readBinaryBool(mixed $value, bool $default): bool {

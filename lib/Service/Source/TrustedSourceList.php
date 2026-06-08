@@ -10,12 +10,14 @@ declare(strict_types=1);
 namespace OCA\AppVersions\Service\Source;
 
 use OCA\AppVersions\AppInfo\Application;
-use OCP\IConfig;
+use OCP\IAppConfig;
 
 /**
  * Reads and enforces the trusted-source allowlist. Bindings whose owner/repo
  * does not match any configured glob are rejected before any HTTP fetch or
  * filesystem write happens.
+ *
+ * @psalm-api
  */
 class TrustedSourceList {
 	private const CONFIG_KEY = 'trusted_sources';
@@ -24,7 +26,7 @@ class TrustedSourceList {
 	private const DEFAULT_PATTERNS = ['ConductionNL/*'];
 
 	public function __construct(
-		private IConfig $config,
+		private IAppConfig $config,
 	) {
 	}
 
@@ -35,7 +37,7 @@ class TrustedSourceList {
 	 * @return list<string>
 	 */
 	public function getPatterns(): array {
-		$raw = $this->config->getAppValue(Application::APP_ID, self::CONFIG_KEY, '');
+		$raw = $this->config->getValueString(Application::APP_ID, self::CONFIG_KEY, '');
 		if ($raw === '') {
 			return self::DEFAULT_PATTERNS;
 		}
@@ -51,6 +53,7 @@ class TrustedSourceList {
 		}
 
 		$patterns = [];
+		/** @var mixed $entry */
 		foreach ($decoded as $entry) {
 			if (is_string($entry) && trim($entry) !== '') {
 				$patterns[] = trim($entry);
@@ -69,12 +72,12 @@ class TrustedSourceList {
 	public function setPatterns(array $patterns): void {
 		$cleaned = [];
 		foreach ($patterns as $entry) {
-			if (is_string($entry) && trim($entry) !== '') {
+			if (trim($entry) !== '') {
 				$cleaned[] = trim($entry);
 			}
 		}
 
-		$this->config->setAppValue(
+		$this->config->setValueString(
 			Application::APP_ID,
 			self::CONFIG_KEY,
 			json_encode($cleaned, JSON_THROW_ON_ERROR)
@@ -138,7 +141,9 @@ class TrustedSourceList {
 			return null;
 		}
 
-		[$owner, $repo] = explode('/', $ownerRepo, 2);
+		$parts = explode('/', $ownerRepo, 2);
+		$owner = $parts[0];
+		$repo = $parts[1] ?? '';
 		if ($owner === '' || $repo === '') {
 			return null;
 		}

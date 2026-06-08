@@ -24,6 +24,8 @@ use Psr\Log\LoggerInterface;
  * `repo` / `public_repo` rejects the upload. Fine-grained PATs
  * (`github_pat_*`) do not expose configured permissions to the holder, so
  * we accept them with an explicit `unverifiable_scope` warning.
+ *
+ * @psalm-api
  */
 class PatValidator {
 	private const USER_ENDPOINT = 'https://api.github.com/user';
@@ -124,15 +126,19 @@ class PatValidator {
 	}
 
 	/**
-	 * @param array<string, list<string>|string> $headers
+	 * @param array<array-key, mixed> $headers
 	 */
 	private function headerValue(array $headers, string $name): ?string {
+		/** @var mixed $values */
 		foreach ($headers as $key => $values) {
 			if (strcasecmp((string)$key, $name) !== 0) {
 				continue;
 			}
 			if (is_array($values)) {
-				return $values[0] ?? null;
+				/** @var mixed $first */
+				$first = $values[0] ?? null;
+
+				return is_string($first) ? $first : null;
 			}
 			if (is_string($values)) {
 				return $values;

@@ -16,6 +16,8 @@ use OCA\AppVersions\Db\PatMapper;
  * Looks up the highest-priority non-expired PAT visible to the current uid
  * that matches the binding's `owner/repo`. Used by `GithubReleaseSource` to
  * decide whether to authenticate a request.
+ *
+ * @psalm-api
  */
 class PatResolver {
 	public function __construct(

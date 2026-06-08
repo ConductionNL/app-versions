@@ -15,6 +15,8 @@ namespace OCA\AppVersions\Service\Source;
  * installation is delegated to either `SelectedReleaseInstallerService`
  * (for the App Store path with full code-signing) or
  * `ExternalReleaseInstallerService` (for unsigned / external sources).
+ *
+ * @psalm-api
  */
 interface SourceInterface {
 	public const INSTALLER_SIGNED = 'signed';

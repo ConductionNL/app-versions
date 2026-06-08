@@ -14,6 +14,8 @@ use RuntimeException;
 /**
  * Thrown when an install or version-list request targets a source not in the
  * configured trusted-source allowlist. The HTTP layer maps this to 403.
+ *
+ * @psalm-api
  */
 final class UntrustedSourceException extends RuntimeException {
 	public function __construct(

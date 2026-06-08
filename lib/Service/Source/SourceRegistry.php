@@ -15,6 +15,8 @@ use InvalidArgumentException;
  * Maps a `SourceBinding` to the concrete driver that knows how to talk to
  * that origin. Drivers are stateless DI singletons; the binding carries the
  * per-app configuration (owner/repo/assetPattern) into the driver.
+ *
+ * @psalm-api
  */
 class SourceRegistry {
 	public function __construct(
@@ -73,7 +75,9 @@ class SourceRegistry {
 			if (!str_contains($ownerRepo, '/')) {
 				throw new InvalidArgumentException('GitHub source id must be of the form github:owner/repo');
 			}
-			[$owner, $repo] = explode('/', $ownerRepo, 2);
+			$parts = explode('/', $ownerRepo, 2);
+			$owner = $parts[0];
+			$repo = $parts[1] ?? '';
 			if ($owner === '' || $repo === '') {
 				throw new InvalidArgumentException('GitHub source id has empty owner or repo');
 			}

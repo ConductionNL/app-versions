@@ -62,7 +62,7 @@ final class SourceBinding {
 			return 'appstore';
 		}
 
-		return 'github:' . $this->config['owner'] . '/' . $this->config['repo'];
+		return 'github:' . $this->configString('owner') . '/' . $this->configString('repo');
 	}
 
 	/**
@@ -75,13 +75,24 @@ final class SourceBinding {
 			return null;
 		}
 
-		return $this->config['owner'] . '/' . $this->config['repo'];
+		return $this->configString('owner') . '/' . $this->configString('repo');
 	}
 
 	public function getAssetPattern(): string {
+		/** @var mixed $pattern */
 		$pattern = $this->config['assetPattern'] ?? '*.tar.gz';
 
 		return is_string($pattern) && $pattern !== '' ? $pattern : '*.tar.gz';
+	}
+
+	/**
+	 * Returns a config value as a string, or '' when absent/non-string.
+	 */
+	private function configString(string $key): string {
+		/** @var mixed $value */
+		$value = $this->config[$key] ?? null;
+
+		return is_string($value) ? $value : '';
 	}
 
 	/**
@@ -91,10 +102,7 @@ final class SourceBinding {
 	 * @return array<string, mixed>
 	 */
 	public function toArray(): array {
-		$payload = ['kind' => $this->kind];
-		foreach ($this->config as $key => $value) {
-			$payload[$key] = $value;
-		}
+		$payload = array_merge(['kind' => $this->kind], $this->config);
 		if ($this->boundAt !== null) {
 			$payload['boundAt'] = $this->boundAt;
 		}
@@ -106,7 +114,7 @@ final class SourceBinding {
 	 * Reconstructs a binding from its persisted payload; see "Source binding".
 	 *
 	 * @spec openspec/specs/external-sources/spec.md
-	 * @param array<string, mixed> $payload
+	 * @param array<array-key, mixed> $payload
 	 */
 	public static function fromArray(array $payload): self {
 		$kind = $payload['kind'] ?? null;
@@ -114,8 +122,12 @@ final class SourceBinding {
 			throw new InvalidArgumentException('Source binding payload missing "kind"');
 		}
 
-		$config = $payload;
-		unset($config['kind'], $config['boundAt']);
+		$config = array_filter(
+			$payload,
+			static fn (int|string $key): bool => is_string($key) && $key !== 'kind' && $key !== 'boundAt',
+			ARRAY_FILTER_USE_KEY,
+		);
+		/** @var array<string, mixed> $config */
 
 		$boundAt = isset($payload['boundAt']) && is_string($payload['boundAt']) ? $payload['boundAt'] : null;
 

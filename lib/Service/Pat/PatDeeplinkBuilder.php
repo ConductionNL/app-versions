@@ -17,6 +17,8 @@ use OCP\IRequest;
  * Builds prefilled GitHub URLs for PAT creation. Classic PATs accept full
  * scope+description prefill; fine-grained PATs only accept the page link, so
  * we return a structured `instructions` array for the UI to render.
+ *
+ * @psalm-api
  */
 class PatDeeplinkBuilder {
 	private const CLASSIC_BASE = 'https://github.com/settings/tokens/new';

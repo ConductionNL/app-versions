@@ -14,7 +14,7 @@ use OCA\AppVersions\AppInfo\Application;
 use OCA\AppVersions\Service\Source\SourceBinding;
 use OCA\AppVersions\Service\Source\TrustedSourceList;
 use OCP\Http\Client\IClientService;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -30,8 +30,11 @@ class GithubSearchDiscovery implements DiscoveryProviderInterface {
 	private const SEARCH_ENDPOINT = 'https://api.github.com/search/repositories';
 	private const USER_AGENT = 'Nextcloud-AppVersions';
 
+	/**
+	 * @psalm-api
+	 */
 	public function __construct(
-		private IConfig $config,
+		private IAppConfig $config,
 		private TrustedSourceList $trustedSources,
 		private IClientService $clientService,
 		private LoggerInterface $logger,
@@ -47,7 +50,7 @@ class GithubSearchDiscovery implements DiscoveryProviderInterface {
 	}
 
 	public function isEnabled(): bool {
-		return $this->config->getAppValue(Application::APP_ID, self::ENABLED_KEY, 'false') === 'true';
+		return $this->config->getValueString(Application::APP_ID, self::ENABLED_KEY, 'false') === 'true';
 	}
 
 	/**
@@ -93,6 +96,7 @@ class GithubSearchDiscovery implements DiscoveryProviderInterface {
 		}
 
 		try {
+			/** @var mixed $decoded */
 			$decoded = json_decode((string)$response->getBody(), true, 32, JSON_THROW_ON_ERROR);
 		} catch (\JsonException) {
 			return DiscoveryResult::failed('GitHub search returned malformed JSON.');
@@ -103,6 +107,7 @@ class GithubSearchDiscovery implements DiscoveryProviderInterface {
 		}
 
 		$hits = [];
+		/** @var mixed $repo */
 		foreach ($decoded['items'] as $repo) {
 			if (!is_array($repo)) {
 				continue;
@@ -117,14 +122,21 @@ class GithubSearchDiscovery implements DiscoveryProviderInterface {
 	}
 
 	/**
-	 * @param array<string, mixed> $repo
+	 * @param array<array-key, mixed> $repo
 	 */
 	private function buildHit(array $repo): ?DiscoveryHit {
-		$fullName = $repo['full_name'] ?? '';
-		if (!is_string($fullName) || !str_contains($fullName, '/')) {
+		/** @var mixed $rawFullName */
+		$rawFullName = $repo['full_name'] ?? '';
+		if (!is_string($rawFullName)) {
 			return null;
 		}
-		[$owner, $repoName] = explode('/', $fullName, 2);
+		$fullName = $rawFullName;
+		if (!str_contains($fullName, '/')) {
+			return null;
+		}
+		$parts = explode('/', $fullName, 2);
+		$owner = $parts[0];
+		$repoName = $parts[1] ?? '';
 
 		$sourceId = 'github:' . $fullName;
 		$installable = $this->trustedSources->isAllowed($sourceId);
@@ -132,10 +144,17 @@ class GithubSearchDiscovery implements DiscoveryProviderInterface {
 			? null
 			: sprintf('Add `%s/*` to the trusted-source allowlist to install this app.', $owner);
 
+		/** @var mixed $repoNameValue */
+		$repoNameValue = $repo['name'] ?? null;
+		/** @var mixed $descriptionValue */
+		$descriptionValue = $repo['description'] ?? null;
+		/** @var mixed $htmlUrlValue */
+		$htmlUrlValue = $repo['html_url'] ?? null;
+
 		return new DiscoveryHit(
 			appId: strtolower(str_replace('-', '_', $repoName)),
-			name: is_string($repo['name'] ?? null) ? $repo['name'] : $repoName,
-			summary: is_string($repo['description'] ?? null) ? (string)$repo['description'] : '',
+			name: is_string($repoNameValue) ? $repoNameValue : $repoName,
+			summary: is_string($descriptionValue) ? $descriptionValue : '',
 			iconUrl: null,
 			sourceProviderId: self::ID,
 			sourceBinding: [
@@ -145,7 +164,7 @@ class GithubSearchDiscovery implements DiscoveryProviderInterface {
 			],
 			installable: $installable,
 			installableReason: $reason,
-			homepageUrl: is_string($repo['html_url'] ?? null) ? (string)$repo['html_url'] : null,
+			homepageUrl: is_string($htmlUrlValue) ? $htmlUrlValue : null,
 		);
 	}
 }

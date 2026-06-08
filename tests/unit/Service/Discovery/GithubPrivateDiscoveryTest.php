@@ -12,7 +12,7 @@ use OCA\AppVersions\Service\Source\TrustedSourceList;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use OCP\IUser;
 use OCP\IUserSession;
 use PHPUnit\Framework\TestCase;
@@ -36,10 +36,10 @@ final class GithubPrivateDiscoveryTest extends TestCase {
 			static fn (Pat $pat, callable $cb) => $cb('fake-plaintext-' . $pat->getId())
 		);
 
-		$config = $this->createMock(IConfig::class);
-		$config->method('getAppValue')->willReturnCallback(
+		$config = $this->createMock(IAppConfig::class);
+		$config->method('getValueString')->willReturnCallback(
 			static fn (string $app, string $key, string $default = '') => $key === 'trusted_sources'
-				? json_encode($allowlist)
+				? (string)json_encode($allowlist)
 				: $default
 		);
 		$trustedSources = new TrustedSourceList($config);

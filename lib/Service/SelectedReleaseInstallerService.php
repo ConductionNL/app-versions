@@ -15,14 +15,17 @@ use OC\Files\FilenameValidator;
 use OCA\AppVersions\Service\Installer\InstallFinalizer;
 use OCP\App\AppPathNotFoundException;
 use OCP\App\IAppManager;
-use OCP\Files;
 use OCP\Http\Client\IClientService;
+use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\ITempManager;
 use OCP\L10N\IFactory;
 use OCP\Server;
 use phpseclib\File\X509;
 
+/**
+ * @psalm-api
+ */
 class SelectedReleaseInstallerService {
 	/** @var array<int, mixed> */
 	private array $debug = [];
@@ -98,7 +101,7 @@ class SelectedReleaseInstallerService {
 		}
 
 		$loadedCertificate = $x509->loadX509($certificate);
-		if (!$loadedCertificate) {
+		if ($loadedCertificate === false) {
 			throw new Exception('Could not parse app certificate.');
 		}
 
@@ -112,7 +115,15 @@ class SelectedReleaseInstallerService {
 			throw new Exception('Could not validate CRL signature');
 		}
 
-		$serial = $loadedCertificate['tbsCertificate']['serialNumber']->toString();
+		$tbsCertificate = (array)($loadedCertificate['tbsCertificate'] ?? []);
+		$serialNumber = $tbsCertificate['serialNumber'] ?? null;
+		if (!is_object($serialNumber) || !method_exists($serialNumber, 'toString')) {
+			throw new Exception('Could not read certificate serial number.');
+		}
+		// External-API mismatch: phpseclib X509::loadX509() returns untyped arrays, so the
+		// serialNumber BigInteger's ->toString() is not statically known despite the method_exists guard above.
+		/** @psalm-suppress MixedMethodCall */
+		$serial = (string)$serialNumber->toString();
 		$revoked = $crl->getRevoked($serial);
 		if ($revoked !== false) {
 			throw new Exception(sprintf('Certificate "%s" has been revoked', $serial));
@@ -123,12 +134,14 @@ class SelectedReleaseInstallerService {
 		}
 
 		$certInfo = openssl_x509_parse($certificate);
-		if (!isset($certInfo['subject']['CN'])) {
+		$subject = is_array($certInfo) && is_array($certInfo['subject'] ?? null) ? $certInfo['subject'] : [];
+		if (!isset($subject['CN'])) {
 			throw new Exception(sprintf('App with id %s has a cert with no CN', $appId));
 		}
 
-		if ($certInfo['subject']['CN'] !== $appId) {
-			throw new Exception(sprintf('App with id %s has a cert issued to %s', $appId, $certInfo['subject']['CN']));
+		$commonName = (string)$subject['CN'];
+		if ($commonName !== $appId) {
+			throw new Exception(sprintf('App with id %s has a cert issued to %s', $appId, $commonName));
 		}
 
 		$this->addDebug('certificate-validated', ['appId' => $appId, 'serial' => $serial]);
@@ -181,6 +194,15 @@ class SelectedReleaseInstallerService {
 	}
 
 	/**
+	 * Returns app config service.
+	 *
+	 * @return IAppConfig
+	 */
+	private function getAppConfig(): IAppConfig {
+		return Server::get(IAppConfig::class);
+	}
+
+	/**
 	 * Returns temp manager.
 	 *
 	 * @return ITempManager
@@ -212,7 +234,7 @@ class SelectedReleaseInstallerService {
 	 *
 	 * @spec openspec/specs/version-management/spec.md
 	 * @param string $appId
-	 * @param array{download?: mixed, signature?: mixed, certificate?: mixed, version?: mixed} $release
+	 * @param array<string, mixed> $release
 	 * @param bool $dryRun
 	 * @return array<string, mixed>
 	 * @throws Exception
@@ -230,14 +252,14 @@ class SelectedReleaseInstallerService {
 
 		$appManager = $this->getAppManager();
 		$config = $this->getConfig();
+		$appConfig = $this->getAppConfig();
 
-		$installedVersion = '';
 		try {
 			$installedVersion = $appManager->getAppVersion($appId);
 		} catch (Exception) {
 			$installedVersion = '';
 		}
-		$previousEnabled = $config->getAppValue($appId, 'enabled', 'no');
+		$previousEnabled = $appConfig->getValueString($appId, 'enabled', 'no');
 		$installedApp = null;
 
 		$this->replaceWithSelectedRelease($appId, $release, $dryRun);
@@ -246,21 +268,23 @@ class SelectedReleaseInstallerService {
 			$appPath = $appManager->getAppPath($appId, true);
 			$l = $this->getL10n()->get('core');
 			$info = $appManager->getAppInfoByPath($appPath . '/appinfo/info.xml', $l->getLanguageCode());
-			if (!is_array($info) || $info['id'] !== $appId) {
+			if (!is_array($info) || ($info['id'] ?? null) !== $appId) {
 				throw new Exception(
 					$l->t('App "%s" cannot be installed because appinfo file cannot be read.',
 						[$appId]
 					)
 				);
 			}
+			/** @var array<string, mixed> $info */
 
-			$ignoreMaxApps = $config->getSystemValue('app_install_overwrite', []);
+			$ignoreMaxApps = (array)$config->getSystemValue('app_install_overwrite', []);
 			$ignoreMax = in_array($appId, $ignoreMaxApps, true);
-			$serverVersion = implode('.', \OCP\Util::getVersion());
+			$serverVersion = Server::get(\OCP\ServerVersion::class)->getVersionString();
 			if (!$appManager->isAppCompatible($serverVersion, $info, $ignoreMax)) {
+				$appName = isset($info['name']) && is_string($info['name']) ? $info['name'] : $appId;
 				throw new Exception(
 					$l->t('App "%s" cannot be installed because it is not compatible with this version of the server.',
-						[$info['name']]
+						[$appName]
 					)
 				);
 			}
@@ -275,7 +299,7 @@ class SelectedReleaseInstallerService {
 			$installedApp = $this->finalizer->finalize($appPath, $info, $enabled);
 			$this->addDebug('post-install-state', [
 				'appPath' => $appPath,
-				'installedVersionConfig' => $config->getAppValue($appId, 'installed_version', ''),
+				'installedVersionConfig' => $appConfig->getValueString($appId, 'installed_version', ''),
 				'installedApp' => $installedApp,
 			]);
 			$this->addDebug('installed', ['appId' => $installedApp]);
@@ -337,8 +361,8 @@ class SelectedReleaseInstallerService {
 		$this->addDebug('release-metadata', [
 			'downloadUrl' => $downloadUrl,
 			'expectedVersion' => $expectedVersion,
-			'hasSignature' => $signature !== '',
-			'hasCertificate' => $certificate !== '',
+			'hasSignature' => true,
+			'hasCertificate' => true,
 			'dryRun' => $dryRun,
 		]);
 
@@ -347,6 +371,9 @@ class SelectedReleaseInstallerService {
 		$tempManager = $this->getTempManager();
 		$tempFile = $tempManager->getTemporaryFile('.tar.gz');
 		$tempFolder = $tempManager->getTemporaryFolder('app-version');
+		if (!is_string($tempFile) || !is_string($tempFolder)) {
+			throw new Exception('Could not allocate temporary download paths.');
+		}
 		$appManager = $this->getAppManager();
 
 		try {
@@ -422,7 +449,6 @@ class SelectedReleaseInstallerService {
 		}
 		$this->addDebug('signature-verified', ['result' => 'ok']);
 
-		$previousPath = null;
 		try {
 			$previousPath = $appManager->getAppPath($appId);
 		} catch (AppPathNotFoundException) {
@@ -465,7 +491,7 @@ class SelectedReleaseInstallerService {
 		} catch (Exception $error) {
 			if ($backupDestination !== null && is_dir($backupDestination)) {
 				if (is_dir($destination)) {
-					Files::rmdirr($destination);
+					$this->rmdirr($destination);
 				}
 				rename($backupDestination, $destination);
 			}
@@ -473,7 +499,7 @@ class SelectedReleaseInstallerService {
 		}
 
 		if ($backupDestination !== null && is_dir($backupDestination)) {
-			Files::rmdirr($backupDestination);
+			$this->rmdirr($backupDestination);
 		}
 		if (function_exists('opcache_reset')) {
 			opcache_reset();
@@ -544,5 +570,35 @@ class SelectedReleaseInstallerService {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Recursively deletes a directory on the local filesystem (temp/backup dirs),
+	 * replacing the deprecated \OCP\Files::rmdirr helper.
+	 *
+	 * @param string $dir
+	 */
+	private function rmdirr(string $dir): void {
+		if (!is_dir($dir)) {
+			if (file_exists($dir) || is_link($dir)) {
+				@unlink($dir);
+			}
+
+			return;
+		}
+
+		/** @var \Iterator<string, \SplFileInfo> $iterator */
+		$iterator = new \RecursiveIteratorIterator(
+			new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
+			\RecursiveIteratorIterator::CHILD_FIRST
+		);
+		foreach ($iterator as $item) {
+			if ($item->isDir() && !$item->isLink()) {
+				@rmdir($item->getPathname());
+			} else {
+				@unlink($item->getPathname());
+			}
+		}
+		@rmdir($dir);
 	}
 }
