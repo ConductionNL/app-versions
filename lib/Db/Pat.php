@@ -14,6 +14,12 @@ use OCP\AppFramework\Db\Entity;
 /**
  * Stored Personal Access Token row.
  *
+ * @psalm-api
+ *
+ * The inherited OCP\AppFramework\Db\Entity::$id is declared but not initialised
+ * by the base constructor; it is populated by the mapper on insert/load.
+ * @psalm-suppress PropertyNotSetInConstructor
+ *
  * @method string getOwnerUid()
  * @method void setOwnerUid(string $value)
  * @method string getLabel()
@@ -74,6 +80,7 @@ class Pat extends Entity {
 		$validated = null;
 		$lastValidated = $this->lastValidatedScopes;
 		if (is_string($lastValidated) && $lastValidated !== '') {
+			/** @var mixed $decoded */
 			$decoded = json_decode($lastValidated, true);
 			if (is_array($decoded)) {
 				$validated = $decoded;

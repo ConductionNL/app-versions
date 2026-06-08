@@ -7,13 +7,13 @@ namespace OCA\AppVersions\Tests\Unit\Service\Source;
 use OCA\AppVersions\AppInfo\Application;
 use OCA\AppVersions\Service\Source\SourceBinding;
 use OCA\AppVersions\Service\Source\SourceBindingStore;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use PHPUnit\Framework\TestCase;
 
 final class SourceBindingStoreTest extends TestCase {
 	public function testGetReturnsNullWhenUnset(): void {
-		$config = $this->createMock(IConfig::class);
-		$config->method('getAppValue')->willReturn('');
+		$config = $this->createMock(IAppConfig::class);
+		$config->method('getValueString')->willReturn('');
 
 		$store = new SourceBindingStore($config);
 
@@ -21,8 +21,8 @@ final class SourceBindingStoreTest extends TestCase {
 	}
 
 	public function testGetReturnsBindingForValidJson(): void {
-		$config = $this->createMock(IConfig::class);
-		$config->method('getAppValue')->willReturn(json_encode([
+		$config = $this->createMock(IAppConfig::class);
+		$config->method('getValueString')->willReturn(json_encode([
 			'kind' => SourceBinding::KIND_GITHUB_RELEASE,
 			'owner' => 'ConductionNL',
 			'repo' => 'openregister',
@@ -37,8 +37,8 @@ final class SourceBindingStoreTest extends TestCase {
 	}
 
 	public function testGetReturnsNullOnMalformedJson(): void {
-		$config = $this->createMock(IConfig::class);
-		$config->method('getAppValue')->willReturn('{not valid json');
+		$config = $this->createMock(IAppConfig::class);
+		$config->method('getValueString')->willReturn('{not valid json');
 
 		$store = new SourceBindingStore($config);
 
@@ -46,8 +46,8 @@ final class SourceBindingStoreTest extends TestCase {
 	}
 
 	public function testGetReturnsNullOnInvalidBinding(): void {
-		$config = $this->createMock(IConfig::class);
-		$config->method('getAppValue')->willReturn(json_encode([
+		$config = $this->createMock(IAppConfig::class);
+		$config->method('getValueString')->willReturn(json_encode([
 			'kind' => SourceBinding::KIND_GITHUB_RELEASE,
 			// missing owner/repo
 		], JSON_THROW_ON_ERROR));
@@ -59,9 +59,9 @@ final class SourceBindingStoreTest extends TestCase {
 
 	public function testSetWritesJson(): void {
 		$captured = null;
-		$config = $this->createMock(IConfig::class);
+		$config = $this->createMock(IAppConfig::class);
 		$config->expects($this->once())
-			->method('setAppValue')
+			->method('setValueString')
 			->with(
 				Application::APP_ID,
 				'source.openregister',
@@ -83,9 +83,9 @@ final class SourceBindingStoreTest extends TestCase {
 	}
 
 	public function testClearDeletesValue(): void {
-		$config = $this->createMock(IConfig::class);
+		$config = $this->createMock(IAppConfig::class);
 		$config->expects($this->once())
-			->method('deleteAppValue')
+			->method('deleteKey')
 			->with(Application::APP_ID, 'source.openregister');
 
 		$store = new SourceBindingStore($config);

@@ -18,6 +18,8 @@ use OCP\User\Events\UserDeletedEvent;
  * Removes any PATs owned by a deleted user so credentials don't outlive
  * the account that uploaded them.
  *
+ * @psalm-api
+ *
  * @template-implements IEventListener<UserDeletedEvent>
  */
 class UserDeletedListener implements IEventListener {

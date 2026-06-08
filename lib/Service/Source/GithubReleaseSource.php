@@ -29,6 +29,8 @@ use Psr\Log\LoggerInterface;
  *     "repo": "openregister",
  *     "assetPattern": "*.tar.gz"
  *   }
+ *
+ * @psalm-api
  */
 class GithubReleaseSource implements SourceInterface {
 	private const API_BASE = 'https://api.github.com';
@@ -63,12 +65,17 @@ class GithubReleaseSource implements SourceInterface {
 		}
 
 		$result = $this->fetchReleases($ownerRepo);
-		if (!$result['ok']) {
-			return ['versions' => [], 'error' => $result['error']];
+		if ($result['ok'] === false) {
+			$error = $result['error'] ?? 'GitHub API request failed.';
+
+			return ['versions' => [], 'error' => $error];
 		}
 
+		$releases = $result['releases'] ?? [];
+
 		$versions = [];
-		foreach ($result['releases'] as $release) {
+		/** @var mixed $release */
+		foreach ($releases as $release) {
 			if (!is_array($release)) {
 				continue;
 			}
@@ -94,12 +101,15 @@ class GithubReleaseSource implements SourceInterface {
 		}
 
 		$result = $this->fetchReleases($ownerRepo);
-		if (!$result['ok']) {
+		if ($result['ok'] === false) {
 			return null;
 		}
 
+		$releases = $result['releases'] ?? [];
+
 		$assetPattern = $binding->getAssetPattern();
-		foreach ($result['releases'] as $release) {
+		/** @var mixed $release */
+		foreach ($releases as $release) {
 			if (!is_array($release)) {
 				continue;
 			}
@@ -193,10 +203,11 @@ class GithubReleaseSource implements SourceInterface {
 	}
 
 	/**
-	 * @param array<string, mixed> $release
+	 * @param array<array-key, mixed> $release
 	 * @return array<string, mixed>|null
 	 */
 	private function buildReleasePayload(array $release, string $assetPattern): ?array {
+		/** @var mixed $assets */
 		$assets = $release['assets'] ?? [];
 		if (!is_array($assets) || !array_is_list($assets)) {
 			return null;
@@ -204,11 +215,14 @@ class GithubReleaseSource implements SourceInterface {
 
 		$matchingAssets = [];
 		$shaUrl = null;
+		/** @var mixed $asset */
 		foreach ($assets as $asset) {
 			if (!is_array($asset)) {
 				continue;
 			}
+			/** @var mixed $name */
 			$name = $asset['name'] ?? '';
+			/** @var mixed $url */
 			$url = $asset['browser_download_url'] ?? '';
 			if (!is_string($name) || !is_string($url) || $name === '' || $url === '') {
 				continue;
@@ -240,6 +254,7 @@ class GithubReleaseSource implements SourceInterface {
 			];
 		}
 
+		/** @var mixed $tag */
 		$tag = $release['tag_name'] ?? '';
 
 		return [
@@ -275,7 +290,14 @@ class GithubReleaseSource implements SourceInterface {
 			$unique[] = $entry;
 		}
 
-		usort($unique, static fn (array $a, array $b): int => version_compare($b['version'], $a['version']));
+		usort(
+			$unique,
+			/**
+			 * @param array{version: string} $a
+			 * @param array{version: string} $b
+			 */
+			static fn (array $a, array $b): int => version_compare($b['version'], $a['version'])
+		);
 
 		return $unique;
 	}

@@ -7,13 +7,13 @@ namespace OCA\AppVersions\Tests\Unit\Service\Source;
 use OCA\AppVersions\AppInfo\Application;
 use OCA\AppVersions\Service\Source\TrustedSourceList;
 use OCA\AppVersions\Service\Source\UntrustedSourceException;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use PHPUnit\Framework\TestCase;
 
 final class TrustedSourceListTest extends TestCase {
 	private function withPatterns(string $stored): TrustedSourceList {
-		$config = $this->createMock(IConfig::class);
-		$config->method('getAppValue')->willReturnCallback(
+		$config = $this->createMock(IAppConfig::class);
+		$config->method('getValueString')->willReturnCallback(
 			fn (string $app, string $key, string $default = '') => $app === Application::APP_ID && $key === 'trusted_sources'
 				? $stored
 				: $default

@@ -10,16 +10,18 @@ declare(strict_types=1);
 namespace OCA\AppVersions\Service\Source;
 
 use OCA\AppVersions\AppInfo\Application;
-use OCP\IConfig;
+use OCP\IAppConfig;
 
 /**
  * Reads and writes the per-app source binding stored under app config key
  * `source.{appId}`. Bindings are JSON; absent or invalid values are treated
  * as unbound and the App Store is used as the fallback source.
+ *
+ * @psalm-api
  */
 class SourceBindingStore {
 	public function __construct(
-		private IConfig $config,
+		private IAppConfig $config,
 	) {
 	}
 
@@ -29,7 +31,7 @@ class SourceBindingStore {
 	 * @spec openspec/specs/external-sources/spec.md
 	 */
 	public function get(string $appId): ?SourceBinding {
-		$raw = $this->config->getAppValue(Application::APP_ID, $this->key($appId), '');
+		$raw = $this->config->getValueString(Application::APP_ID, $this->key($appId), '');
 		if ($raw === '') {
 			return null;
 		}
@@ -57,7 +59,7 @@ class SourceBindingStore {
 	 * @spec openspec/specs/external-sources/spec.md
 	 */
 	public function set(string $appId, SourceBinding $binding): void {
-		$this->config->setAppValue(
+		$this->config->setValueString(
 			Application::APP_ID,
 			$this->key($appId),
 			json_encode($binding->toArray(), JSON_THROW_ON_ERROR)
@@ -70,7 +72,7 @@ class SourceBindingStore {
 	 * @spec openspec/specs/external-sources/spec.md
 	 */
 	public function clear(string $appId): void {
-		$this->config->deleteAppValue(Application::APP_ID, $this->key($appId));
+		$this->config->deleteKey(Application::APP_ID, $this->key($appId));
 	}
 
 	private function key(string $appId): string {

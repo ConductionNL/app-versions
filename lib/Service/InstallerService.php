@@ -19,6 +19,7 @@ use OCA\AppVersions\Service\Source\TrustedSourceList;
 use OCA\AppVersions\Service\Source\UntrustedSourceException;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Http;
+use OCP\IAppConfig;
 use OCP\IConfig;
 
 /**
@@ -28,11 +29,14 @@ use OCP\IConfig;
  *   - delegates version listing to the matching source driver
  *   - dispatches install to either the signed installer (App Store) or the
  *     external installer (GitHub releases), then writes the binding on success.
+ *
+ * @psalm-api
  */
 class InstallerService {
 	public function __construct(
 		private IAppManager $appManager,
 		private IConfig $config,
+		private IAppConfig $appConfig,
 		private SourceRegistry $sourceRegistry,
 		private SourceBindingStore $bindingStore,
 		private TrustedSourceList $trustedSources,
@@ -49,7 +53,7 @@ class InstallerService {
 	 */
 	public function getInstalledApps(): array {
 		$installedApps = array_values(array_filter(
-			$this->appManager->getInstalledApps(),
+			$this->appManager->getEnabledApps(),
 			fn (string $appId): bool => !$this->isSelfManagedApp($appId)
 		));
 		sort($installedApps);
@@ -123,7 +127,7 @@ class InstallerService {
 		$installedVersion = null;
 		try {
 			$installed = $this->appManager->getAppVersion($appId);
-			if (is_string($installed) && $installed !== '') {
+			if ($installed !== '') {
 				$installedVersion = $installed;
 			}
 		} catch (Exception) {
@@ -195,7 +199,7 @@ class InstallerService {
 			$installedVersion = '';
 		}
 
-		if ($installedVersion !== '' && version_compare($targetVersion, $installedVersion, '=') === 0) {
+		if ($installedVersion !== '' && version_compare($targetVersion, $installedVersion, '=')) {
 			return [
 				'statusCode' => Http::STATUS_OK,
 				'payload' => [
@@ -268,7 +272,7 @@ class InstallerService {
 			if ($appVersion === null) {
 				$appVersion = $this->appManager->getAppVersion($appId, false);
 			}
-			$configuredVersion = (string)$this->config->getAppValue($appId, 'installed_version', $appVersion ?? '');
+			$configuredVersion = $this->appConfig->getValueString($appId, 'installed_version', $appVersion);
 			if ($configuredVersion !== '') {
 				$appVersion = $configuredVersion;
 			}
@@ -278,8 +282,8 @@ class InstallerService {
 				'fromVersion' => $installedVersion === '' ? null : $installedVersion,
 				'toVersion' => $dryRun ? $targetVersion : $appVersion,
 				'installedVersion' => $appVersion,
-				'updateType' => $this->classifyUpdateType($installedVersion, $appVersion ?? '', $dryRun),
-				'message' => $this->classifyMessage($installedVersion, $appVersion ?? '', $dryRun),
+				'updateType' => $this->classifyUpdateType($installedVersion, $appVersion, $dryRun),
+				'message' => $this->classifyMessage($installedVersion, $appVersion, $dryRun),
 				'dryRun' => $dryRun,
 				'installStatus' => $result['status'] ?? 'unknown',
 				'sourceId' => $binding->getId(),
@@ -288,7 +292,7 @@ class InstallerService {
 				$payload['integrityWarning'] = $integrityWarning;
 			}
 			if ($includeDebug) {
-				$payload['debug'] = $result['debug'] ?? [];
+				$payload['debug'] = (array)($result['debug'] ?? []);
 			}
 
 			return ['statusCode' => Http::STATUS_OK, 'payload' => $payload];
@@ -384,7 +388,7 @@ class InstallerService {
 			return 'none';
 		}
 
-		return version_compare($newVersion, $previousVersion, '>') === 1 ? 'upgrade' : 'downgrade';
+		return version_compare($newVersion, $previousVersion, '>') ? 'upgrade' : 'downgrade';
 	}
 
 	private function classifyMessage(string $previousVersion, string $newVersion, bool $dryRun): string {
@@ -398,7 +402,7 @@ class InstallerService {
 			return 'App already at selected version.';
 		}
 
-		return version_compare($newVersion, $previousVersion, '<') === -1 ? 'App downgraded.' : 'App updated.';
+		return version_compare($newVersion, $previousVersion, '<') ? 'App downgraded.' : 'App updated.';
 	}
 
 	/**

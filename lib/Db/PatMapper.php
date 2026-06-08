@@ -15,6 +15,8 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
 /**
+ * @psalm-api
+ *
  * @extends QBMapper<Pat>
  */
 class PatMapper extends QBMapper {
@@ -48,18 +50,6 @@ class PatMapper extends QBMapper {
 				$qb->expr()->eq('shared_with_admins', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL))
 			))
 			->orderBy('created_at', 'DESC');
-
-		return $this->findEntities($qb);
-	}
-
-	/**
-	 * @return list<Pat>
-	 */
-	public function findOwnedBy(string $uid): array {
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')
-			->from($this->tableName)
-			->where($qb->expr()->eq('owner_uid', $qb->createNamedParameter($uid, IQueryBuilder::PARAM_STR)));
 
 		return $this->findEntities($qb);
 	}

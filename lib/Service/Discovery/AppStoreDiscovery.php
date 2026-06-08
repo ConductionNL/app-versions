@@ -14,7 +14,7 @@ use OCA\AppVersions\AppInfo\Application;
 use OCA\AppVersions\Service\Source\SourceBinding;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Http\Client\IClientService;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -29,9 +29,12 @@ class AppStoreDiscovery implements DiscoveryProviderInterface {
 	private const CACHE_TTL_SECONDS = 3600;
 	private const ENDPOINT = 'https://garm3.nextcloud.com/api/v1/apps.json';
 
+	/**
+	 * @psalm-api
+	 */
 	public function __construct(
 		private IClientService $clientService,
-		private IConfig $config,
+		private IAppConfig $config,
 		private ITimeFactory $timeFactory,
 		private LoggerInterface $logger,
 	) {
@@ -67,9 +70,7 @@ class AppStoreDiscovery implements DiscoveryProviderInterface {
 
 		$hits = [];
 		foreach ($catalog as $app) {
-			if (!is_array($app)) {
-				continue;
-			}
+			/** @var mixed $id */
 			$id = $app['id'] ?? null;
 			if (!is_string($id) || $id === '') {
 				continue;
@@ -102,15 +103,16 @@ class AppStoreDiscovery implements DiscoveryProviderInterface {
 	}
 
 	/**
-	 * @return list<array<string, mixed>>|null
+	 * @return list<array<array-key, mixed>>|null
 	 */
 	private function loadCatalog(): ?array {
 		$now = $this->timeFactory->getTime();
-		$cachedTs = (int)$this->config->getAppValue(Application::APP_ID, self::CACHE_TS_KEY, '0');
+		$cachedTs = $this->config->getValueInt(Application::APP_ID, self::CACHE_TS_KEY, 0);
 		if ($cachedTs > 0 && ($now - $cachedTs) < self::CACHE_TTL_SECONDS) {
-			$cached = $this->config->getAppValue(Application::APP_ID, self::CACHE_KEY, '');
+			$cached = $this->config->getValueString(Application::APP_ID, self::CACHE_KEY, '');
 			if ($cached !== '') {
 				try {
+					/** @var mixed $decoded */
 					$decoded = json_decode($cached, true, 32, JSON_THROW_ON_ERROR);
 					if (is_array($decoded)) {
 						return array_values(array_filter($decoded, 'is_array'));
@@ -127,8 +129,8 @@ class AppStoreDiscovery implements DiscoveryProviderInterface {
 		}
 
 		try {
-			$this->config->setAppValue(Application::APP_ID, self::CACHE_KEY, json_encode($catalog, JSON_THROW_ON_ERROR));
-			$this->config->setAppValue(Application::APP_ID, self::CACHE_TS_KEY, (string)$now);
+			$this->config->setValueString(Application::APP_ID, self::CACHE_KEY, json_encode($catalog, JSON_THROW_ON_ERROR));
+			$this->config->setValueInt(Application::APP_ID, self::CACHE_TS_KEY, $now);
 		} catch (\JsonException $error) {
 			$this->logger->warning('AppStoreDiscovery: could not cache catalog', ['errorMessage' => $error->getMessage()]);
 		}
@@ -137,7 +139,7 @@ class AppStoreDiscovery implements DiscoveryProviderInterface {
 	}
 
 	/**
-	 * @return list<array<string, mixed>>|null
+	 * @return list<array<array-key, mixed>>|null
 	 */
 	private function fetchCatalog(): ?array {
 		try {
@@ -180,18 +182,21 @@ class AppStoreDiscovery implements DiscoveryProviderInterface {
 	}
 
 	/**
-	 * @param array<string, mixed> $app
+	 * @param array<array-key, mixed> $app
 	 */
 	private function matches(array $app, string $needle): bool {
 		foreach (['id', 'name', 'summary', 'description'] as $field) {
-			$value = $app[$field] ?? '';
-			if (is_string($value) && str_contains(mb_strtolower($value), $needle)) {
+			/** @var mixed $raw */
+			$raw = $app[$field] ?? '';
+			if (is_string($raw) && str_contains(mb_strtolower($raw), $needle)) {
 				return true;
 			}
 		}
 
+		/** @var mixed $categories */
 		$categories = $app['categories'] ?? [];
 		if (is_array($categories)) {
+			/** @var mixed $cat */
 			foreach ($categories as $cat) {
 				if (is_string($cat) && str_contains(mb_strtolower($cat), $needle)) {
 					return true;
@@ -216,9 +221,10 @@ class AppStoreDiscovery implements DiscoveryProviderInterface {
 	}
 
 	/**
-	 * @param array<string, mixed> $app
+	 * @param array<array-key, mixed> $app
 	 */
 	private function stringField(array $app, string $key, string $default): string {
+		/** @var mixed $value */
 		$value = $app[$key] ?? null;
 
 		return is_string($value) ? trim($value) : $default;
