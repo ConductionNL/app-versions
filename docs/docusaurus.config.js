@@ -66,7 +66,7 @@ const config = createConfig({
              plus the standard node_modules bucket. */
           exclude: ['**/node_modules/**', 'src/**'],
           sidebarPath: require.resolve('./sidebars.js'),
-          editUrl: 'https://github.com/ConductionNL/app-versions/tree/development/docs/',
+          editUrl: 'https://codeberg.org/Conduction/app-versions/src/branch/development/docs/',
         },
         blog: false,
         theme: {
@@ -80,7 +80,7 @@ const config = createConfig({
 
   /* Brand navbar provides locale dropdown + GitHub by default; we
      replace items[] with the app's own (Documentation sidebar link,
-     GitHub link, locale dropdown). Object.assign in createConfig is
+     Codeberg link, locale dropdown). Object.assign in createConfig is
      shallow, so items: replaces wholesale. */
   navbar: {
     items: [
@@ -91,8 +91,8 @@ const config = createConfig({
         label: 'Documentation',
       },
       {
-        href: 'https://github.com/ConductionNL/app-versions',
-        label: 'GitHub',
+        href: 'https://codeberg.org/Conduction/app-versions',
+        label: 'Codeberg',
         position: 'right',
       },
       { type: 'localeDropdown', position: 'right' },
