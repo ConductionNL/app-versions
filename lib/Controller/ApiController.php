@@ -202,15 +202,23 @@ class ApiController extends OCSController {
 	}
 
 	/**
-	 * Removes a trusted-source pattern (URL-encoded path param); see "Source management API".
+	 * Removes a trusted-source pattern. The pattern is passed as a `pattern`
+	 * query parameter (not a path segment) because patterns contain `/`, and
+	 * Apache rejects encoded slashes in the path (`AllowEncodedSlashes Off`) with
+	 * a 404 before the request reaches Nextcloud; query strings carry `%2F` fine.
 	 *
 	 * @spec openspec/specs/external-sources/spec.md
 	 */
 	#[PasswordConfirmationRequired(strict: false)]
-	#[ApiRoute(verb: 'DELETE', url: '/api/trusted-sources/{pattern}')]
-	public function removeTrustedSource(string $pattern): DataResponse {
+	#[ApiRoute(verb: 'DELETE', url: '/api/trusted-sources')]
+	public function removeTrustedSource(): DataResponse {
 		if (!$this->isAdmin()) {
 			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$pattern = $this->stringParam('pattern', '');
+		if ($pattern === '') {
+			return new DataResponse(['message' => 'A pattern is required.'], Http::STATUS_BAD_REQUEST);
 		}
 
 		$patterns = $this->installerService->removeTrustedPattern($pattern);
