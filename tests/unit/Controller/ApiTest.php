@@ -92,7 +92,7 @@ final class ApiTest extends TestCase {
 	}
 
 	public function testRemoveTrustedSourceForbiddenForNonAdmin(): void {
-		$response = $this->buildController()->removeTrustedSource('github:acme/*');
+		$response = $this->buildController()->removeTrustedSource();
 
 		$this->assertSame(403, $response->getStatus());
 	}

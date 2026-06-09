@@ -67,7 +67,7 @@ const removePattern = async (pattern: string): Promise<void> => {
 	try {
 		const { payload, error: apiError } = await ocsWrite<{ trustedPatterns?: string[] }>(
 			'DELETE',
-			`${TRUSTED}/${encodeURIComponent(pattern)}`,
+			`${TRUSTED}?pattern=${encodeURIComponent(pattern)}`,
 		)
 		if (apiError) {
 			error.value = apiError

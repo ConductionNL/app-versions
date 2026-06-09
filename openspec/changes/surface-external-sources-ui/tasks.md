@@ -9,7 +9,7 @@
 - [x] 1.2 Add `removeTrustedPattern(string $pattern): void` to `InstallerService` — remove the exact pattern from the current set and persist via `setPatterns()`
 - [x] 1.3 Implement over-broad-glob validation in `InstallerService` (adr-008 layering): reject unknown forge; empty or `*`-only owner; resulting patterns `*`, `*/*`, `{forge}:*`; owner/repo not matching `[A-Za-z0-9_.\-]+`. Throw a typed/`InvalidArgumentException` with a clear message
 - [x] 1.4 Add `POST /api/trusted-sources` to `lib/Controller/ApiController.php` — admin-gated, `#[PasswordConfirmationRequired(strict: false)]`, body `{forge, owner, repo?}`; map validation failures to HTTP 400/422, success returns the updated `trustedPatterns`
-- [x] 1.5 Add `DELETE /api/trusted-sources/{pattern}` to `ApiController` — admin-gated, password-confirmed; pattern is a URL-encoded path param (client percent-encodes the `/` and `:`), decoded server-side before matching; ensure the route captures the encoded segment intact; returns the updated `trustedPatterns`
+- [x] 1.5 Add `DELETE /api/trusted-sources?pattern=…` to `ApiController` — admin-gated, password-confirmed; pattern is a URL-encoded **query** parameter (path params fail on Apache: `AllowEncodedSlashes Off` 404s `%2F`); returns the updated `trustedPatterns`
 - [x] 1.6 Confirm listing reuses existing `GET /api/sources` `trustedPatterns` (no dedicated GET added)
 
 ## 2. Backend — tests (adr-009)
@@ -44,7 +44,7 @@
 - [x] 6.1 Create `src/components/TrustedSourcesPanel.vue`; list current forge-qualified patterns from `GET /api/sources` `trustedPatterns`
 - [x] 6.2 Curated add: forge select + owner [+ optional repo], explicit "I trust this source" confirmation → `POST /api/trusted-sources` (password-confirmed)
 - [x] 6.3 Surface backend rejection messages (e.g. `*/*` refused) in the UI via NcNoteCard
-- [x] 6.4 Remove a pattern → `DELETE /api/trusted-sources/{pattern}` with the URL-encoded pattern (password-confirmed); refresh the list
+- [x] 6.4 Remove a pattern → `DELETE /api/trusted-sources?pattern=…` with the URL-encoded pattern (password-confirmed); refresh the list
 
 ## 7. Frontend — quality (adr-003, adr-005, adr-012)
 
@@ -75,7 +75,7 @@
 
 ## DEFERRED_QUESTIONS
 
-- **DELETE endpoint shape for removing a pattern** — RESOLVED (user): pattern as a **URL-encoded path param** (`DELETE /api/trusted-sources/{pattern}`); the client percent-encodes the `/` and `:`, the server decodes before matching. Affected: `external-sources` spec, `ApiController`, TrustedSourcesPanel.
+- **DELETE endpoint shape for removing a pattern** — RESOLVED: pattern as a URL-encoded **query parameter** (`DELETE /api/trusted-sources?pattern=…`). Originally a path param, but verification found Apache 404s `%2F` in the path (`AllowEncodedSlashes Off`), so it moved to a query param. Affected: `external-sources` spec, `ApiController`, TrustedSourcesPanel.
 - **Dedicated `GET /api/trusted-sources` vs reuse `GET /api/sources`** — provisional choice: **reuse** `GET /api/sources` (`trustedPatterns`), no new GET. Affected: `external-sources` spec, frontend fetch wiring.
 - **Tab mechanism (in-component tab bar vs Nc navigation)** — provisional choice: **in-component tab bar** inside the settings container, since #1 removed the full app-shell/nav context. Affected: `version-management` spec, `App.vue`.
 - **Token `targetPattern` entry (free-text vs derived)** — provisional choice: **derived** from forge + owner (`owner/*`, optional repo), mirroring the curated allowlist UX, to avoid raw-glob footguns. Affected: `pat-management` spec, TokensPanel (UI-only; backend `createPat` already accepts `targetPattern`).

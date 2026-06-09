@@ -34,8 +34,10 @@ Constraints: this app has **no database** for its own state (allowlist lives in 
 
 **D4 — Trusted-allowlist write API shape.** Add to `ApiController`:
 - `POST /api/trusted-sources` — body `{forge, owner, repo?}`; server constructs `{forge}:{owner}/{repo}` when `repo` is present, else `{forge}:{owner}/*`; appends to the existing patterns and persists via a new `InstallerService::addTrustedPattern()` delegating to `TrustedSourceList::setPatterns()`.
-- `DELETE /api/trusted-sources/{pattern}` — the pattern is supplied as a **URL-encoded path parameter** (the embedded `/` and `:` are percent-encoded by the client, e.g. `codeberg%3AConduction%2Fopenregister`); `InstallerService::removeTrustedPattern()` removes the exact match and persists.
-Both `#[PasswordConfirmationRequired(strict: false)]`, admin-gated, mirroring `bindSource`/`createPat`. Listing reuses the existing `GET /api/sources` `trustedPatterns` field (no dedicated GET added). The DELETE route must accept an encoded path segment — register it so the encoded `{pattern}` is captured intact and decoded server-side before matching.
+- `DELETE /api/trusted-sources?pattern=…` — the pattern is supplied as a **query parameter** (URL-encoded, e.g. `codeberg%3AConduction%2Fopenregister`); `InstallerService::removeTrustedPattern()` removes the exact match and persists.
+Both `#[PasswordConfirmationRequired(strict: false)]`, admin-gated, mirroring `bindSource`/`createPat`. Listing reuses the existing `GET /api/sources` `trustedPatterns` field (no dedicated GET added).
+
+> **Revised during verification:** the DELETE pattern was originally a URL-encoded **path** parameter, but live testing on Apache returned 404 — Apache's default `AllowEncodedSlashes Off` rejects `%2F` in the path before the request reaches Nextcloud, and every real pattern contains a `/`. Moved to a query parameter, which carries `%2F` without any server config change.
 
 **D5 — Over-broad-glob rejection (the trust boundary).** Validation lives in `InstallerService` (adr-008 layering: controller → service → `TrustedSourceList`), returning 400/422 with a clear message. Reject when: forge is unknown; owner is empty or exactly `*`; the resulting pattern is `*`, `*/*`, or `{forge}:*`; owner/repo do not match the same safe charset `SourceBinding` enforces (`[A-Za-z0-9_.\-]+`). A concrete owner is always required. This guarantees the curated path can never trust an entire forge or everything.
 
