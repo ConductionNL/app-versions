@@ -89,85 +89,85 @@
       "id": "3.1",
       "section": "Frontend \u2014 shell + tab structure",
       "title": "In `src/App.vue` replace `NcContent`/`NcAppContent` with a settings-section container that renders cleanly inside the admin Settings panel",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "3.2",
       "section": "Frontend \u2014 shell + tab structure",
       "title": "Add an in-component tab/section switcher (Apps / Sources / Tokens / Trusted sources) with `currentTab` state; default to Apps",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "3.3",
       "section": "Frontend \u2014 shell + tab structure",
       "title": "Wrap the existing apps \u2192 versions \u2192 install view as the Apps tab, preserving its current behaviour",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "4.1",
       "section": "Frontend \u2014 SourcesPanel",
       "title": "Create `src/components/SourcesPanel.vue`; on app select, show current binding from `GET /api/source/{appId}/binding`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "4.2",
       "section": "Frontend \u2014 SourcesPanel",
       "title": "Add bind form: forge select (github|codeberg from `GET /api/sources` `listAvailable`), owner, repo, optional assetPattern \u2192 `POST /api/source/{appId}/bind` (password-confirmed)",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "4.3",
       "section": "Frontend \u2014 SourcesPanel",
       "title": "On successful bind, refresh the binding display and the app's version list",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "5.1",
       "section": "Frontend \u2014 TokensPanel",
       "title": "Create `src/components/TokensPanel.vue`; list redacted PATs from `GET /api/pats`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "5.2",
       "section": "Frontend \u2014 TokensPanel",
       "title": "Add-token form: forge select, label, target (owner [+ optional repo] \u2192 derived `targetPattern`), token field \u2192 `POST /api/pats`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "5.3",
       "section": "Frontend \u2014 TokensPanel",
       "title": "Edit label / share toggle \u2192 `PATCH /api/pats/{id}`; delete \u2192 `DELETE /api/pats/{id}` (both password-confirmed)",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "5.4",
       "section": "Frontend \u2014 TokensPanel",
       "title": "Per-forge \"create a token\" button \u2192 `GET /api/pats/deeplink?forge=\u2026`; show returned url + instructions",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "6.1",
       "section": "Frontend \u2014 TrustedSourcesPanel",
       "title": "Create `src/components/TrustedSourcesPanel.vue`; list current forge-qualified patterns from `GET /api/sources` `trustedPatterns`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "6.2",
       "section": "Frontend \u2014 TrustedSourcesPanel",
       "title": "Curated add: forge select + owner [+ optional repo], explicit \"I trust this source\" confirmation \u2192 `POST /api/trusted-sources` (password-confirmed)",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "6.3",
       "section": "Frontend \u2014 TrustedSourcesPanel",
       "title": "Surface backend rejection messages (e.g. `*/*` refused) in the UI via NcNoteCard",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "6.4",
       "section": "Frontend \u2014 TrustedSourcesPanel",
       "title": "Remove a pattern \u2192 `DELETE /api/trusted-sources/{pattern}` with the URL-encoded pattern (password-confirmed); refresh the list",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "7.1",
@@ -185,31 +185,31 @@
       "id": "7.3",
       "section": "Frontend \u2014 quality (adr-003, adr-005, adr-012)",
       "title": "Frontend mount/render check if a harness exists; at minimum ensure the app compiles with `vite build`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "8.1",
       "section": "Quality gates (run in the container per project convention)",
       "title": "`composer cs:check`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "8.2",
       "section": "Quality gates (run in the container per project convention)",
       "title": "`composer psalm`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "8.3",
       "section": "Quality gates (run in the container per project convention)",
       "title": "`composer test:unit` (NOTE: this app has NO `composer check:strict` \u2014 use individual scripts)",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "8.4",
       "section": "Quality gates (run in the container per project convention)",
       "title": "`npm run build`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "8.5",

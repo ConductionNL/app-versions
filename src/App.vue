@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import NcAppContent from '@nextcloud/vue/components/NcAppContent'
-import NcContent from '@nextcloud/vue/components/NcContent'
+import NcButton from '@nextcloud/vue/components/NcButton'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 import { computed, onMounted, ref, watch } from 'vue'
+import SourcesPanel from './components/SourcesPanel.vue'
+import TokensPanel from './components/TokensPanel.vue'
+import TrustedSourcesPanel from './components/TrustedSourcesPanel.vue'
 
 type AppOption = {
 	id: string
@@ -65,6 +67,16 @@ const lastInstallResult = ref<InstallResult | null>(null)
 const hasInstallResult = ref(false)
 const installRequestFromVersion = ref('')
 const installRequestToVersion = ref('')
+
+// Admin-settings tabs: the existing apps→versions→install view plus the
+// source / token / trusted-source management panels.
+const tabs = [
+	{ id: 'apps', label: 'Apps' },
+	{ id: 'sources', label: 'Sources' },
+	{ id: 'tokens', label: 'Tokens' },
+	{ id: 'trusted', label: 'Trusted sources' },
+]
+const currentTab = ref('apps')
 
 type VersionRangeInfo = {
 	major: number
@@ -456,6 +468,13 @@ const ensurePasswordConfirmation = async (): Promise<void> => {
 const onSelectApp = (appId: string) => {
 	selectedApp.value = appId
 	resetSelectedAppState()
+}
+
+// A source was (re)bound via the Sources panel; refresh versions if that app is selected.
+const onPanelBound = async (appId: string): Promise<void> => {
+	if (selectedApp.value === appId) {
+		await checkVersions(true)
+	}
 }
 
 const onPickApp = async (appId: string) => {
@@ -908,8 +927,8 @@ watch(debugModeEnabled, () => {
 </script>
 
 <template>
-	<NcContent app-name="app_versions">
-		<NcAppContent :class="$style.content">
+	<div :class="$style.section">
+		<div :class="$style.content">
 			<NcDialog
 				:open="isDowngradeConfirmOpen"
 				name="Confirm downgrade"
@@ -931,7 +950,15 @@ watch(debugModeEnabled, () => {
 					Downgrading can break database schema assumptions if migrations were already applied in newer versions. Continue only if you are sure no incompatible schema changes are involved.
 				</p>
 				</NcDialog>
-				<div :class="$style.layout">
+				<div :class="$style.tabs" role="tablist">
+					<NcButton v-for="tab in tabs"
+						:key="tab.id"
+						:type="currentTab === tab.id ? 'primary' : 'tertiary'"
+						@click="currentTab = tab.id">
+						{{ tab.label }}
+					</NcButton>
+				</div>
+				<div v-show="currentTab === 'apps'" :class="$style.layout">
 					<main :class="$style.mainContent">
 						<h2>App Versions!</h2>
 						<div :class="$style.settingsPanel">
@@ -1222,14 +1249,29 @@ watch(debugModeEnabled, () => {
 					</div>
 				</main>
 			</div>
-		</NcAppContent>
-	</NcContent>
+			<SourcesPanel v-show="currentTab === 'sources'" :apps="apps" @bound="onPanelBound" />
+			<TokensPanel v-show="currentTab === 'tokens'" />
+			<TrustedSourcesPanel v-show="currentTab === 'trusted'" />
+		</div>
+	</div>
 </template>
 
 <style module>
+.section {
+	display: block;
+}
+
 .content {
-	height: 100%;
-	margin: 16px;
+	margin: 0;
+}
+
+.tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-bottom: 16px;
+	border-bottom: 1px solid var(--color-border);
+	padding-bottom: 8px;
 }
 
 .layout {

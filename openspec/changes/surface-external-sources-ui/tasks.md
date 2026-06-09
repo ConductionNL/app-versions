@@ -22,42 +22,42 @@
 
 ## 3. Frontend — shell + tab structure
 
-- [ ] 3.1 In `src/App.vue` replace `NcContent`/`NcAppContent` with a settings-section container that renders cleanly inside the admin Settings panel
-- [ ] 3.2 Add an in-component tab/section switcher (Apps / Sources / Tokens / Trusted sources) with `currentTab` state; default to Apps
-- [ ] 3.3 Wrap the existing apps → versions → install view as the Apps tab, preserving its current behaviour
+- [x] 3.1 In `src/App.vue` replace `NcContent`/`NcAppContent` with a settings-section container that renders cleanly inside the admin Settings panel
+- [x] 3.2 Add an in-component tab/section switcher (Apps / Sources / Tokens / Trusted sources) with `currentTab` state; default to Apps
+- [x] 3.3 Wrap the existing apps → versions → install view as the Apps tab, preserving its current behaviour
 
 ## 4. Frontend — SourcesPanel
 
-- [ ] 4.1 Create `src/components/SourcesPanel.vue`; on app select, show current binding from `GET /api/source/{appId}/binding`
-- [ ] 4.2 Add bind form: forge select (github|codeberg from `GET /api/sources` `listAvailable`), owner, repo, optional assetPattern → `POST /api/source/{appId}/bind` (password-confirmed)
-- [ ] 4.3 On successful bind, refresh the binding display and the app's version list
+- [x] 4.1 Create `src/components/SourcesPanel.vue`; on app select, show current binding from `GET /api/source/{appId}/binding`
+- [x] 4.2 Add bind form: forge select (github|codeberg from `GET /api/sources` `listAvailable`), owner, repo, optional assetPattern → `POST /api/source/{appId}/bind` (password-confirmed)
+- [x] 4.3 On successful bind, refresh the binding display and the app's version list
 
 ## 5. Frontend — TokensPanel
 
-- [ ] 5.1 Create `src/components/TokensPanel.vue`; list redacted PATs from `GET /api/pats`
-- [ ] 5.2 Add-token form: forge select, label, target (owner [+ optional repo] → derived `targetPattern`), token field → `POST /api/pats`
-- [ ] 5.3 Edit label / share toggle → `PATCH /api/pats/{id}`; delete → `DELETE /api/pats/{id}` (both password-confirmed)
-- [ ] 5.4 Per-forge "create a token" button → `GET /api/pats/deeplink?forge=…`; show returned url + instructions
+- [x] 5.1 Create `src/components/TokensPanel.vue`; list redacted PATs from `GET /api/pats`
+- [x] 5.2 Add-token form: forge select, label, target (owner [+ optional repo] → derived `targetPattern`), token field → `POST /api/pats`
+- [x] 5.3 Edit label / share toggle → `PATCH /api/pats/{id}`; delete → `DELETE /api/pats/{id}` (both password-confirmed)
+- [x] 5.4 Per-forge "create a token" button → `GET /api/pats/deeplink?forge=…`; show returned url + instructions
 
 ## 6. Frontend — TrustedSourcesPanel
 
-- [ ] 6.1 Create `src/components/TrustedSourcesPanel.vue`; list current forge-qualified patterns from `GET /api/sources` `trustedPatterns`
-- [ ] 6.2 Curated add: forge select + owner [+ optional repo], explicit "I trust this source" confirmation → `POST /api/trusted-sources` (password-confirmed)
-- [ ] 6.3 Surface backend rejection messages (e.g. `*/*` refused) in the UI via NcNoteCard
-- [ ] 6.4 Remove a pattern → `DELETE /api/trusted-sources/{pattern}` with the URL-encoded pattern (password-confirmed); refresh the list
+- [x] 6.1 Create `src/components/TrustedSourcesPanel.vue`; list current forge-qualified patterns from `GET /api/sources` `trustedPatterns`
+- [x] 6.2 Curated add: forge select + owner [+ optional repo], explicit "I trust this source" confirmation → `POST /api/trusted-sources` (password-confirmed)
+- [x] 6.3 Surface backend rejection messages (e.g. `*/*` refused) in the UI via NcNoteCard
+- [x] 6.4 Remove a pattern → `DELETE /api/trusted-sources/{pattern}` with the URL-encoded pattern (password-confirmed); refresh the list
 
 ## 7. Frontend — quality (adr-003, adr-005, adr-012)
 
 - [ ] 7.1 Use standard NC Vue components (NcButton, NcTextField, NcSelect, NcCheckboxRadioSwitch, NcDialog, NcNoteCard); no hardcoded colors; WCAG AA
 - [ ] 7.2 Wrap all new user-facing strings in `t('app_versions', …)` (adr-005)
-- [ ] 7.3 Frontend mount/render check if a harness exists; at minimum ensure the app compiles with `vite build`
+- [x] 7.3 Frontend mount/render check if a harness exists; at minimum ensure the app compiles with `vite build`
 
 ## 8. Quality gates (run in the container per project convention)
 
-- [ ] 8.1 `composer cs:check`
-- [ ] 8.2 `composer psalm`
-- [ ] 8.3 `composer test:unit` (NOTE: this app has NO `composer check:strict` — use individual scripts)
-- [ ] 8.4 `npm run build`
+- [x] 8.1 `composer cs:check`
+- [x] 8.2 `composer psalm`
+- [x] 8.3 `composer test:unit` (NOTE: this app has NO `composer check:strict` — use individual scripts)
+- [x] 8.4 `npm run build`
 - [ ] 8.5 `npm run lint`
 
 ## 9. Manual verification
