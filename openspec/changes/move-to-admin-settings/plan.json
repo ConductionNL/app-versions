@@ -11,121 +11,121 @@
       "id": "1.1",
       "section": "Create AdminSection class",
       "title": "Create directory `lib/Sections/` if it does not already exist",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "1.2",
       "section": "Create AdminSection class",
       "title": "Create `lib/Sections/AdminSection.php` implementing `OCP\\Settings\\IIconSection` with constructor injecting `IL10N $l` and `IURLGenerator $urlGenerator`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "1.3",
       "section": "Create AdminSection class",
       "title": "Implement `getID(): string` \u2014 return `'app_versions'`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "1.4",
       "section": "Create AdminSection class",
       "title": "Implement `getName(): string` \u2014 return `$this->l->t('App Versions')`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "1.5",
       "section": "Create AdminSection class",
       "title": "Implement `getPriority(): int` \u2014 return `98`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "1.6",
       "section": "Create AdminSection class",
       "title": "Implement `getIcon(): string` \u2014 return `$this->urlGenerator->imagePath('app_versions', 'app.svg')`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "2.1",
       "section": "Create Admin Settings class",
       "title": "Create directory `lib/Settings/` if it does not already exist",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "2.2",
       "section": "Create Admin Settings class",
       "title": "Create `lib/Settings/Admin.php` implementing `OCP\\Settings\\ISettings` with namespace `OCA\\AppVersions\\Settings`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "2.3",
       "section": "Create Admin Settings class",
       "title": "Implement `getForm(): TemplateResponse` \u2014 return `new TemplateResponse(Application::APP_ID, 'index', [], '')` (empty renderAs string embeds form inside the settings page)",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "2.4",
       "section": "Create Admin Settings class",
       "title": "Implement `getSection(): string` \u2014 return `'app_versions'`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "2.5",
       "section": "Create Admin Settings class",
       "title": "Implement `getPriority(): int` \u2014 return `10`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "3.1",
       "section": "Update appinfo/info.xml",
       "title": "Remove the entire `<navigations>` block (including its `<navigation>` child) from `appinfo/info.xml`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "3.2",
       "section": "Update appinfo/info.xml",
       "title": "Add a `<settings>` block declaring `<admin>OCA\\AppVersions\\Settings\\Admin</admin>` and `<admin-section>OCA\\AppVersions\\Sections\\AdminSection</admin-section>`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "4.1",
       "section": "Remove PageController / FrontpageRoute",
       "title": "Delete `lib/Controller/PageController.php` (removes the `#[FrontpageRoute(verb: 'GET', url: '/')]` entry point; the UI is now served only via the admin settings form)",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "4.2",
       "section": "Remove PageController / FrontpageRoute",
       "title": "Grep the codebase for references to `PageController`, `page.index`, and the `GET /` route; confirm nothing else depends on them (e.g. `appinfo/info.xml` navigation `<route>` is removed in task 3.1)",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "5.1",
       "section": "Unit tests",
       "title": "Create `tests/unit/Sections/AdminSectionTest.php` \u2014 test that `getID()` returns `'app_versions'`, `getPriority()` returns an int, `getName()` returns a non-empty string, `getIcon()` returns a non-empty string",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "5.2",
       "section": "Unit tests",
       "title": "Create `tests/unit/Settings/AdminTest.php` \u2014 test that `getSection()` returns `'app_versions'`, `getPriority()` returns an int, `getForm()` returns a `TemplateResponse` instance",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "6.1",
       "section": "Quality checks",
       "title": "Run `composer cs:check` and fix any coding-style violations in the new files",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "6.2",
       "section": "Quality checks",
       "title": "Run `composer psalm` and resolve any type errors or warnings in the new files",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "6.3",
       "section": "Quality checks",
       "title": "Run `composer test:unit` and confirm all unit tests pass (including the new Section and Settings tests)",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "7.1",
