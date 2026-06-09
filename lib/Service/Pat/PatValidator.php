@@ -11,6 +11,7 @@ namespace OCA\AppVersions\Service\Pat;
 
 use Exception;
 use OCA\AppVersions\Db\Pat;
+use OCA\AppVersions\Service\Source\ForgeRegistry;
 use OCP\Http\Client\IClientService;
 use Psr\Log\LoggerInterface;
 
@@ -28,7 +29,6 @@ use Psr\Log\LoggerInterface;
  * @psalm-api
  */
 class PatValidator {
-	private const USER_ENDPOINT = 'https://api.github.com/user';
 	private const USER_AGENT = 'Nextcloud-AppVersions';
 
 	/** @var list<string> */
@@ -37,6 +37,7 @@ class PatValidator {
 	public function __construct(
 		private IClientService $clientService,
 		private LoggerInterface $logger,
+		private ForgeRegistry $forgeRegistry,
 	) {
 	}
 
@@ -61,18 +62,27 @@ class PatValidator {
 	 *
 	 * @spec openspec/specs/pat-management/spec.md
 	 */
-	public function validate(string $token): ValidationResult {
+	public function validate(string $token, string $forge = ForgeRegistry::FORGE_GITHUB): ValidationResult {
+		$f = $this->forgeRegistry->get($forge);
 		$kind = $this->detectKind($token);
 		$client = $this->clientService->newClient();
 
+		$headers = [
+			'Authorization' => $f->authHeaderValue($token),
+			'Accept' => 'application/json',
+			'User-Agent' => self::USER_AGENT,
+		];
+		if ($f->id === ForgeRegistry::FORGE_GITHUB) {
+			$headers['Accept'] = 'application/vnd.github+json';
+			$headers['X-GitHub-Api-Version'] = '2022-11-28';
+		}
+
+		$host = parse_url($f->apiBaseUrl, PHP_URL_HOST);
+		$hostLabel = is_string($host) ? $host : $f->id;
+
 		try {
-			$response = $client->get(self::USER_ENDPOINT, [
-				'headers' => [
-					'Authorization' => 'Bearer ' . $token,
-					'Accept' => 'application/vnd.github+json',
-					'User-Agent' => self::USER_AGENT,
-					'X-GitHub-Api-Version' => '2022-11-28',
-				],
+			$response = $client->get($f->userEndpoint(), [
+				'headers' => $headers,
 				'timeout' => 30,
 				// IClient (Guzzle) throws on 4xx by default; we want to inspect
 				// the status ourselves so we can produce a useful error message.
@@ -80,9 +90,9 @@ class PatValidator {
 				'nextcloud' => ['allow_local_address' => false],
 			]);
 		} catch (Exception $error) {
-			$this->logger->warning('PatValidator: probe failed', ['errorMessage' => $error->getMessage()]);
+			$this->logger->warning('PatValidator: probe failed', ['forge' => $f->id, 'errorMessage' => $error->getMessage()]);
 
-			return ValidationResult::rejected('Could not reach api.github.com — check network connectivity.');
+			return ValidationResult::rejected(sprintf('Could not reach %s — check network connectivity.', $hostLabel));
 		}
 
 		$status = $response->getStatusCode();
@@ -90,10 +100,21 @@ class PatValidator {
 			return ValidationResult::rejected('Token is invalid or revoked.');
 		}
 		if ($status === 403) {
-			return ValidationResult::rejected('GitHub rate limit exceeded — try again later.');
+			return ValidationResult::rejected('The rate limit was exceeded — try again later.');
 		}
 		if ($status !== 200) {
-			return ValidationResult::rejected(sprintf('GitHub returned HTTP %d.', $status));
+			return ValidationResult::rejected(sprintf('%s returned HTTP %d.', $hostLabel, $status));
+		}
+
+		// Forges that do not expose token scopes to the holder (e.g.
+		// Codeberg/Forgejo, GitHub fine-grained PATs) are accepted best-effort
+		// with an explicit warning to verify least privilege manually.
+		if (!$f->exposesScopeHeader) {
+			return ValidationResult::accepted(
+				[],
+				[sprintf('unverifiable_scope: %s does not expose token permissions to the holder; please verify the token is read-only (repository contents read access only).', ucfirst($f->id))],
+				null,
+			);
 		}
 
 		$headers = $response->getHeaders();

@@ -227,7 +227,7 @@ class ExternalReleaseInstallerService {
 			return null;
 		}
 
-		return $this->patResolver->findFor($ownerRepo, $user->getUID());
+		return $this->patResolver->findFor($binding->getForge(), $ownerRepo, $user->getUID());
 	}
 
 	private function authenticatedDownload(string $url, string $sinkPath, ?\OCA\AppVersions\Db\Pat $pat): void {
