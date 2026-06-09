@@ -15,13 +15,8 @@
 	<dependencies>
 		<nextcloud min-version="31" max-version="34"/>
 	</dependencies>
-	<navigations>
-		<navigation>
-			<id>app_versions</id>
-			<name>App Versions</name>
-			<route>app_versions.page.index</route>
-			<icon>app.svg</icon>
-			<type>link</type>
-		</navigation>
-	</navigations>
+	<settings>
+		<admin>OCA\AppVersions\Settings\Admin</admin>
+		<admin-section>OCA\AppVersions\Sections\AdminSection</admin-section>
+	</settings>
 </info>
