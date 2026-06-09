@@ -83,4 +83,17 @@ final class ApiTest extends TestCase {
 		// Smoke test that InstallerService autoloads cleanly from the new namespace structure.
 		$this->assertTrue(class_exists(InstallerService::class));
 	}
+
+	public function testAddTrustedSourceForbiddenForNonAdmin(): void {
+		// The default mocked IGroupManager/IUserSession make isAdmin() false.
+		$response = $this->buildController()->addTrustedSource();
+
+		$this->assertSame(403, $response->getStatus());
+	}
+
+	public function testRemoveTrustedSourceForbiddenForNonAdmin(): void {
+		$response = $this->buildController()->removeTrustedSource('github:acme/*');
+
+		$this->assertSame(403, $response->getStatus());
+	}
 }

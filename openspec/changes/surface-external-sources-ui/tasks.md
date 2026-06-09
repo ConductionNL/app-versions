@@ -1,24 +1,24 @@
 ## 0. Prerequisites
 
-- [ ] 0.1 Confirm `move-to-admin-settings` (#1) is applied — the app mounts inside Settings → Administration (no top-nav/page route)
-- [ ] 0.2 Confirm `codeberg-forge-support` (#2) is applied — `forge` field on SourceBinding/Pat, codeberg source registered, forge-qualified allowlist patterns, forge-aware token validation/deeplink
+- [x] 0.1 Confirm `move-to-admin-settings` (#1) is applied — the app mounts inside Settings → Administration (no top-nav/page route)
+- [x] 0.2 Confirm `codeberg-forge-support` (#2) is applied — `forge` field on SourceBinding/Pat, codeberg source registered, forge-qualified allowlist patterns, forge-aware token validation/deeplink
 
 ## 1. Backend — trusted-allowlist write API
 
-- [ ] 1.1 Add `addTrustedPattern(string $forge, string $owner, ?string $repo): void` to `lib/Service/InstallerService.php` — construct `{forge}:{owner}/{repo}` (or `{forge}:{owner}/*` when repo is null), validate, append to existing patterns, persist via `TrustedSourceList::setPatterns()`
-- [ ] 1.2 Add `removeTrustedPattern(string $pattern): void` to `InstallerService` — remove the exact pattern from the current set and persist via `setPatterns()`
-- [ ] 1.3 Implement over-broad-glob validation in `InstallerService` (adr-008 layering): reject unknown forge; empty or `*`-only owner; resulting patterns `*`, `*/*`, `{forge}:*`; owner/repo not matching `[A-Za-z0-9_.\-]+`. Throw a typed/`InvalidArgumentException` with a clear message
-- [ ] 1.4 Add `POST /api/trusted-sources` to `lib/Controller/ApiController.php` — admin-gated, `#[PasswordConfirmationRequired(strict: false)]`, body `{forge, owner, repo?}`; map validation failures to HTTP 400/422, success returns the updated `trustedPatterns`
-- [ ] 1.5 Add `DELETE /api/trusted-sources/{pattern}` to `ApiController` — admin-gated, password-confirmed; pattern is a URL-encoded path param (client percent-encodes the `/` and `:`), decoded server-side before matching; ensure the route captures the encoded segment intact; returns the updated `trustedPatterns`
-- [ ] 1.6 Confirm listing reuses existing `GET /api/sources` `trustedPatterns` (no dedicated GET added)
+- [x] 1.1 Add `addTrustedPattern(string $forge, string $owner, ?string $repo): void` to `lib/Service/InstallerService.php` — construct `{forge}:{owner}/{repo}` (or `{forge}:{owner}/*` when repo is null), validate, append to existing patterns, persist via `TrustedSourceList::setPatterns()`
+- [x] 1.2 Add `removeTrustedPattern(string $pattern): void` to `InstallerService` — remove the exact pattern from the current set and persist via `setPatterns()`
+- [x] 1.3 Implement over-broad-glob validation in `InstallerService` (adr-008 layering): reject unknown forge; empty or `*`-only owner; resulting patterns `*`, `*/*`, `{forge}:*`; owner/repo not matching `[A-Za-z0-9_.\-]+`. Throw a typed/`InvalidArgumentException` with a clear message
+- [x] 1.4 Add `POST /api/trusted-sources` to `lib/Controller/ApiController.php` — admin-gated, `#[PasswordConfirmationRequired(strict: false)]`, body `{forge, owner, repo?}`; map validation failures to HTTP 400/422, success returns the updated `trustedPatterns`
+- [x] 1.5 Add `DELETE /api/trusted-sources/{pattern}` to `ApiController` — admin-gated, password-confirmed; pattern is a URL-encoded path param (client percent-encodes the `/` and `:`), decoded server-side before matching; ensure the route captures the encoded segment intact; returns the updated `trustedPatterns`
+- [x] 1.6 Confirm listing reuses existing `GET /api/sources` `trustedPatterns` (no dedicated GET added)
 
 ## 2. Backend — tests (adr-009)
 
-- [ ] 2.1 Unit test: curated add of `{forge:codeberg, owner:Conduction, repo:openregister}` persists `codeberg:Conduction/openregister`
-- [ ] 2.2 Unit test: owner-only add persists `{forge}:owner/*`
-- [ ] 2.3 Unit test: dangerous globs rejected — `*`, `*/*`, `{forge}:*`, empty owner, owner `*`, unknown forge, bad charset
-- [ ] 2.4 Unit test: remove deletes exactly the given pattern and persists
-- [ ] 2.5 Unit test: non-admin gets HTTP 403 from both write endpoints and the allowlist is unchanged
+- [x] 2.1 Unit test: curated add of `{forge:codeberg, owner:Conduction, repo:openregister}` persists `codeberg:Conduction/openregister`
+- [x] 2.2 Unit test: owner-only add persists `{forge}:owner/*`
+- [x] 2.3 Unit test: dangerous globs rejected — `*`, `*/*`, `{forge}:*`, empty owner, owner `*`, unknown forge, bad charset
+- [x] 2.4 Unit test: remove deletes exactly the given pattern and persists
+- [x] 2.5 Unit test: non-admin gets HTTP 403 from both write endpoints and the allowlist is unchanged
 
 ## 3. Frontend — shell + tab structure
 

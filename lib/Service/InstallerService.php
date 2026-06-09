@@ -351,6 +351,80 @@ class InstallerService {
 		return $this->trustedSources;
 	}
 
+	/**
+	 * Curated add of a forge-qualified trusted-source pattern. Constructs
+	 * `{forge}:{owner}/{repo}` (or `{forge}:{owner}/*` when repo is null),
+	 * validates it (no over-broad globs), appends it to the existing patterns,
+	 * and persists. Idempotent: an already-present pattern is a no-op.
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 * @return list<string> the updated pattern set
+	 * @throws InvalidArgumentException on an unknown forge, empty/`*` owner, bad charset, or an over-broad result
+	 */
+	public function addTrustedPattern(string $forge, string $owner, ?string $repo): array {
+		$pattern = $this->buildAndValidatePattern($forge, $owner, $repo);
+
+		$patterns = $this->trustedSources->getPatterns();
+		if (!in_array($pattern, $patterns, true)) {
+			$patterns[] = $pattern;
+			$this->trustedSources->setPatterns($patterns);
+		}
+
+		return $this->trustedSources->getPatterns();
+	}
+
+	/**
+	 * Removes an exact trusted-source pattern and persists.
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 * @return list<string> the updated pattern set
+	 */
+	public function removeTrustedPattern(string $pattern): array {
+		$patterns = array_values(array_filter(
+			$this->trustedSources->getPatterns(),
+			static fn (string $p): bool => $p !== $pattern,
+		));
+		$this->trustedSources->setPatterns($patterns);
+
+		return $this->trustedSources->getPatterns();
+	}
+
+	/**
+	 * Validates a curated allowlist entry and returns the forge-qualified glob.
+	 * Guarantees a concrete owner — never a whole-forge or match-everything glob.
+	 *
+	 * @throws InvalidArgumentException
+	 */
+	private function buildAndValidatePattern(string $forge, string $owner, ?string $repo): string {
+		if (!in_array($forge, [SourceBinding::FORGE_GITHUB, SourceBinding::FORGE_CODEBERG], true)) {
+			throw new InvalidArgumentException('Unknown forge: ' . $forge);
+		}
+		$owner = trim($owner);
+		if ($owner === '' || $owner === '*') {
+			throw new InvalidArgumentException('A concrete owner is required (wildcard-only owners are not allowed).');
+		}
+		if (!preg_match('/^[A-Za-z0-9_.\-]+$/', $owner)) {
+			throw new InvalidArgumentException('Owner contains invalid characters.');
+		}
+
+		$repoPart = '*';
+		if ($repo !== null && trim($repo) !== '') {
+			$repo = trim($repo);
+			if (!preg_match('/^[A-Za-z0-9_.\-]+$/', $repo)) {
+				throw new InvalidArgumentException('Repository contains invalid characters.');
+			}
+			$repoPart = $repo;
+		}
+
+		$pattern = $forge . ':' . $owner . '/' . $repoPart;
+		// Defence in depth: reject anything that would trust an entire forge.
+		if (in_array($pattern, ['*', '*/*', $forge . ':*', $forge . ':*/*'], true)) {
+			throw new InvalidArgumentException('That pattern is too broad — it would trust an entire forge.');
+		}
+
+		return $pattern;
+	}
+
 	public function getSourceRegistry(): SourceRegistry {
 		return $this->sourceRegistry;
 	}

@@ -11,79 +11,79 @@
       "id": "0.1",
       "section": "Prerequisites",
       "title": "Confirm `move-to-admin-settings` (#1) is applied \u2014 the app mounts inside Settings \u2192 Administration (no top-nav/page route)",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "0.2",
       "section": "Prerequisites",
       "title": "Confirm `codeberg-forge-support` (#2) is applied \u2014 `forge` field on SourceBinding/Pat, codeberg source registered, forge-qualified allowlist patterns, forge-aware token validation/deeplink",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "1.1",
       "section": "Backend \u2014 trusted-allowlist write API",
       "title": "Add `addTrustedPattern(string $forge, string $owner, ?string $repo): void` to `lib/Service/InstallerService.php` \u2014 construct `{forge}:{owner}/{repo}` (or `{forge}:{owner}/*` when repo is null), validate, append to existing patterns, persist via `TrustedSourceList::setPatterns()`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "1.2",
       "section": "Backend \u2014 trusted-allowlist write API",
       "title": "Add `removeTrustedPattern(string $pattern): void` to `InstallerService` \u2014 remove the exact pattern from the current set and persist via `setPatterns()`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "1.3",
       "section": "Backend \u2014 trusted-allowlist write API",
       "title": "Implement over-broad-glob validation in `InstallerService` (adr-008 layering): reject unknown forge; empty or `*`-only owner; resulting patterns `*`, `*/*`, `{forge}:*`; owner/repo not matching `[A-Za-z0-9_.\\-]+`. Throw a typed/`InvalidArgumentException` with a clear message",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "1.4",
       "section": "Backend \u2014 trusted-allowlist write API",
       "title": "Add `POST /api/trusted-sources` to `lib/Controller/ApiController.php` \u2014 admin-gated, `#[PasswordConfirmationRequired(strict: false)]`, body `{forge, owner, repo?}`; map validation failures to HTTP 400/422, success returns the updated `trustedPatterns`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "1.5",
       "section": "Backend \u2014 trusted-allowlist write API",
       "title": "Add `DELETE /api/trusted-sources/{pattern}` to `ApiController` \u2014 admin-gated, password-confirmed; pattern is a URL-encoded path param (client percent-encodes the `/` and `:`), decoded server-side before matching; ensure the route captures the encoded segment intact; returns the updated `trustedPatterns`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "1.6",
       "section": "Backend \u2014 trusted-allowlist write API",
       "title": "Confirm listing reuses existing `GET /api/sources` `trustedPatterns` (no dedicated GET added)",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "2.1",
       "section": "Backend \u2014 tests (adr-009)",
       "title": "Unit test: curated add of `{forge:codeberg, owner:Conduction, repo:openregister}` persists `codeberg:Conduction/openregister`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "2.2",
       "section": "Backend \u2014 tests (adr-009)",
       "title": "Unit test: owner-only add persists `{forge}:owner/*`",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "2.3",
       "section": "Backend \u2014 tests (adr-009)",
       "title": "Unit test: dangerous globs rejected \u2014 `*`, `*/*`, `{forge}:*`, empty owner, owner `*`, unknown forge, bad charset",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "2.4",
       "section": "Backend \u2014 tests (adr-009)",
       "title": "Unit test: remove deletes exactly the given pattern and persists",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "2.5",
       "section": "Backend \u2014 tests (adr-009)",
       "title": "Unit test: non-admin gets HTTP 403 from both write endpoints and the allowlist is unchanged",
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "3.1",

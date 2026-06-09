@@ -51,11 +51,13 @@ class PatManager {
 		array $scopes,
 		array $warnings,
 		?string $expiresAt,
+		string $forge = 'github',
 	): Pat {
 		$pat = new Pat();
 		$pat->setOwnerUid($ownerUid);
 		$pat->setLabel($label);
 		$pat->setKind($kind);
+		$pat->setForge($forge);
 		$pat->setTargetPattern($targetPattern);
 		$pat->setEncryptedToken($this->crypto->encrypt($plaintextToken));
 		$pat->setTokenHint(self::buildHint($plaintextToken));
