@@ -42,15 +42,20 @@ use OCP\AppFramework\Db\Entity;
  * @method void setLastUsedAt(?string $value)
  * @method string getCreatedAt()
  * @method void setCreatedAt(string $value)
+ * @method string getForge()
+ * @method void setForge(string $value)
  */
 class Pat extends Entity {
 	public const KIND_CLASSIC = 'classic';
 	public const KIND_FINE_GRAINED = 'fine-grained';
+	/** Opaque forge access token (e.g. Codeberg/Forgejo) — no holder-visible scopes. */
+	public const KIND_FORGE_TOKEN = 'forge-token';
 
 	protected string $ownerUid = '';
 	protected string $label = '';
 	protected string $targetPattern = '';
 	protected string $kind = '';
+	protected string $forge = 'github';
 	protected string $encryptedToken = '';
 	protected string $tokenHint = '';
 	protected bool $sharedWithAdmins = false;
@@ -64,6 +69,7 @@ class Pat extends Entity {
 		$this->addType('label', 'string');
 		$this->addType('targetPattern', 'string');
 		$this->addType('kind', 'string');
+		$this->addType('forge', 'string');
 		$this->addType('encryptedToken', 'string');
 		$this->addType('tokenHint', 'string');
 		$this->addType('sharedWithAdmins', 'boolean');
@@ -93,6 +99,7 @@ class Pat extends Entity {
 			'label' => $this->label,
 			'targetPattern' => $this->targetPattern,
 			'kind' => $this->kind,
+			'forge' => $this->forge,
 			'tokenHint' => $this->tokenHint,
 			'sharedWithAdmins' => $this->sharedWithAdmins,
 			'lastValidatedScopes' => $validated,
