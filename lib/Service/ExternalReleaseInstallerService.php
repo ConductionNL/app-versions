@@ -13,6 +13,7 @@ use Exception;
 use OC\Archive\TAR;
 use OC\Archive\ZIP;
 use OC\Files\FilenameValidator;
+use OCA\AppVersions\Service\Installer\FailureClassifier;
 use OCA\AppVersions\Service\Installer\InstallFailure;
 use OCA\AppVersions\Service\Installer\InstallFinalizer;
 use OCA\AppVersions\Service\Pat\PatManager;
@@ -188,8 +189,16 @@ class ExternalReleaseInstallerService {
 			$this->copyRecursive($archivePath, $destination);
 		} catch (Exception $error) {
 			// Pre-finalize failure: restore the previous files and report a clean
-			// revert (the previously installed version is intact).
-			$this->restoreFromBackup($destination, $backupDestination);
+			// revert (the previously installed version is intact). For a fresh
+			// install (no backup) there is nothing to restore — remove the
+			// partially-copied new files so we don't leave a broken app folder.
+			if ($backupDestination === null) {
+				if (is_dir($destination)) {
+					$this->rmdirr($destination);
+				}
+			} else {
+				$this->restoreFromBackup($destination, $backupDestination);
+			}
 			throw InstallFailure::reverted($error->getMessage(), 'copy', $error);
 		}
 
@@ -206,8 +215,10 @@ class ExternalReleaseInstallerService {
 		try {
 			$installedApp = $this->finalizer->finalize($destination, $info, $enabled);
 		} catch (Exception $finalizeError) {
-			$restoredCleanly = $this->restoreFromBackup($destination, $backupDestination);
-			throw InstallFailure::finalizeFailed($finalizeError->getMessage(), $restoredCleanly, $finalizeError);
+			$restoreState = $backupDestination === null
+				? FailureClassifier::RESTORE_NONE
+				: ($this->restoreFromBackup($destination, $backupDestination) ? FailureClassifier::RESTORE_CLEAN : FailureClassifier::RESTORE_FAILED);
+			throw InstallFailure::finalizeFailed($finalizeError->getMessage(), $restoreState, $finalizeError);
 		}
 
 		// Finalize succeeded — now it is safe to drop the backup.

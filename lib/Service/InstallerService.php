@@ -362,7 +362,7 @@ class InstallerService {
 				? FailureClassifier::CATEGORY_FINALIZE
 				: $this->failureClassifier->categoryFor($failure, $failure->getStage());
 			$hint = $isBroken
-				? $this->failureClassifier->finalizeHint($failure->wasRestoredCleanly())
+				? $this->failureClassifier->finalizeHint($failure->getRestoreState())
 				: $this->failureClassifier->revertedHint();
 			$payload = [
 				'appId' => $appId,

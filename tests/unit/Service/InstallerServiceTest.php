@@ -127,7 +127,7 @@ final class InstallerServiceTest extends TestCase {
 		$this->environmentCheck->method('isDestinationWritable')->willReturn(true);
 		$this->stubSignedSourceReturning();
 		$this->signedInstaller->method('installFromSelectedRelease')
-			->willThrowException(InstallFailure::finalizeFailed('migration step failed', true));
+			->willThrowException(InstallFailure::finalizeFailed('migration step failed', FailureClassifier::RESTORE_CLEAN));
 
 		$result = $this->service()->installAppVersion('someapp', '2.0.0', false);
 
@@ -142,12 +142,30 @@ final class InstallerServiceTest extends TestCase {
 		$this->environmentCheck->method('isDestinationWritable')->willReturn(true);
 		$this->stubSignedSourceReturning();
 		$this->signedInstaller->method('installFromSelectedRelease')
-			->willThrowException(InstallFailure::finalizeFailed('migration step failed', false));
+			->willThrowException(InstallFailure::finalizeFailed('migration step failed', FailureClassifier::RESTORE_FAILED));
 
 		$result = $this->service()->installAppVersion('someapp', '2.0.0', false);
 
 		self::assertSame(InstallFailure::OUTCOME_INSTALLED_BUT_BROKEN, $result['payload']['installStatus']);
 		self::assertStringContainsString('indeterminate', strtolower((string)$result['payload']['hint']));
+	}
+
+	public function testFreshInstallFinalizeFailureDoesNotClaimLostPreviousFiles(): void {
+		$this->appManager->method('getAppPath')->willReturn('/writable/app');
+		$this->environmentCheck->method('isDestinationWritable')->willReturn(true);
+		$this->stubSignedSourceReturning();
+		// No prior version existed (RESTORE_NONE) — the hint must not tell the
+		// admin that previous files could not be restored.
+		$this->signedInstaller->method('installFromSelectedRelease')
+			->willThrowException(InstallFailure::finalizeFailed('migration step failed', FailureClassifier::RESTORE_NONE));
+
+		$result = $this->service()->installAppVersion('someapp', '2.0.0', false);
+
+		self::assertSame(InstallFailure::OUTCOME_INSTALLED_BUT_BROKEN, $result['payload']['installStatus']);
+		$hint = strtolower((string)$result['payload']['hint']);
+		self::assertStringNotContainsString('indeterminate', $hint);
+		self::assertStringNotContainsString('previous app files could not', $hint);
+		self::assertStringContainsString('fresh install', $hint);
 	}
 
 	public function testPreFinalizeFailureReportsReverted(): void {
