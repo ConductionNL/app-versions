@@ -27,11 +27,14 @@ class InstallFailure extends Exception {
 	public const OUTCOME_REVERTED = 'reverted';
 	public const OUTCOME_INSTALLED_BUT_BROKEN = 'installed-but-broken';
 
+	/**
+	 * @param FailureClassifier::RESTORE_* $restoreState
+	 */
 	public function __construct(
 		string $message,
 		private string $stage,
 		private string $outcome,
-		private bool $restoredCleanly,
+		private string $restoreState,
 		?Throwable $previous = null,
 	) {
 		parent::__construct($message, 0, $previous);
@@ -42,15 +45,20 @@ class InstallFailure extends Exception {
 	 * fully safe, previous version intact.
 	 */
 	public static function reverted(string $message, string $stage, ?Throwable $previous = null): self {
-		return new self($message, $stage, self::OUTCOME_REVERTED, true, $previous);
+		return new self($message, $stage, self::OUTCOME_REVERTED, FailureClassifier::RESTORE_CLEAN, $previous);
 	}
 
 	/**
-	 * Finalize-phase failure. `restoredCleanly` records whether the previous
-	 * files could be swapped back; either way database state may be uncertain.
+	 * Finalize-phase failure. `$restoreState` records whether the previous files
+	 * could be swapped back ({@see FailureClassifier::RESTORE_CLEAN}), the restore
+	 * failed ({@see FailureClassifier::RESTORE_FAILED}), or there was no prior
+	 * version to restore ({@see FailureClassifier::RESTORE_NONE}); either way the
+	 * database state may be uncertain.
+	 *
+	 * @param FailureClassifier::RESTORE_* $restoreState
 	 */
-	public static function finalizeFailed(string $message, bool $restoredCleanly, ?Throwable $previous = null): self {
-		return new self($message, FailureClassifier::STAGE_FINALIZE, self::OUTCOME_INSTALLED_BUT_BROKEN, $restoredCleanly, $previous);
+	public static function finalizeFailed(string $message, string $restoreState, ?Throwable $previous = null): self {
+		return new self($message, FailureClassifier::STAGE_FINALIZE, self::OUTCOME_INSTALLED_BUT_BROKEN, $restoreState, $previous);
 	}
 
 	public function getStage(): string {
@@ -61,7 +69,10 @@ class InstallFailure extends Exception {
 		return $this->outcome;
 	}
 
-	public function wasRestoredCleanly(): bool {
-		return $this->restoredCleanly;
+	/**
+	 * @return FailureClassifier::RESTORE_*
+	 */
+	public function getRestoreState(): string {
+		return $this->restoreState;
 	}
 }

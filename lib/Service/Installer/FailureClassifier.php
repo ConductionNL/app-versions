@@ -35,8 +35,18 @@ class FailureClassifier {
 	public const CATEGORY_APPID_MISMATCH = 'appid_mismatch';
 	public const CATEGORY_VERSION_MISMATCH = 'version_mismatch';
 	public const CATEGORY_INCOMPATIBLE = 'incompatible';
+	public const CATEGORY_FILESYSTEM = 'filesystem';
 	public const CATEGORY_FINALIZE = 'finalize';
 	public const CATEGORY_UNKNOWN = 'unknown';
+
+	/**
+	 * Tri-state outcome of the post-swap restore attempt, used to pick an honest
+	 * finalize-failure hint. A fresh install (no prior version) must not be told
+	 * that "previous files could not be restored" — there were none.
+	 */
+	public const RESTORE_CLEAN = 'clean';
+	public const RESTORE_FAILED = 'failed';
+	public const RESTORE_NONE = 'no_prior_version';
 
 	/**
 	 * Canonical breadcrumb stage names emitted by the installers. Documented
@@ -108,8 +118,15 @@ class FailureClassifier {
 		if (str_contains($message, 'extract')) {
 			return self::CATEGORY_EXTRACT;
 		}
-		if (str_contains($message, 'permission') || str_contains($message, 'not writable') || str_contains($message, 'cannot write') || str_contains($message, 'backup existing app folder')) {
+		if (str_contains($message, 'permission') || str_contains($message, 'not writable') || str_contains($message, 'cannot write')) {
 			return self::CATEGORY_PREFLIGHT_PERMISSION;
+		}
+		// Filesystem-operation failures (backup rename, destination mkdir) happen
+		// *after* the pre-flight writability guard already passed, so they must not
+		// be reported as a preflight-permission problem — that would tell the admin
+		// to fix permissions the guard already confirmed are correct.
+		if (str_contains($message, 'backup existing app folder') || str_contains($message, 'create app destination folder') || str_contains($message, 'resolve app install folder')) {
+			return self::CATEGORY_FILESYSTEM;
 		}
 
 		// Fall back to the last reached stage when the message is opaque.
@@ -136,6 +153,7 @@ class FailureClassifier {
 			self::CATEGORY_APPID_MISMATCH => $l->t('The downloaded archive is for a different app than requested. Verify the source binding points at the correct repository.'),
 			self::CATEGORY_VERSION_MISMATCH => $l->t('The downloaded archive declares a different version than requested. The source metadata and asset may be out of sync.'),
 			self::CATEGORY_INCOMPATIBLE => $l->t('This version is not compatible with the current Nextcloud server version. Choose a compatible release.'),
+			self::CATEGORY_FILESYSTEM => $l->t('A filesystem operation (moving or creating the app folder) failed even though the pre-flight writability check passed. This can happen on a concurrent install, a momentarily busy filesystem, or a stale ".appversion-backup" folder left behind by a previous failure. Remove any leftover "*.appversion-backup" folder next to the app directory and retry.'),
 			self::CATEGORY_FINALIZE => $l->t('The app files were updated but a migration or repair step failed. The previous files were restored, but database migrations may have already partially applied and cannot be rolled back automatically — verify the app and its data manually.'),
 			default => $l->t('An unexpected error occurred during installation. Check the server log for details.'),
 		};
@@ -143,14 +161,18 @@ class FailureClassifier {
 
 	/**
 	 * Hint for a finalize-phase failure. Honest about the database: even when
-	 * the files were restored, migrations may have partially applied.
+	 * the files were restored, migrations may have partially applied. The
+	 * restore state is tri-state so a fresh install (no prior version) is not
+	 * told that previous files could not be restored — there were none.
+	 *
+	 * @param self::RESTORE_* $restoreState
 	 */
-	public function finalizeHint(bool $restoredCleanly): string {
-		if ($restoredCleanly) {
-			return $this->hintFor(self::CATEGORY_FINALIZE);
-		}
-
-		return $this->l10n()->t('The previous app files could not be reliably restored — the installation is in an indeterminate state and requires manual intervention. Check the app folder and its database tables.');
+	public function finalizeHint(string $restoreState): string {
+		return match ($restoreState) {
+			self::RESTORE_CLEAN => $this->hintFor(self::CATEGORY_FINALIZE),
+			self::RESTORE_NONE => $this->l10n()->t('This was a fresh install (no previous version existed). A migration or repair step failed, so the new app files are present but the app is not fully installed. Remove the app folder and any tables it created, then retry.'),
+			default => $this->l10n()->t('The previous app files could not be reliably restored — the installation is in an indeterminate state and requires manual intervention. Check the app folder and its database tables.'),
+		};
 	}
 
 	/**

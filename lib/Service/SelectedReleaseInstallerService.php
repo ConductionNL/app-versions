@@ -314,8 +314,10 @@ class SelectedReleaseInstallerService {
 			try {
 				$installedApp = $this->finalizer->finalize($appPath, $info, $enabled);
 			} catch (Exception $finalizeError) {
-				$restoredCleanly = $this->restoreFromBackup($appPath, $backupDestination);
-				throw InstallFailure::finalizeFailed($finalizeError->getMessage(), $restoredCleanly, $finalizeError);
+				$restoreState = $backupDestination === null
+					? FailureClassifier::RESTORE_NONE
+					: ($this->restoreFromBackup($appPath, $backupDestination) ? FailureClassifier::RESTORE_CLEAN : FailureClassifier::RESTORE_FAILED);
+				throw InstallFailure::finalizeFailed($finalizeError->getMessage(), $restoreState, $finalizeError);
 			}
 
 			// Finalize succeeded — now it is safe to drop the backup.
@@ -519,8 +521,16 @@ class SelectedReleaseInstallerService {
 			$this->copyRecursive($extractedRoot, $destination);
 		} catch (Exception $error) {
 			// Pre-finalize failure: restore the previous files and report a clean
-			// revert (the previously installed version is intact).
-			$this->restoreFromBackup($destination, $backupDestination);
+			// revert (the previously installed version is intact). For a fresh
+			// install (no backup) there is nothing to restore — remove the
+			// partially-copied new files so we don't leave a broken app folder.
+			if ($backupDestination === null) {
+				if (is_dir($destination)) {
+					$this->rmdirr($destination);
+				}
+			} else {
+				$this->restoreFromBackup($destination, $backupDestination);
+			}
 			throw InstallFailure::reverted($error->getMessage(), 'copy', $error);
 		}
 
