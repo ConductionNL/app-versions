@@ -177,6 +177,13 @@ class ApiController extends OCSController {
 	/**
 	 * Curated add of a forge-qualified trusted-source pattern; see "Source management API".
 	 *
+	 * Admin access is enforced by the runtime isAdmin() guard below (covered by
+	 * both the 403 and 200 controller tests). The declarative
+	 * #[AuthorizedAdminSetting] attribute is intentionally not used here: it
+	 * requires a class-string<IDelegatedSettings>, whereas Settings\Admin is a
+	 * plain ISettings — adopting it would also opt this endpoint into admin
+	 * delegation semantics, a product change to make deliberately.
+	 *
 	 * @spec openspec/specs/external-sources/spec.md
 	 */
 	#[PasswordConfirmationRequired(strict: false)]

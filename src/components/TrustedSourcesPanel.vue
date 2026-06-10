@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
+import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
+import NcSelect from '@nextcloud/vue/components/NcSelect'
+import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { ocsGet, ocsWrite } from '../ocs'
+
+type SelectOption = { id: string, label: string }
 
 const SOURCES = '/ocs/v2.php/apps/app_versions/api/sources'
 const TRUSTED = '/ocs/v2.php/apps/app_versions/api/trusted-sources'
@@ -16,13 +22,18 @@ const loading = ref(false)
 const error = ref('')
 const notice = ref('')
 
+const forgeOptions: SelectOption[] = [
+	{ id: 'github', label: 'GitHub' },
+	{ id: 'codeberg', label: 'Codeberg' },
+]
+
 const loadPatterns = async (): Promise<void> => {
 	error.value = ''
 	try {
 		const { payload } = await ocsGet<{ trustedPatterns?: string[] }>(SOURCES)
 		patterns.value = Array.isArray(payload.trustedPatterns) ? payload.trustedPatterns : []
 	} catch (e) {
-		error.value = e instanceof Error ? e.message : 'Could not load trusted sources.'
+		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not load trusted sources.')
 	}
 }
 
@@ -30,11 +41,11 @@ const addPattern = async (): Promise<void> => {
 	error.value = ''
 	notice.value = ''
 	if (!owner.value.trim()) {
-		error.value = 'An owner/organisation is required.'
+		error.value = t('app_versions', 'An owner/organisation is required.')
 		return
 	}
 	if (!confirmTrust.value) {
-		error.value = 'Please confirm you trust this source before adding it.'
+		error.value = t('app_versions', 'Please confirm you trust this source before adding it.')
 		return
 	}
 	loading.value = true
@@ -49,12 +60,12 @@ const addPattern = async (): Promise<void> => {
 			return
 		}
 		patterns.value = Array.isArray(payload.trustedPatterns) ? payload.trustedPatterns : patterns.value
-		notice.value = `Trusted ${forge.value}:${owner.value.trim()}/${repo.value.trim() || '*'}`
+		notice.value = t('app_versions', 'Trusted {pattern}', { pattern: `${forge.value}:${owner.value.trim()}/${repo.value.trim() || '*'}` })
 		owner.value = ''
 		repo.value = ''
 		confirmTrust.value = false
 	} catch (e) {
-		error.value = e instanceof Error ? e.message : 'Could not add the trusted source.'
+		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not add the trusted source.')
 	} finally {
 		loading.value = false
 	}
@@ -75,7 +86,7 @@ const removePattern = async (pattern: string): Promise<void> => {
 		}
 		patterns.value = Array.isArray(payload.trustedPatterns) ? payload.trustedPatterns : patterns.value
 	} catch (e) {
-		error.value = e instanceof Error ? e.message : 'Could not remove the trusted source.'
+		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not remove the trusted source.')
 	} finally {
 		loading.value = false
 	}
@@ -86,10 +97,9 @@ onMounted(loadPatterns)
 
 <template>
 	<div :class="$style.panel">
-		<h3>Trusted sources</h3>
+		<h3>{{ t('app_versions', 'Trusted sources') }}</h3>
 		<p :class="$style.hint">
-			Only repositories matching these forge-qualified patterns may be installed from external
-			sources. Widening this list extends trust — add concrete owners only.
+			{{ t('app_versions', 'Only repositories matching these forge-qualified patterns may be installed from external sources. Widening this list extends trust — add concrete owners only.') }}
 		</p>
 
 		<NcNoteCard v-if="error" type="error">{{ error }}</NcNoteCard>
@@ -98,32 +108,25 @@ onMounted(loadPatterns)
 		<ul :class="$style.list">
 			<li v-for="pattern in patterns" :key="pattern" :class="$style.row">
 				<code>{{ pattern }}</code>
-				<NcButton type="tertiary" :disabled="loading" @click="removePattern(pattern)">Remove</NcButton>
+				<NcButton type="tertiary" :disabled="loading" @click="removePattern(pattern)">{{ t('app_versions', 'Remove') }}</NcButton>
 			</li>
-			<li v-if="patterns.length === 0" :class="$style.empty">No trusted sources configured.</li>
+			<li v-if="patterns.length === 0" :class="$style.empty">{{ t('app_versions', 'No trusted sources configured.') }}</li>
 		</ul>
 
 		<form :class="$style.form" @submit.prevent="addPattern">
-			<label :class="$style.field">
-				<span>Forge</span>
-				<select v-model="forge">
-					<option value="github">GitHub</option>
-					<option value="codeberg">Codeberg</option>
-				</select>
-			</label>
-			<label :class="$style.field">
-				<span>Owner / organisation</span>
-				<input v-model="owner" type="text" placeholder="ConductionNL" />
-			</label>
-			<label :class="$style.field">
-				<span>Repository (optional — blank trusts the whole owner)</span>
-				<input v-model="repo" type="text" placeholder="openregister" />
-			</label>
-			<label :class="$style.checkbox">
-				<input v-model="confirmTrust" type="checkbox" />
-				<span>I trust this source and understand apps will be installed from it.</span>
-			</label>
-			<NcButton native-type="submit" type="primary" :disabled="loading">Add trusted source</NcButton>
+			<NcSelect
+				v-model="forge"
+				:input-label="t('app_versions', 'Forge')"
+				:options="forgeOptions"
+				:reduce="(option) => option.id"
+				:clearable="false"
+				label="label" />
+			<NcTextField v-model="owner" :label="t('app_versions', 'Owner / organisation')" placeholder="ConductionNL" />
+			<NcTextField v-model="repo" :label="t('app_versions', 'Repository (optional — blank trusts the whole owner)')" placeholder="openregister" />
+			<NcCheckboxRadioSwitch v-model="confirmTrust">
+				{{ t('app_versions', 'I trust this source and understand apps will be installed from it.') }}
+			</NcCheckboxRadioSwitch>
+			<NcButton native-type="submit" type="primary" :disabled="loading">{{ t('app_versions', 'Add trusted source') }}</NcButton>
 		</form>
 	</div>
 </template>
@@ -135,7 +138,4 @@ onMounted(loadPatterns)
 .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--color-border); }
 .empty { color: var(--color-text-maxcontrast); font-style: italic; }
 .form { display: flex; flex-direction: column; gap: 8px; max-width: 480px; margin-top: 8px; }
-.field { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
-.field input, .field select { padding: 6px 8px; }
-.checkbox { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; }
 </style>

@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
+import NcSelect from '@nextcloud/vue/components/NcSelect'
+import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { ocsGet, ocsWrite } from '../ocs'
 
 type AppOption = { id: string, label: string }
+type SelectOption = { id: string, label: string }
 
 const props = defineProps<{ apps: AppOption[] }>()
 const emit = defineEmits<{ (e: 'bound', appId: string): void }>()
@@ -19,6 +23,12 @@ const loading = ref(false)
 const error = ref('')
 const notice = ref('')
 
+const appOptions = computed<SelectOption[]>(() => props.apps.map((app) => ({ id: app.id, label: `${app.label} (${app.id})` })))
+const forgeOptions: SelectOption[] = [
+	{ id: 'github', label: 'GitHub' },
+	{ id: 'codeberg', label: 'Codeberg' },
+]
+
 const loadBinding = async (appId: string): Promise<void> => {
 	currentBinding.value = null
 	if (!appId) {
@@ -30,7 +40,7 @@ const loadBinding = async (appId: string): Promise<void> => {
 		)
 		currentBinding.value = { sourceId: payload.sourceId }
 	} catch (e) {
-		error.value = e instanceof Error ? e.message : 'Could not load the current binding.'
+		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not load the current binding.')
 	}
 }
 
@@ -44,11 +54,11 @@ const bind = async (): Promise<void> => {
 	error.value = ''
 	notice.value = ''
 	if (!selectedAppId.value) {
-		error.value = 'Select an app first.'
+		error.value = t('app_versions', 'Select an app first.')
 		return
 	}
 	if (!owner.value.trim() || !repo.value.trim()) {
-		error.value = 'Owner and repository are required.'
+		error.value = t('app_versions', 'Owner and repository are required.')
 		return
 	}
 	loading.value = true
@@ -69,10 +79,10 @@ const bind = async (): Promise<void> => {
 			return
 		}
 		currentBinding.value = { sourceId: payload.sourceId }
-		notice.value = `Bound to ${payload.sourceId}`
+		notice.value = t('app_versions', 'Bound to {source}', { source: payload.sourceId ?? '' })
 		emit('bound', selectedAppId.value)
 	} catch (e) {
-		error.value = e instanceof Error ? e.message : 'Could not bind the source.'
+		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not bind the source.')
 	} finally {
 		loading.value = false
 	}
@@ -81,48 +91,38 @@ const bind = async (): Promise<void> => {
 
 <template>
 	<div :class="$style.panel">
-		<h3>App sources</h3>
+		<h3>{{ t('app_versions', 'App sources') }}</h3>
 		<p :class="$style.hint">
-			Bind an installed app to a GitHub or Codeberg repository so its versions are pulled from
-			that forge instead of the App Store. The repository must be on the trusted-sources list.
+			{{ t('app_versions', 'Bind an installed app to a GitHub or Codeberg repository so its versions are pulled from that forge instead of the App Store. The repository must be on the trusted-sources list.') }}
 		</p>
 
 		<NcNoteCard v-if="error" type="error">{{ error }}</NcNoteCard>
 		<NcNoteCard v-if="notice" type="success">{{ notice }}</NcNoteCard>
 
 		<form :class="$style.form" @submit.prevent="bind">
-			<label :class="$style.field">
-				<span>App</span>
-				<select v-model="selectedAppId">
-					<option value="">— choose an app —</option>
-					<option v-for="app in props.apps" :key="app.id" :value="app.id">{{ app.label }} ({{ app.id }})</option>
-				</select>
-			</label>
+			<NcSelect
+				v-model="selectedAppId"
+				:input-label="t('app_versions', 'App')"
+				:options="appOptions"
+				:reduce="(option) => option.id"
+				:placeholder="t('app_versions', 'Choose an app')"
+				label="label" />
 
 			<p v-if="currentBinding && currentBinding.sourceId" :class="$style.hint">
-				Current source: <code>{{ currentBinding.sourceId }}</code>
+				{{ t('app_versions', 'Current source:') }} <code>{{ currentBinding.sourceId }}</code>
 			</p>
 
-			<label :class="$style.field">
-				<span>Forge</span>
-				<select v-model="forge">
-					<option value="github">GitHub</option>
-					<option value="codeberg">Codeberg</option>
-				</select>
-			</label>
-			<label :class="$style.field">
-				<span>Owner</span>
-				<input v-model="owner" type="text" placeholder="ConductionNL" />
-			</label>
-			<label :class="$style.field">
-				<span>Repository</span>
-				<input v-model="repo" type="text" placeholder="openregister" />
-			</label>
-			<label :class="$style.field">
-				<span>Asset pattern</span>
-				<input v-model="assetPattern" type="text" placeholder="*.tar.gz" />
-			</label>
-			<NcButton native-type="submit" type="primary" :disabled="loading">Bind source</NcButton>
+			<NcSelect
+				v-model="forge"
+				:input-label="t('app_versions', 'Forge')"
+				:options="forgeOptions"
+				:reduce="(option) => option.id"
+				:clearable="false"
+				label="label" />
+			<NcTextField v-model="owner" :label="t('app_versions', 'Owner')" placeholder="ConductionNL" />
+			<NcTextField v-model="repo" :label="t('app_versions', 'Repository')" placeholder="openregister" />
+			<NcTextField v-model="assetPattern" :label="t('app_versions', 'Asset pattern')" placeholder="*.tar.gz" />
+			<NcButton native-type="submit" type="primary" :disabled="loading">{{ t('app_versions', 'Bind source') }}</NcButton>
 		</form>
 	</div>
 </template>
@@ -131,6 +131,4 @@ const bind = async (): Promise<void> => {
 .panel { display: flex; flex-direction: column; gap: 12px; }
 .hint { color: var(--color-text-maxcontrast); font-size: 13px; margin: 0; }
 .form { display: flex; flex-direction: column; gap: 8px; max-width: 480px; }
-.field { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
-.field input, .field select { padding: 6px 8px; }
 </style>
