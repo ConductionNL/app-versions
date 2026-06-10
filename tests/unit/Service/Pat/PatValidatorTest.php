@@ -78,6 +78,18 @@ final class PatValidatorTest extends TestCase {
 		$this->assertStringContainsString('admin:org', $result->error);
 	}
 
+	public function testUnknownForgeRejectedInBandNotThrown(): void {
+		// An unknown forge must fail closed as a rejected ValidationResult (-> 400),
+		// not throw InvalidArgumentException (which would surface as HTTP 500).
+		$validator = $this->buildValidator(200);
+
+		$result = $validator->validate('ghp_anyclassic1234567890abcdef1234567890abcdef', 'gitlab');
+
+		$this->assertFalse($result->ok);
+		$this->assertNotNull($result->error);
+		$this->assertStringContainsString('Unknown forge', $result->error);
+	}
+
 	public function testInvalidTokenRejectedOn401(): void {
 		$validator = $this->buildValidator(401);
 

@@ -57,6 +57,24 @@ final class SourceRegistryTest extends TestCase {
 		$this->assertSame('codeberg:Conduction/pipelinq', $binding->getId());
 	}
 
+	public function testParseCodebergMissingRepoRejected(): void {
+		$this->expectException(InvalidArgumentException::class);
+
+		SourceRegistry::parseSourceId('codeberg:Conduction');
+	}
+
+	public function testParseCodebergEmptyOwnerRejected(): void {
+		$this->expectException(InvalidArgumentException::class);
+
+		SourceRegistry::parseSourceId('codeberg:/pipelinq');
+	}
+
+	public function testParseCodebergEmptyRepoRejected(): void {
+		$this->expectException(InvalidArgumentException::class);
+
+		SourceRegistry::parseSourceId('codeberg:Conduction/');
+	}
+
 	public function testListAvailableIncludesCodeberg(): void {
 		$registry = new SourceRegistry(
 			$this->createMock(AppStoreSource::class),

@@ -63,6 +63,12 @@ class PatValidator {
 	 * @spec openspec/specs/pat-management/spec.md
 	 */
 	public function validate(string $token, string $forge = ForgeRegistry::FORGE_GITHUB): ValidationResult {
+		// Fail closed on an unknown forge: ForgeRegistry::get() throws
+		// InvalidArgumentException, which the OCS base controller does not catch
+		// and would surface as an HTTP 500. Reject in-band instead (-> HTTP 400).
+		if (!$this->forgeRegistry->has($forge)) {
+			return ValidationResult::rejected(sprintf('Unknown forge "%s".', $forge));
+		}
 		$f = $this->forgeRegistry->get($forge);
 		$kind = $this->detectKind($token);
 		$client = $this->clientService->newClient();
