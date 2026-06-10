@@ -42,6 +42,14 @@ final class PatDeeplinkBuilderTest extends TestCase {
 		);
 	}
 
+	public function testCodebergDeeplinkReturnsForgeTokenKindAndUrl(): void {
+		$result = $this->buildBuilder()->build(Pat::KIND_FORGE_TOKEN);
+
+		$this->assertSame(Pat::KIND_FORGE_TOKEN, $result['kind']);
+		$this->assertStringContainsString('codeberg.org', $result['url']);
+		$this->assertNotEmpty($result['instructions']);
+	}
+
 	public function testUnknownKindRejected(): void {
 		$this->expectException(InvalidArgumentException::class);
 
