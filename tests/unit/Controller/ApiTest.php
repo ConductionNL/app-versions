@@ -13,6 +13,7 @@ use OCA\AppVersions\Service\Pat\PatManager;
 use OCA\AppVersions\Service\Pat\PatValidator;
 use OCP\IGroupManager;
 use OCP\IRequest;
+use OCP\IUser;
 use OCP\IUserSession;
 use OCP\ServerVersion;
 use PHPUnit\Framework\TestCase;
@@ -33,6 +34,33 @@ final class ApiTest extends TestCase {
 			$this->createMock(InstallerService::class),
 			$this->createMock(IGroupManager::class),
 			$this->createMock(IUserSession::class),
+			$this->fakeServerVersion(),
+			$this->createMock(PatMapper::class),
+			$this->createMock(PatManager::class),
+			$this->createMock(PatValidator::class),
+			$this->createMock(PatDeeplinkBuilder::class),
+			$this->createMock(DiscoveryAggregator::class),
+		);
+	}
+
+	/**
+	 * Builds a controller whose isAdmin() returns true, with the given installer
+	 * service and request wired in.
+	 */
+	private function buildAdminController(InstallerService $installer, IRequest $request): ApiController {
+		$user = $this->createMock(IUser::class);
+		$user->method('getUID')->willReturn('admin');
+		$session = $this->createMock(IUserSession::class);
+		$session->method('getUser')->willReturn($user);
+		$groupManager = $this->createMock(IGroupManager::class);
+		$groupManager->method('isAdmin')->with('admin')->willReturn(true);
+
+		return new ApiController(
+			'app_versions',
+			$request,
+			$installer,
+			$groupManager,
+			$session,
 			$this->fakeServerVersion(),
 			$this->createMock(PatMapper::class),
 			$this->createMock(PatManager::class),
@@ -82,5 +110,62 @@ final class ApiTest extends TestCase {
 	public function testInstallerServiceClassExists(): void {
 		// Smoke test that InstallerService autoloads cleanly from the new namespace structure.
 		$this->assertTrue(class_exists(InstallerService::class));
+	}
+
+	public function testAddTrustedSourceForbiddenForNonAdmin(): void {
+		// The default mocked IGroupManager/IUserSession make isAdmin() false.
+		$response = $this->buildController()->addTrustedSource();
+
+		$this->assertSame(403, $response->getStatus());
+	}
+
+	public function testRemoveTrustedSourceForbiddenForNonAdmin(): void {
+		$response = $this->buildController()->removeTrustedSource();
+
+		$this->assertSame(403, $response->getStatus());
+	}
+
+	public function testAddTrustedSourceAsAdminReturnsPatterns(): void {
+		$request = $this->createMock(IRequest::class);
+		$request->method('getParam')->willReturnCallback(
+			static fn (string $name, mixed $default = null): mixed => match ($name) {
+				'forge' => 'github',
+				'owner' => 'ConductionNL',
+				'repo' => null,
+				default => $default,
+			}
+		);
+
+		$installer = $this->createMock(InstallerService::class);
+		$installer->expects($this->once())
+			->method('addTrustedPattern')
+			->with('github', 'ConductionNL', null)
+			->willReturn(['github:ConductionNL/*']);
+
+		$response = $this->buildAdminController($installer, $request)->addTrustedSource();
+
+		$this->assertSame(200, $response->getStatus());
+		$this->assertSame(['trustedPatterns' => ['github:ConductionNL/*']], $response->getData());
+	}
+
+	public function testRemoveTrustedSourceAsAdminReturnsRemainingPatterns(): void {
+		$request = $this->createMock(IRequest::class);
+		$request->method('getParam')->willReturnCallback(
+			static fn (string $name, mixed $default = null): mixed => match ($name) {
+				'pattern' => 'github:ConductionNL/*',
+				default => $default,
+			}
+		);
+
+		$installer = $this->createMock(InstallerService::class);
+		$installer->expects($this->once())
+			->method('removeTrustedPattern')
+			->with('github:ConductionNL/*')
+			->willReturn([]);
+
+		$response = $this->buildAdminController($installer, $request)->removeTrustedSource();
+
+		$this->assertSame(200, $response->getStatus());
+		$this->assertSame(['trustedPatterns' => []], $response->getData());
 	}
 }

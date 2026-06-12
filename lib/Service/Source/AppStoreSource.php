@@ -20,6 +20,8 @@ use OCP\IConfig;
  *
  * The App Store path uses the full code-signing chain — install is dispatched
  * to `SelectedReleaseInstallerService`, not the external installer.
+ *
+ * @psalm-api
  */
 class AppStoreSource implements SourceInterface {
 	private const PRIMARY_ENDPOINT = 'https://garm3.nextcloud.com/api/v1/apps.json';
@@ -40,6 +42,11 @@ class AppStoreSource implements SourceInterface {
 		return self::INSTALLER_SIGNED;
 	}
 
+	/**
+	 * Lists App Store releases for an app, normalized newest-first; see "Fetch Available Versions".
+	 *
+	 * @spec openspec/specs/version-management/spec.md
+	 */
 	public function listVersions(string $appId, SourceBinding $binding): array {
 		try {
 			$payload = $this->fetchAppPayload($appId);
@@ -59,21 +66,33 @@ class AppStoreSource implements SourceInterface {
 		return ['versions' => $this->normalizeVersions($releases), 'error' => null];
 	}
 
+	/**
+	 * Resolves a single App Store release (with certificate) for install; see "Install Specific Version".
+	 *
+	 * @spec openspec/specs/version-management/spec.md
+	 */
 	public function resolveRelease(string $appId, string $version, SourceBinding $binding): ?array {
 		$payload = $this->fetchAppPayload($appId);
-		if (!is_array($payload) || !isset($payload['releases']) || !is_array($payload['releases'])) {
+		if ($payload === null || !isset($payload['releases']) || !is_array($payload['releases'])) {
 			return null;
 		}
 
+		/** @var mixed $release */
 		foreach ($payload['releases'] as $release) {
 			if (!is_array($release)) {
 				continue;
 			}
 			if (($release['version'] ?? null) === $version) {
-				$release['certificate'] = $payload['certificate'] ?? null;
-				$release['kind'] = 'appstore';
+				/** @var array<string, mixed> $resolved */
+				$resolved = array_merge(
+					$release,
+					[
+						'certificate' => $payload['certificate'] ?? null,
+						'kind' => 'appstore',
+					],
+				);
 
-				return $release;
+				return $resolved;
 			}
 		}
 
@@ -81,7 +100,7 @@ class AppStoreSource implements SourceInterface {
 	}
 
 	/**
-	 * @return array<string, mixed>|null
+	 * @return array<array-key, mixed>|null
 	 */
 	private function fetchAppPayload(string $appId): ?array {
 		$client = $this->clientService->newClient();
@@ -97,6 +116,7 @@ class AppStoreSource implements SourceInterface {
 				if ($body === '') {
 					return null;
 				}
+				/** @var mixed $decoded */
 				$decoded = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
 				if (!is_array($decoded)) {
 					return null;
@@ -127,6 +147,7 @@ class AppStoreSource implements SourceInterface {
 				if ($body === '') {
 					continue;
 				}
+				/** @var mixed $decoded */
 				$decoded = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
 				if (!is_array($decoded)) {
 					continue;
@@ -147,33 +168,52 @@ class AppStoreSource implements SourceInterface {
 	}
 
 	/**
-	 * @param array<mixed> $payload
-	 * @return array<string, mixed>|null
+	 * @param array<array-key, mixed> $payload
+	 * @return array<array-key, mixed>|null
 	 */
 	private function extractAppPayload(array $payload, string $appId): ?array {
-		if (is_array($payload['data'] ?? null) && array_is_list($payload['data'])) {
-			foreach ($payload['data'] as $entry) {
-				if (is_array($entry) && ($entry['id'] ?? null) === $appId) {
-					return $entry;
-				}
+		$data = $this->arrayField($payload, 'data');
+		if ($data !== null && array_is_list($data)) {
+			$match = $this->findById($data, $appId);
+			if ($match !== null) {
+				return $match;
 			}
 		}
 
 		if (array_is_list($payload)) {
-			foreach ($payload as $entry) {
-				if (is_array($entry) && ($entry['id'] ?? null) === $appId) {
-					return $entry;
-				}
-			}
+			return $this->findById($payload, $appId);
+		}
 
+		$apps = $this->arrayField($payload, 'apps');
+		if ($apps === null) {
 			return null;
 		}
 
-		if (!is_array($payload['apps'] ?? null)) {
-			return null;
-		}
+		return $this->findById($apps, $appId);
+	}
 
-		foreach ($payload['apps'] as $entry) {
+	/**
+	 * Returns the named field as an array, or null when absent/non-array.
+	 *
+	 * @param array<array-key, mixed> $payload
+	 * @return array<array-key, mixed>|null
+	 */
+	private function arrayField(array $payload, string $key): ?array {
+		/** @var mixed $value */
+		$value = $payload[$key] ?? null;
+
+		return is_array($value) ? $value : null;
+	}
+
+	/**
+	 * Finds the first list entry whose `id` matches the given app id.
+	 *
+	 * @param array<array-key, mixed> $entries
+	 * @return array<array-key, mixed>|null
+	 */
+	private function findById(array $entries, string $appId): ?array {
+		/** @var mixed $entry */
+		foreach ($entries as $entry) {
 			if (is_array($entry) && ($entry['id'] ?? null) === $appId) {
 				return $entry;
 			}
@@ -183,7 +223,7 @@ class AppStoreSource implements SourceInterface {
 	}
 
 	/**
-	 * @param array<mixed> $payload
+	 * @param array<array-key, mixed> $payload
 	 */
 	private function hasPossibleNextPage(array $payload, int $currentPage): bool {
 		if (isset($payload['page'])) {
@@ -201,11 +241,13 @@ class AppStoreSource implements SourceInterface {
 		if (isset($payload['nextPage']) && is_string($payload['nextPage'])) {
 			return $payload['nextPage'] !== '';
 		}
-		if (is_array($payload['apps'] ?? null)) {
-			return count($payload['apps']) > 0;
+		$apps = $this->arrayField($payload, 'apps');
+		if ($apps !== null) {
+			return count($apps) > 0;
 		}
-		if (is_array($payload['data'] ?? null)) {
-			return count($payload['data']) > 0;
+		$data = $this->arrayField($payload, 'data');
+		if ($data !== null) {
+			return count($data) > 0;
 		}
 
 		return false;
@@ -216,7 +258,7 @@ class AppStoreSource implements SourceInterface {
 		$parts = explode('.', $version);
 		$major = $parts[0] ?? '0';
 		$minor = $parts[1] ?? '0';
-		if (!ctype_digit((string)$major) || !ctype_digit((string)$minor)) {
+		if (!ctype_digit($major) || !ctype_digit($minor)) {
 			return '0.0.0';
 		}
 
@@ -229,6 +271,7 @@ class AppStoreSource implements SourceInterface {
 	 */
 	private function normalizeVersions(array $releases): array {
 		$versions = [];
+		/** @var mixed $release */
 		foreach ($releases as $release) {
 			if (is_string($release)) {
 				$versions[] = $release;
@@ -237,6 +280,7 @@ class AppStoreSource implements SourceInterface {
 			if (!is_array($release)) {
 				continue;
 			}
+			/** @var mixed $version */
 			$version = $release['version'] ?? $release['ver'] ?? $release['name'] ?? $release['tag_name'] ?? null;
 			if (is_string($version) && $version !== '') {
 				$versions[] = $version;

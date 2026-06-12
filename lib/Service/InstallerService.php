@@ -12,13 +12,18 @@ namespace OCA\AppVersions\Service;
 use Exception;
 use InvalidArgumentException;
 use OCA\AppVersions\AppInfo\Application;
+use OCA\AppVersions\Service\Installer\EnvironmentCheck;
+use OCA\AppVersions\Service\Installer\FailureClassifier;
+use OCA\AppVersions\Service\Installer\InstallFailure;
 use OCA\AppVersions\Service\Source\SourceBinding;
 use OCA\AppVersions\Service\Source\SourceBindingStore;
+use OCA\AppVersions\Service\Source\SourceInterface;
 use OCA\AppVersions\Service\Source\SourceRegistry;
 use OCA\AppVersions\Service\Source\TrustedSourceList;
 use OCA\AppVersions\Service\Source\UntrustedSourceException;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Http;
+use OCP\IAppConfig;
 use OCP\IConfig;
 
 /**
@@ -28,27 +33,33 @@ use OCP\IConfig;
  *   - delegates version listing to the matching source driver
  *   - dispatches install to either the signed installer (App Store) or the
  *     external installer (GitHub releases), then writes the binding on success.
+ *
+ * @psalm-api
  */
 class InstallerService {
 	public function __construct(
 		private IAppManager $appManager,
 		private IConfig $config,
+		private IAppConfig $appConfig,
 		private SourceRegistry $sourceRegistry,
 		private SourceBindingStore $bindingStore,
 		private TrustedSourceList $trustedSources,
 		private SelectedReleaseInstallerService $signedInstaller,
 		private ExternalReleaseInstallerService $externalInstaller,
+		private FailureClassifier $failureClassifier,
+		private EnvironmentCheck $environmentCheck,
 	) {
 	}
 
 	/**
-	 * Returns installed apps enriched with metadata for frontend cards.
+	 * Returns installed apps enriched with metadata for frontend cards; see "List Installed Apps".
 	 *
-	 * @return list<array{id:string,label:string,description:string,summary:string,preview:string,isCore:bool,boundSourceId:?string}>
+	 * @spec openspec/specs/version-management/spec.md
+	 * @return list<array{id:string,label:string,description:string,summary:string,preview:string,isCore:bool,isShipped:bool,boundSourceId:?string,manageable:bool,warning:?string}>
 	 */
 	public function getInstalledApps(): array {
 		$installedApps = array_values(array_filter(
-			$this->appManager->getInstalledApps(),
+			$this->appManager->getEnabledApps(),
 			fn (string $appId): bool => !$this->isSelfManagedApp($appId)
 		));
 		sort($installedApps);
@@ -62,9 +73,11 @@ class InstallerService {
 		}
 
 		$bindingStore = $this->bindingStore;
+		$appManager = $this->appManager;
+		$environmentCheck = $this->environmentCheck;
 
 		return array_map(
-			static function (string $appId) use ($appList, $alwaysEnabledApps, $bindingStore): array {
+			static function (string $appId) use ($appList, $alwaysEnabledApps, $bindingStore, $appManager, $environmentCheck): array {
 				$app = $appList[$appId] ?? [];
 				$name = isset($app['name']) && is_string($app['name']) && trim($app['name']) !== ''
 					? trim($app['name'])
@@ -74,6 +87,15 @@ class InstallerService {
 				$preview = isset($app['preview']) && is_string($app['preview']) ? trim($app['preview']) : '';
 				$binding = $bindingStore->get($appId);
 
+				// Proactively flag apps whose folder cannot be managed here
+				// (e.g. a bind-mounted dev checkout that is not writable).
+				$env = ['manageable' => true, 'warning' => null];
+				try {
+					$env = $environmentCheck->inspect($appManager->getAppPath($appId));
+				} catch (\Throwable) {
+					// Path unknown — leave defaults; install-time guard still applies.
+				}
+
 				return [
 					'id' => $appId,
 					'label' => $name,
@@ -81,7 +103,10 @@ class InstallerService {
 					'summary' => $summary,
 					'preview' => $preview,
 					'isCore' => in_array($appId, $alwaysEnabledApps, true),
+					'isShipped' => $appManager->isShipped($appId),
 					'boundSourceId' => $binding?->getId(),
+					'manageable' => $env['manageable'],
+					'warning' => $env['warning'],
 				];
 			},
 			$installedApps
@@ -89,6 +114,9 @@ class InstallerService {
 	}
 
 	/**
+	 * Resolves the active source and lists versions for an app; see "Fetch Available Versions" and "Explicit source override".
+	 *
+	 * @spec openspec/specs/version-management/spec.md
 	 * @return array{installedVersion: ?string, availableVersions: list<array{version:string}>, versions: list<array{version:string}>, source: string, sourceId: string, statusCode: int, hasError: bool, error?: string}
 	 */
 	public function getAppVersions(string $appId, ?string $sourceOverride = null): array {
@@ -116,10 +144,19 @@ class InstallerService {
 		$source = $this->sourceRegistry->get($binding);
 		$result = $source->listVersions($appId, $binding);
 
+		// Shipped apps (bundled with the server release) are never published to
+		// the App Store, so a store miss is expected — explain it instead of
+		// surfacing a generic "not available" error.
+		if ($result['error'] === 'App is not available in the Nextcloud App Store.'
+			&& $this->appManager->isShipped($appId)
+		) {
+			$result['error'] = 'This app ships with Nextcloud itself: its version follows the server release and it is not distributed via the App Store. Bind a forge source to manage it from a repository instead.';
+		}
+
 		$installedVersion = null;
 		try {
 			$installed = $this->appManager->getAppVersion($appId);
-			if (is_string($installed) && $installed !== '') {
+			if ($installed !== '') {
 				$installedVersion = $installed;
 			}
 		} catch (Exception) {
@@ -143,6 +180,9 @@ class InstallerService {
 	}
 
 	/**
+	 * Installs a target version via the matching installer and persists the binding on success; see "Install Specific Version" and "Source binding".
+	 *
+	 * @spec openspec/specs/version-management/spec.md
 	 * @return array{statusCode:int, payload:array<string, mixed>}
 	 */
 	public function installAppVersion(
@@ -188,7 +228,7 @@ class InstallerService {
 			$installedVersion = '';
 		}
 
-		if ($installedVersion !== '' && version_compare($targetVersion, $installedVersion, '=') === 0) {
+		if ($installedVersion !== '' && version_compare($targetVersion, $installedVersion, '=')) {
 			return [
 				'statusCode' => Http::STATUS_OK,
 				'payload' => [
@@ -196,6 +236,34 @@ class InstallerService {
 					'fromVersion' => $installedVersion,
 					'toVersion' => $targetVersion,
 					'message' => 'App already has this version installed.',
+					'sourceId' => $binding->getId(),
+				] + ($includeDebug ? ['debug' => []] : []),
+			];
+		}
+
+		// Pre-flight: replacing an existing app renames its folder, which needs a
+		// writable parent directory. A bind-mounted dev checkout (owned by another
+		// uid) is not writable by the web-server user, so the install can never
+		// succeed — fail fast before downloading anything.
+		try {
+			$existingPath = $this->appManager->getAppPath($appId);
+		} catch (Exception) {
+			$existingPath = null;
+		}
+		if ($existingPath !== null && !$this->environmentCheck->isDestinationWritable($existingPath)) {
+			$category = FailureClassifier::CATEGORY_PREFLIGHT_PERMISSION;
+
+			return [
+				'statusCode' => $this->failureClassifier->httpStatusFor($category),
+				'payload' => [
+					'appId' => $appId,
+					'fromVersion' => $installedVersion === '' ? null : $installedVersion,
+					'toVersion' => $targetVersion,
+					'message' => $this->failureClassifier->messageFor($category),
+					'category' => $category,
+					'stage' => FailureClassifier::STAGE_REQUESTED,
+					'hint' => $this->failureClassifier->hintFor($category),
+					'installStatus' => 'failed',
 					'sourceId' => $binding->getId(),
 				] + ($includeDebug ? ['debug' => []] : []),
 			];
@@ -261,7 +329,7 @@ class InstallerService {
 			if ($appVersion === null) {
 				$appVersion = $this->appManager->getAppVersion($appId, false);
 			}
-			$configuredVersion = (string)$this->config->getAppValue($appId, 'installed_version', $appVersion ?? '');
+			$configuredVersion = $this->appConfig->getValueString($appId, 'installed_version', $appVersion);
 			if ($configuredVersion !== '') {
 				$appVersion = $configuredVersion;
 			}
@@ -271,8 +339,8 @@ class InstallerService {
 				'fromVersion' => $installedVersion === '' ? null : $installedVersion,
 				'toVersion' => $dryRun ? $targetVersion : $appVersion,
 				'installedVersion' => $appVersion,
-				'updateType' => $this->classifyUpdateType($installedVersion, $appVersion ?? '', $dryRun),
-				'message' => $this->classifyMessage($installedVersion, $appVersion ?? '', $dryRun),
+				'updateType' => $this->classifyUpdateType($installedVersion, $appVersion, $dryRun),
+				'message' => $this->classifyMessage($installedVersion, $appVersion, $dryRun),
 				'dryRun' => $dryRun,
 				'installStatus' => $result['status'] ?? 'unknown',
 				'sourceId' => $binding->getId(),
@@ -281,7 +349,7 @@ class InstallerService {
 				$payload['integrityWarning'] = $integrityWarning;
 			}
 			if ($includeDebug) {
-				$payload['debug'] = $result['debug'] ?? [];
+				$payload['debug'] = (array)($result['debug'] ?? []);
 			}
 
 			return ['statusCode' => Http::STATUS_OK, 'payload' => $payload];
@@ -295,21 +363,55 @@ class InstallerService {
 					'sourceId' => $binding->getId(),
 				] + ($includeDebug ? ['debug' => []] : []),
 			];
+		} catch (InstallFailure $failure) {
+			// The installer already handled filesystem recovery; report the
+			// honest outcome (reverted / installed-but-broken) instead of a 500.
+			$debugLog = $this->installerDebugLog($source);
+			$isBroken = $failure->getOutcome() === InstallFailure::OUTCOME_INSTALLED_BUT_BROKEN;
+			$category = $isBroken
+				? FailureClassifier::CATEGORY_FINALIZE
+				: $this->failureClassifier->categoryFor($failure, $failure->getStage());
+			$hint = $isBroken
+				? $this->failureClassifier->finalizeHint($failure->getRestoreState())
+				: $this->failureClassifier->revertedHint();
+			$payload = [
+				'appId' => $appId,
+				'fromVersion' => $installedVersion === '' ? null : $installedVersion,
+				'toVersion' => $targetVersion,
+				'message' => $failure->getMessage(),
+				'category' => $category,
+				'stage' => $failure->getStage(),
+				'hint' => $hint,
+				'installStatus' => $failure->getOutcome(),
+				'sourceId' => $binding->getId(),
+			];
+			if ($includeDebug) {
+				$payload['debug'] = $debugLog;
+			}
+
+			return ['statusCode' => $this->failureClassifier->httpStatusFor($category), 'payload' => $payload];
 		} catch (Exception $error) {
+			// Classified failure: attach stage/category/hint regardless of debug,
+			// and derive the HTTP status from the category (no blanket 500).
+			$debugLog = $this->installerDebugLog($source);
+			$lastStage = $this->lastStageOf($debugLog);
+			$classification = $this->failureClassifier->classify($error, $lastStage);
 			$payload = [
 				'appId' => $appId,
 				'fromVersion' => $installedVersion === '' ? null : $installedVersion,
 				'toVersion' => $targetVersion,
 				'message' => $error->getMessage(),
+				'category' => $classification['category'],
+				'stage' => $lastStage,
+				'hint' => $classification['hint'],
+				'installStatus' => 'failed',
 				'sourceId' => $binding->getId(),
 			];
 			if ($includeDebug) {
-				$payload['debug'] = $source->getInstallerKind() === \OCA\AppVersions\Service\Source\SourceInterface::INSTALLER_SIGNED
-					? $this->signedInstaller->getDebugLog()
-					: $this->externalInstaller->getDebugLog();
+				$payload['debug'] = $debugLog;
 			}
 
-			return ['statusCode' => Http::STATUS_INTERNAL_SERVER_ERROR, 'payload' => $payload];
+			return ['statusCode' => $classification['statusCode'], 'payload' => $payload];
 		} finally {
 			if ($maintenanceWasSet) {
 				$this->config->setSystemValue('maintenance', false);
@@ -317,11 +419,21 @@ class InstallerService {
 		}
 	}
 
+	/**
+	 * Validates against the allowlist and persists a source binding; see "Source management API".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public function bindSource(string $appId, SourceBinding $binding): void {
 		$this->trustedSources->assertBindingAllowed($binding);
 		$this->bindingStore->set($appId, $binding);
 	}
 
+	/**
+	 * Returns the persisted source binding for an app; see "Source binding".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public function getBinding(string $appId): ?SourceBinding {
 		return $this->bindingStore->get($appId);
 	}
@@ -330,8 +442,111 @@ class InstallerService {
 		return $this->trustedSources;
 	}
 
+	/**
+	 * Curated add of a forge-qualified trusted-source pattern. Constructs
+	 * `{forge}:{owner}/{repo}` (or `{forge}:{owner}/*` when repo is null),
+	 * validates it (no over-broad globs), appends it to the existing patterns,
+	 * and persists. Idempotent: an already-present pattern is a no-op.
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 * @return list<string> the updated pattern set
+	 * @throws InvalidArgumentException on an unknown forge, empty/`*` owner, bad charset, or an over-broad result
+	 */
+	public function addTrustedPattern(string $forge, string $owner, ?string $repo): array {
+		$pattern = $this->buildAndValidatePattern($forge, $owner, $repo);
+
+		$patterns = $this->trustedSources->getPatterns();
+		if (!in_array($pattern, $patterns, true)) {
+			$patterns[] = $pattern;
+			$this->trustedSources->setPatterns($patterns);
+		}
+
+		return $this->trustedSources->getPatterns();
+	}
+
+	/**
+	 * Removes an exact trusted-source pattern and persists.
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 * @return list<string> the updated pattern set
+	 */
+	public function removeTrustedPattern(string $pattern): array {
+		$patterns = array_values(array_filter(
+			$this->trustedSources->getPatterns(),
+			static fn (string $p): bool => $p !== $pattern,
+		));
+		$this->trustedSources->setPatterns($patterns);
+
+		return $this->trustedSources->getPatterns();
+	}
+
+	/**
+	 * Validates a curated allowlist entry and returns the forge-qualified glob.
+	 * Guarantees a concrete owner — never a whole-forge or match-everything glob.
+	 *
+	 * @throws InvalidArgumentException
+	 */
+	private function buildAndValidatePattern(string $forge, string $owner, ?string $repo): string {
+		if (!in_array($forge, [SourceBinding::FORGE_GITHUB, SourceBinding::FORGE_CODEBERG], true)) {
+			throw new InvalidArgumentException('Unknown forge: ' . $forge);
+		}
+		$owner = trim($owner);
+		if ($owner === '' || $owner === '*') {
+			throw new InvalidArgumentException('A concrete owner is required (wildcard-only owners are not allowed).');
+		}
+		if (!preg_match('/^[A-Za-z0-9_.\-]+$/', $owner)) {
+			throw new InvalidArgumentException('Owner contains invalid characters.');
+		}
+
+		$repoPart = '*';
+		if ($repo !== null && trim($repo) !== '') {
+			$repo = trim($repo);
+			if (!preg_match('/^[A-Za-z0-9_.\-]+$/', $repo)) {
+				throw new InvalidArgumentException('Repository contains invalid characters.');
+			}
+			$repoPart = $repo;
+		}
+
+		$pattern = $forge . ':' . $owner . '/' . $repoPart;
+		// Defence in depth: reject anything that would trust an entire forge.
+		if (in_array($pattern, ['*', '*/*', $forge . ':*', $forge . ':*/*'], true)) {
+			throw new InvalidArgumentException('That pattern is too broad — it would trust an entire forge.');
+		}
+
+		return $pattern;
+	}
+
 	public function getSourceRegistry(): SourceRegistry {
 		return $this->sourceRegistry;
+	}
+
+	/**
+	 * Returns the breadcrumb log of whichever installer handled the request.
+	 * The two installers type their logs differently, so we use the looser
+	 * common type and validate shape in {@see lastStageOf()}.
+	 *
+	 * @return array<int, mixed>
+	 */
+	private function installerDebugLog(SourceInterface $source): array {
+		return $source->getInstallerKind() === SourceInterface::INSTALLER_SIGNED
+			? $this->signedInstaller->getDebugLog()
+			: $this->externalInstaller->getDebugLog();
+	}
+
+	/**
+	 * The last stage reached in a breadcrumb log, used to classify failures.
+	 *
+	 * @param array<int, mixed> $debugLog
+	 */
+	private function lastStageOf(array $debugLog): ?string {
+		$last = end($debugLog);
+		if (!is_array($last)) {
+			return null;
+		}
+		/** @var mixed $stage */
+		$stage = $last['stage'] ?? null;
+
+		return is_string($stage) ? $stage : null;
 	}
 
 	private function resolveBinding(string $appId, ?string $sourceOverride): SourceBinding {
@@ -367,7 +582,7 @@ class InstallerService {
 			return 'none';
 		}
 
-		return version_compare($newVersion, $previousVersion, '>') === 1 ? 'upgrade' : 'downgrade';
+		return version_compare($newVersion, $previousVersion, '>') ? 'upgrade' : 'downgrade';
 	}
 
 	private function classifyMessage(string $previousVersion, string $newVersion, bool $dryRun): string {
@@ -381,7 +596,7 @@ class InstallerService {
 			return 'App already at selected version.';
 		}
 
-		return version_compare($newVersion, $previousVersion, '<') === -1 ? 'App downgraded.' : 'App updated.';
+		return version_compare($newVersion, $previousVersion, '<') ? 'App downgraded.' : 'App updated.';
 	}
 
 	/**

@@ -13,6 +13,8 @@ use Exception;
 use OC\Archive\TAR;
 use OC\Archive\ZIP;
 use OC\Files\FilenameValidator;
+use OCA\AppVersions\Service\Installer\FailureClassifier;
+use OCA\AppVersions\Service\Installer\InstallFailure;
 use OCA\AppVersions\Service\Installer\InstallFinalizer;
 use OCA\AppVersions\Service\Pat\PatManager;
 use OCA\AppVersions\Service\Pat\PatResolver;
@@ -20,8 +22,8 @@ use OCA\AppVersions\Service\Source\SourceBinding;
 use OCA\AppVersions\Service\Source\TrustedSourceList;
 use OCP\App\AppPathNotFoundException;
 use OCP\App\IAppManager;
-use OCP\Files;
 use OCP\Http\Client\IClientService;
+use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\ITempManager;
 use OCP\IUserSession;
@@ -43,6 +45,8 @@ use Psr\Log\LoggerInterface;
  * The post-extract finalization (migrations, repair steps, config writes) is
  * delegated to `InstallFinalizer` so signed and external installs cannot drift
  * on upgrade semantics.
+ *
+ * @psalm-api
  */
 class ExternalReleaseInstallerService {
 	/** @var list<array{stage: string, data: mixed}> */
@@ -53,6 +57,7 @@ class ExternalReleaseInstallerService {
 		private ITempManager $tempManager,
 		private IAppManager $appManager,
 		private IConfig $config,
+		private IAppConfig $appConfig,
 		private InstallFinalizer $finalizer,
 		private TrustedSourceList $trustedSources,
 		private LoggerInterface $logger,
@@ -70,6 +75,10 @@ class ExternalReleaseInstallerService {
 	}
 
 	/**
+	 * Downloads, integrity-checks (allowlist, SHA-256, appId/version), and installs an external release;
+	 * see "External install integrity checks".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
 	 * @param array<string, mixed> $release
 	 * @return array{status: string, installedVersionBefore: ?string, installedApp?: string, integrityWarning?: ?string, dryRun: bool, debug: list<array{stage: string, data: mixed}>}
 	 * @throws Exception
@@ -95,19 +104,20 @@ class ExternalReleaseInstallerService {
 
 		$this->trustedSources->assertBindingAllowed($binding);
 
-		$downloadUrl = $release['download'] ?? '';
-		$rawShaUrl = $release['sha256Url'] ?? null;
-		$shaUrl = is_string($rawShaUrl) && $rawShaUrl !== '' ? $rawShaUrl : null;
-		if (!is_string($downloadUrl) || $downloadUrl === '') {
+		$downloadUrl = isset($release['download']) && is_string($release['download']) ? $release['download'] : '';
+		$shaUrl = isset($release['sha256Url']) && is_string($release['sha256Url']) && $release['sha256Url'] !== ''
+			? $release['sha256Url']
+			: null;
+		if ($downloadUrl === '') {
 			throw new Exception('No download URL found for the selected release.');
 		}
 
 		try {
-			$installedVersion = (string)$this->appManager->getAppVersion($appId);
+			$installedVersion = $this->appManager->getAppVersion($appId);
 		} catch (Exception) {
 			$installedVersion = '';
 		}
-		$previousEnabled = (string)$this->config->getAppValue($appId, 'enabled', 'no');
+		$previousEnabled = $this->appConfig->getValueString($appId, 'enabled', 'no');
 
 		$tempFile = $this->tempManager->getTemporaryFile('.tar.gz');
 		$tempFolder = $this->tempManager->getTemporaryFolder('app-version-external');
@@ -137,7 +147,6 @@ class ExternalReleaseInstallerService {
 			'archiveVersion' => $info['version'],
 		]);
 
-		$previousPath = null;
 		try {
 			$previousPath = $this->appManager->getAppPath($appId);
 		} catch (AppPathNotFoundException) {
@@ -166,7 +175,7 @@ class ExternalReleaseInstallerService {
 		if (is_dir($destination)) {
 			$backupDestination = $destination . '.appversion-backup';
 			if (is_dir($backupDestination)) {
-				Files::rmdirr($backupDestination);
+				$this->rmdirr($backupDestination);
 			}
 			if (!rename($destination, $backupDestination)) {
 				throw new Exception('Could not backup existing app folder before replacement.');
@@ -179,25 +188,43 @@ class ExternalReleaseInstallerService {
 			}
 			$this->copyRecursive($archivePath, $destination);
 		} catch (Exception $error) {
-			if ($backupDestination !== null && is_dir($backupDestination)) {
+			// Pre-finalize failure: restore the previous files and report a clean
+			// revert (the previously installed version is intact). For a fresh
+			// install (no backup) there is nothing to restore — remove the
+			// partially-copied new files so we don't leave a broken app folder.
+			if ($backupDestination === null) {
 				if (is_dir($destination)) {
-					Files::rmdirr($destination);
+					$this->rmdirr($destination);
 				}
-				rename($backupDestination, $destination);
+			} else {
+				$this->restoreFromBackup($destination, $backupDestination);
 			}
-			throw $error;
+			throw InstallFailure::reverted($error->getMessage(), 'copy', $error);
 		}
 
-		if ($backupDestination !== null && is_dir($backupDestination)) {
-			Files::rmdirr($backupDestination);
-		}
 		if (function_exists('opcache_reset')) {
 			opcache_reset();
 		}
 		$this->addDebug('filesystem-updated', ['destination' => $destination]);
 
 		$enabled = $installedVersion === '' ? 'no' : $previousEnabled;
-		$installedApp = $this->finalizer->finalize($destination, $info, $enabled);
+
+		// Finalize (migrations + repair steps) is the last, unrecoverable phase.
+		// Keep the backup until it succeeds; on failure restore the previous
+		// files and report installed-but-broken.
+		try {
+			$installedApp = $this->finalizer->finalize($destination, $info, $enabled);
+		} catch (Exception $finalizeError) {
+			$restoreState = $backupDestination === null
+				? FailureClassifier::RESTORE_NONE
+				: ($this->restoreFromBackup($destination, $backupDestination) ? FailureClassifier::RESTORE_CLEAN : FailureClassifier::RESTORE_FAILED);
+			throw InstallFailure::finalizeFailed($finalizeError->getMessage(), $restoreState, $finalizeError);
+		}
+
+		// Finalize succeeded — now it is safe to drop the backup.
+		if ($backupDestination !== null && is_dir($backupDestination)) {
+			$this->rmdirr($backupDestination);
+		}
 		$this->addDebug('finalized', ['appId' => $installedApp, 'enabled' => $enabled]);
 
 		return [
@@ -220,7 +247,7 @@ class ExternalReleaseInstallerService {
 			return null;
 		}
 
-		return $this->patResolver->findFor($ownerRepo, $user->getUID());
+		return $this->patResolver->findFor($binding->getForge(), $ownerRepo, $user->getUID());
 	}
 
 	private function authenticatedDownload(string $url, string $sinkPath, ?\OCA\AppVersions\Db\Pat $pat): void {
@@ -364,17 +391,19 @@ class ExternalReleaseInstallerService {
 
 		$l = Server::get(IFactory::class)->get('core');
 		$info = $this->appManager->getAppInfoByPath($infoXml, $l->getLanguageCode());
-		if (!is_array($info) || $info['id'] !== $expectedAppId) {
+		if (!is_array($info) || ($info['id'] ?? null) !== $expectedAppId) {
 			throw new Exception('appinfo/info.xml could not be loaded by app manager.');
 		}
+		/** @var array<string, mixed> $info */
 
-		$ignoreMaxApps = $this->config->getSystemValue('app_install_overwrite', []);
+		$ignoreMaxApps = (array)$this->config->getSystemValue('app_install_overwrite', []);
 		$ignoreMax = in_array($expectedAppId, $ignoreMaxApps, true);
-		$serverVersion = implode('.', \OCP\Util::getVersion());
+		$serverVersion = Server::get(\OCP\ServerVersion::class)->getVersionString();
 		if (!$this->appManager->isAppCompatible($serverVersion, $info, $ignoreMax)) {
+			$appName = isset($info['name']) && is_string($info['name']) ? $info['name'] : $expectedAppId;
 			throw new Exception(sprintf(
 				'App "%s" is not compatible with this Nextcloud version.',
-				$info['name'] ?? $expectedAppId
+				$appName
 			));
 		}
 
@@ -446,6 +475,53 @@ class ExternalReleaseInstallerService {
 
 	private function getDownloadTimeout(): int {
 		return PHP_SAPI === 'cli' ? 0 : 120;
+	}
+
+	/**
+	 * Restores the previous app files from the retained backup after a post-swap
+	 * failure. Returns whether the restore completed cleanly.
+	 */
+	private function restoreFromBackup(string $destination, ?string $backupDestination): bool {
+		if ($backupDestination === null || !is_dir($backupDestination)) {
+			return false;
+		}
+		try {
+			if (is_dir($destination)) {
+				$this->rmdirr($destination);
+			}
+
+			return rename($backupDestination, $destination);
+		} catch (\Throwable) {
+			return false;
+		}
+	}
+
+	/**
+	 * Recursively deletes a directory on the local filesystem (temp/backup dirs),
+	 * replacing the deprecated \OCP\Files::rmdirr helper.
+	 */
+	private function rmdirr(string $dir): void {
+		if (!is_dir($dir)) {
+			if (file_exists($dir) || is_link($dir)) {
+				@unlink($dir);
+			}
+
+			return;
+		}
+
+		/** @var \Iterator<string, \SplFileInfo> $iterator */
+		$iterator = new \RecursiveIteratorIterator(
+			new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
+			\RecursiveIteratorIterator::CHILD_FIRST
+		);
+		foreach ($iterator as $item) {
+			if ($item->isDir() && !$item->isLink()) {
+				@rmdir($item->getPathname());
+			} else {
+				@unlink($item->getPathname());
+			}
+		}
+		@rmdir($dir);
 	}
 
 	private function resetDebug(): void {

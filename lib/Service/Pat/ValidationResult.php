@@ -32,28 +32,23 @@ final class ValidationResult {
 	) {
 	}
 
+	/**
+	 * Builds a rejected validation outcome carrying an admin-readable error; see "PAT validation on upload".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
 	public static function rejected(string $error): self {
 		return new self(false, [], [], null, $error);
 	}
 
 	/**
+	 * Builds an accepted validation outcome with scopes/warnings/expiry; see "PAT validation on upload".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
 	 * @param list<string> $scopes
 	 * @param list<string> $warnings
 	 */
 	public static function accepted(array $scopes, array $warnings, ?string $expiresAt): self {
 		return new self(true, $scopes, $warnings, $expiresAt, null);
-	}
-
-	/**
-	 * @return array<string, mixed>
-	 */
-	public function toArray(): array {
-		return [
-			'ok' => $this->ok,
-			'scopes' => $this->scopes,
-			'warnings' => $this->warnings,
-			'expiresAt' => $this->expiresAt,
-			'error' => $this->error,
-		];
 	}
 }

@@ -22,7 +22,6 @@ use OCP\Migration\SimpleMigrationStep;
  */
 class Version1000Date20260502120000 extends SimpleMigrationStep {
 	public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ?ISchemaWrapper {
-		/** @var ISchemaWrapper $schema */
 		$schema = $schemaClosure();
 
 		if ($schema->hasTable('app_versions_pats')) {

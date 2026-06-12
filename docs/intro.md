@@ -11,7 +11,7 @@ from a breaking change in a minor release.
 > **Status: in development.** This documentation site is up so the
 > brand surface and the eventual journeydoc tutorials have a stable
 > home. Step-by-step walkthroughs and screenshots land as the admin UI
-> matures. Follow the [GitHub repository](https://github.com/ConductionNL/app-versions)
+> matures. Follow the [Codeberg repository](https://codeberg.org/Conduction/app-versions)
 > for milestones.
 
 ## What does it do?
@@ -33,12 +33,12 @@ installed app, with three things working together:
   admin is visible Monday morning without digging through server logs.
 
 The app is built around four specs (see the openspec tracker on
-GitHub):
+Codeberg):
 
-- [`version-management`](https://github.com/ConductionNL/app-versions/tree/development/openspec/specs/version-management) — list installed apps, pick a version, install.
-- [`external-sources`](https://github.com/ConductionNL/app-versions/tree/development/openspec/specs/external-sources) — GitHub releases as a source alongside the App Store.
-- [`pat-management`](https://github.com/ConductionNL/app-versions/tree/development/openspec/specs/pat-management) — encrypted PAT storage for private GitHub repos.
-- [`app-discovery`](https://github.com/ConductionNL/app-versions/tree/development/openspec/specs/app-discovery) — a single search aggregator over the App Store, your PAT-visible repos, and (opt-in) public GitHub topic search.
+- [`version-management`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/version-management) — list installed apps, pick a version, install.
+- [`external-sources`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/external-sources) — GitHub releases as a source alongside the App Store.
+- [`pat-management`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/pat-management) — encrypted PAT storage for private GitHub repos.
+- [`app-discovery`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/app-discovery) — a single search aggregator over the App Store, your PAT-visible repos, and (opt-in) public GitHub topic search.
 
 ## Getting started
 

@@ -18,6 +18,8 @@ use OCP\User\Events\UserDeletedEvent;
  * Removes any PATs owned by a deleted user so credentials don't outlive
  * the account that uploaded them.
  *
+ * @psalm-api
+ *
  * @template-implements IEventListener<UserDeletedEvent>
  */
 class UserDeletedListener implements IEventListener {
@@ -26,6 +28,11 @@ class UserDeletedListener implements IEventListener {
 	) {
 	}
 
+	/**
+	 * On user deletion, sweeps every PAT owned by that uid; see "Admin removal cleans up PATs".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
 	public function handle(Event $event): void {
 		if (!($event instanceof UserDeletedEvent)) {
 			return;

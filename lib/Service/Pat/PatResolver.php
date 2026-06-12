@@ -16,6 +16,8 @@ use OCA\AppVersions\Db\PatMapper;
  * Looks up the highest-priority non-expired PAT visible to the current uid
  * that matches the binding's `owner/repo`. Used by `GithubReleaseSource` to
  * decide whether to authenticate a request.
+ *
+ * @psalm-api
  */
 class PatResolver {
 	public function __construct(
@@ -23,9 +25,21 @@ class PatResolver {
 	) {
 	}
 
-	public function findFor(string $ownerRepo, string $currentUid): ?Pat {
+	/**
+	 * Finds the highest-priority non-expired PAT for the given forge matching owner/repo; see "Authenticated GitHub fetches" ("Expired PAT skipped").
+	 *
+	 * Only tokens whose `forge` equals the requested forge are considered, so a
+	 * Codeberg binding never authenticates with a GitHub token and vice-versa.
+	 * Legacy PAT rows default to forge `github`, so they keep serving GitHub.
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
+	public function findFor(string $forge, string $ownerRepo, string $currentUid): ?Pat {
 		$now = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d H:i:s');
-		$candidates = $this->mapper->findVisibleTo($currentUid);
+		$candidates = array_values(array_filter(
+			$this->mapper->findVisibleTo($currentUid),
+			static fn (Pat $pat): bool => $pat->getForge() === $forge,
+		));
 
 		// Prefer owner-owned PATs over shared ones; within each tier, prefer most-specific pattern.
 		usort($candidates, function (Pat $a, Pat $b) use ($currentUid): int {

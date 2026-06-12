@@ -1,0 +1,47 @@
+<?php
+
+declare(strict_types=1);
+/**
+ * @license AGPL-3.0-or-later
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ */
+
+
+namespace OCA\AppVersions\Sections;
+
+use OCA\AppVersions\AppInfo\Application;
+use OCP\IL10N;
+use OCP\IURLGenerator;
+use OCP\Settings\IIconSection;
+
+/**
+ * Registers the App Versions section in the Nextcloud Administration settings
+ * sidebar. The app lives here (admin settings) rather than in the top-level
+ * navigation menu.
+ *
+ * @spec openspec/specs/version-management/spec.md
+ * @psalm-api
+ */
+class AdminSection implements IIconSection {
+	public function __construct(
+		private IL10N $l,
+		private IURLGenerator $urlGenerator,
+	) {
+	}
+
+	public function getID(): string {
+		return Application::APP_ID;
+	}
+
+	public function getName(): string {
+		return $this->l->t('App Versions');
+	}
+
+	public function getPriority(): int {
+		return 98;
+	}
+
+	public function getIcon(): string {
+		return $this->urlGenerator->imagePath(Application::APP_ID, 'app.svg');
+	}
+}

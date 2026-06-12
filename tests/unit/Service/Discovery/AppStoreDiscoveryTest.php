@@ -9,7 +9,7 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
@@ -18,11 +18,16 @@ final class AppStoreDiscoveryTest extends TestCase {
 	 * @param list<array<string, mixed>> $catalog
 	 */
 	private function buildDiscovery(array $catalog, int $cachedTs = 0): AppStoreDiscovery {
-		$config = $this->createMock(IConfig::class);
-		$config->method('getAppValue')->willReturnCallback(
+		$config = $this->createMock(IAppConfig::class);
+		$config->method('getValueString')->willReturnCallback(
 			static fn (string $app, string $key, string $default = '') => match ($key) {
-				'cache.appstore_catalog' => $cachedTs > 0 ? json_encode($catalog) : $default,
-				'cache.appstore_catalog_ts' => $cachedTs > 0 ? (string)$cachedTs : $default,
+				'cache.appstore_catalog' => $cachedTs > 0 ? (string)json_encode($catalog) : $default,
+				default => $default,
+			}
+		);
+		$config->method('getValueInt')->willReturnCallback(
+			static fn (string $app, string $key, int $default = 0) => match ($key) {
+				'cache.appstore_catalog_ts' => $cachedTs > 0 ? $cachedTs : $default,
 				default => $default,
 			}
 		);

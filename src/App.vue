@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import NcAppContent from '@nextcloud/vue/components/NcAppContent'
-import NcContent from '@nextcloud/vue/components/NcContent'
+import NcButton from '@nextcloud/vue/components/NcButton'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
-import { computed, onMounted, ref, watch } from 'vue'
+import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { t } from '@nextcloud/l10n'
+import SourcesPanel from './components/SourcesPanel.vue'
+import TokensPanel from './components/TokensPanel.vue'
+import TrustedSourcesPanel from './components/TrustedSourcesPanel.vue'
 
 type AppOption = {
 	id: string
@@ -11,6 +15,8 @@ type AppOption = {
 	summary: string
 	preview: string
 	isCore: boolean
+	manageable?: boolean
+	warning?: string | null
 }
 
 type AppVersion = {
@@ -31,10 +37,12 @@ type InstallResult = {
 	message: string
 	dryRun: boolean
 	installStatus: string
+	stage?: string | null
+	category?: string | null
+	hint?: string | null
 	debug?: InstallDebugEntry[]
 }
 
-const isAdmin = ref(false)
 const isLoading = ref(true)
 const apps = ref<AppOption[]>([])
 const appFilter = ref('')
@@ -65,6 +73,50 @@ const lastInstallResult = ref<InstallResult | null>(null)
 const hasInstallResult = ref(false)
 const installRequestFromVersion = ref('')
 const installRequestToVersion = ref('')
+
+// Admin-settings tabs: the existing apps→versions→install view plus the
+// source / token / trusted-source management panels.
+const tabs = [
+	{ id: 'apps' },
+	{ id: 'sources' },
+	{ id: 'tokens' },
+	{ id: 'trusted' },
+]
+const currentTab = ref('apps')
+const tablistEl = ref<HTMLElement | null>(null)
+
+// Literal strings (not interpolated) so they remain extractable for translation.
+const tabLabel = (id: string): string => ({
+	apps: t('app_versions', 'Apps'),
+	sources: t('app_versions', 'Sources'),
+	tokens: t('app_versions', 'Tokens'),
+	trusted: t('app_versions', 'Trusted sources'),
+}[id] ?? id)
+
+// WAI-ARIA tablist keyboard support: Left/Right (and Home/End) move between
+// tabs and move focus to the newly selected tab, per the tabs pattern.
+const onTabKeydown = async (event: KeyboardEvent): Promise<void> => {
+	const keys = ['ArrowRight', 'ArrowLeft', 'Home', 'End']
+	if (!keys.includes(event.key)) {
+		return
+	}
+	event.preventDefault()
+	const index = tabs.findIndex((tab) => tab.id === currentTab.value)
+	let next = index
+	if (event.key === 'ArrowRight') {
+		next = (index + 1) % tabs.length
+	} else if (event.key === 'ArrowLeft') {
+		next = (index - 1 + tabs.length) % tabs.length
+	} else if (event.key === 'Home') {
+		next = 0
+	} else if (event.key === 'End') {
+		next = tabs.length - 1
+	}
+	currentTab.value = tabs[next].id
+	await nextTick()
+	const buttons = tablistEl.value?.querySelectorAll<HTMLElement>('[role="tab"]')
+	buttons?.[next]?.focus()
+}
 
 type VersionRangeInfo = {
 	major: number
@@ -181,7 +233,7 @@ const changeActionLabel = computed(() => {
 	return ''
 })
 
-const hasSidebarSelect = computed(() => isAdmin.value)
+const hasSidebarSelect = computed(() => !isLoading.value)
 const sidebarLabel = computed(() => hasSidebarSelect.value ? 'Select an app from store' : 'Loading…')
 const hasInfoPanel = computed(() => selectedApp.value || installedVersion.value || versions.value.length > 0 || availableSource.value || errorMessage.value || hasCheckedVersions.value)
 const hasSplitLayout = computed(() => Boolean(selectedApp.value || installedVersion.value || hasInstallResult.value))
@@ -266,6 +318,9 @@ const normalizeInstallResult = (payload: {
 	message?: string
 	dryRun?: boolean
 	installStatus?: string
+	stage?: string | null
+	category?: string | null
+	hint?: string | null
 	debug?: unknown
 }): InstallResult => {
 	const normalizedUpdateType = payload.updateType ?? 'none'
@@ -289,6 +344,9 @@ const normalizeInstallResult = (payload: {
 		message: finalMessage,
 		dryRun: Boolean(payload.dryRun),
 		installStatus: payload.installStatus || 'failed',
+		stage: payload.stage ?? null,
+		category: payload.category ?? null,
+		hint: payload.hint ?? null,
 		debug: Array.isArray(payload.debug) ? payload.debug as InstallDebugEntry[] : [],
 	}
 }
@@ -299,11 +357,11 @@ const installStatusTone = computed<'success' | 'warning' | 'error' | 'info'>(() 
 		return 'info'
 	}
 
-	if (result.installStatus === 'dry-run') {
+	if (result.installStatus === 'dry-run' || result.installStatus === 'reverted') {
 		return 'warning'
 	}
 
-	if (result.installStatus === 'failed' || result.installStatus === 'error') {
+	if (result.installStatus === 'failed' || result.installStatus === 'error' || result.installStatus === 'installed-but-broken') {
 		return 'error'
 	}
 
@@ -311,6 +369,16 @@ const installStatusTone = computed<'success' | 'warning' | 'error' | 'info'>(() 
 })
 
 const installStatusLabel = computed(() => {
+	const status = lastInstallResult.value?.installStatus
+	if (status === 'dry-run') {
+		return 'Dry run'
+	}
+	if (status === 'reverted') {
+		return 'Reverted'
+	}
+	if (status === 'installed-but-broken') {
+		return 'Installed but broken'
+	}
 	switch (installStatusTone.value) {
 	case 'warning':
 		return 'Dry run'
@@ -321,26 +389,7 @@ const installStatusLabel = computed(() => {
 	}
 })
 
-const checkAdmin = async (): Promise<void> => {
-	errorMessage.value = ''
-	try {
-		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/admin-check')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
-		const payload = await unwrapOcsResponse<{ isAdmin: boolean }>(response)
-		isAdmin.value = Boolean(payload.isAdmin)
-	} catch {
-		isAdmin.value = false
-		errorMessage.value = 'Could not verify admin permissions.'
-	} finally {
-		isLoading.value = false
-	}
-}
-
 const checkUpdateChannel = async (): Promise<void> => {
-	if (!isAdmin.value) {
-		updateChannel.value = ''
-		return
-	}
-
 	try {
 		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/update-channel')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
 		const payload = await unwrapOcsResponse<{ updateChannel: string }>(response)
@@ -351,10 +400,6 @@ const checkUpdateChannel = async (): Promise<void> => {
 }
 
 const loadApps = async (): Promise<void> => {
-	if (!isAdmin.value) {
-		return
-	}
-
 	try {
 		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/apps')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
 		const payload = await unwrapOcsResponse<{ apps: AppOption[] }>(response)
@@ -394,6 +439,8 @@ const checkVersions = async (preserveInstallResult = false): Promise<void> => {
 
 	isCheckingVersions.value = true
 	errorMessage.value = ''
+	availableSource.value = ''
+	installedVersion.value = ''
 
 		try {
 			const url = withOcsJson(`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(appId)}/versions`)
@@ -403,11 +450,12 @@ const checkVersions = async (preserveInstallResult = false): Promise<void> => {
 			versions?: AppVersion[]
 			installedVersion: string | null
 			source?: string
+			sourceId?: string
 			error?: string
 		}>(response)
 		versions.value = payload.availableVersions || payload.versions || []
 		installedVersion.value = payload.installedVersion || ''
-		availableSource.value = payload.source || ''
+		availableSource.value = payload.sourceId || payload.source || ''
 		errorMessage.value = payload.error ?? ''
 		hasCheckedVersions.value = true
 	} catch (error) {
@@ -456,6 +504,13 @@ const ensurePasswordConfirmation = async (): Promise<void> => {
 const onSelectApp = (appId: string) => {
 	selectedApp.value = appId
 	resetSelectedAppState()
+}
+
+// A source was (re)bound via the Sources panel; refresh versions if that app is selected.
+const onPanelBound = async (appId: string): Promise<void> => {
+	if (selectedApp.value === appId) {
+		await checkVersions(true)
+	}
 }
 
 const onPickApp = async (appId: string) => {
@@ -839,12 +894,22 @@ const endpoint = withOcsJson(
 			hasInstallResult.value = true
 
 			if (metaMessage) {
-				errorMessage.value = metaMessage
-				if (lastInstallResult.value) {
+				// Failure: prefer the structured backend payload over the generic
+				// OCS meta message. Show the actionable hint first, then the
+				// "what happened" message; fall back to metaMessage only when the
+				// backend supplied neither. Preserve the backend installStatus
+				// (e.g. reverted / installed-but-broken) instead of forcing failed.
+				const structured = lastInstallResult.value
+				const backendMessage = structured && structured.message && structured.message !== 'Install completed.'
+					? structured.message
+					: ''
+				const hint = structured?.hint || ''
+				errorMessage.value = hint || backendMessage || metaMessage
+				if (structured) {
 					lastInstallResult.value = {
-						...lastInstallResult.value,
-						message: metaMessage,
-						installStatus: 'failed',
+						...structured,
+						message: backendMessage || metaMessage,
+						installStatus: structured.installStatus || 'failed',
 					}
 				}
 			} else {
@@ -881,9 +946,16 @@ onMounted(async () => {
 		debugModeEnabled.value = storedDebugMode === 'true'
 	}
 
-	await checkAdmin()
-	await checkUpdateChannel()
-	await loadApps()
+	// Access is enforced server-side: the page is an admin-only ISettings
+	// section and every OCS endpoint guards on isAdmin(). No client-side admin
+	// probe is needed — load the data directly so a flaky probe can never blank
+	// out the panel for a confirmed admin.
+	try {
+		await checkUpdateChannel()
+		await loadApps()
+	} finally {
+		isLoading.value = false
+	}
 })
 
 watch([safeModeEnabled, installedVersion, selectedVersion], () => {
@@ -908,8 +980,8 @@ watch(debugModeEnabled, () => {
 </script>
 
 <template>
-	<NcContent app-name="app_versions">
-		<NcAppContent :class="$style.content">
+	<div :class="$style.section">
+		<div :class="$style.content">
 			<NcDialog
 				:open="isDowngradeConfirmOpen"
 				name="Confirm downgrade"
@@ -931,9 +1003,23 @@ watch(debugModeEnabled, () => {
 					Downgrading can break database schema assumptions if migrations were already applied in newer versions. Continue only if you are sure no incompatible schema changes are involved.
 				</p>
 				</NcDialog>
-				<div :class="$style.layout">
+			<h2>{{ t('app_versions', 'App Versions') }}</h2>
+			<div :class="$style.well">
+				<div ref="tablistEl" :class="$style.tabs" role="tablist" :aria-label="t('app_versions', 'App Versions sections')" @keydown="onTabKeydown">
+					<NcButton v-for="tab in tabs"
+						:id="`${tab.id}-tab`"
+						:key="tab.id"
+						role="tab"
+						:aria-selected="currentTab === tab.id ? 'true' : 'false'"
+						:aria-controls="`${tab.id}-panel`"
+						:tabindex="currentTab === tab.id ? 0 : -1"
+						:type="currentTab === tab.id ? 'primary' : 'tertiary'"
+						@click="currentTab = tab.id">
+						{{ tabLabel(tab.id) }}
+					</NcButton>
+				</div>
+				<div v-show="currentTab === 'apps'" id="apps-panel" role="tabpanel" aria-labelledby="apps-tab" :class="$style.layout">
 					<main :class="$style.mainContent">
-						<h2>App Versions!</h2>
 						<div :class="$style.settingsPanel">
 							<p v-if="updateChannel" :class="$style.updateChannel">
 								Update channel: <strong>{{ updateChannel }}</strong>
@@ -1021,6 +1107,12 @@ watch(debugModeEnabled, () => {
 													</div>
 												</div>
 												<p :class="$style.appCardDescription">{{ appCardDescription(app) }}</p>
+												<p
+													v-if="app.warning"
+													:class="[$style.appCardWarning, { [$style.appCardWarningBlocking]: app.manageable === false }]"
+												>
+													⚠ {{ app.warning }}
+												</p>
 											</div>
 											<button
 											v-if="!app.isCore"
@@ -1152,6 +1244,10 @@ watch(debugModeEnabled, () => {
 										</p>
 									</div>
 								</div>
+								<p v-if="isCheckingVersions" :class="$style.checkingNote" role="status" aria-live="polite">
+									<NcLoadingIcon :size="20" />
+									<span>{{ t('app_versions', 'Fetching available versions from the source — this can take a few seconds…') }}</span>
+								</p>
 								<p v-if="availableSource" :class="$style.note">
 									Versions source: {{ availableSource }}
 								</p>
@@ -1168,6 +1264,7 @@ watch(debugModeEnabled, () => {
 									{{ installStatusLabel }}
 								</p>
 								<p :class="$style.resultMessage">{{ lastInstallResult.message }}</p>
+								<p v-if="lastInstallResult.hint" :class="$style.resultHint">{{ lastInstallResult.hint }}</p>
 								<div :class="$style.resultGrid">
 									<div>
 										<span>App</span>
@@ -1184,6 +1281,14 @@ watch(debugModeEnabled, () => {
 									<div>
 										<span>Result</span>
 										<strong>{{ lastInstallResult.installedVersion || lastInstallResult.toVersion }}</strong>
+									</div>
+									<div v-if="lastInstallResult.category">
+										<span>Failure category</span>
+										<strong>{{ lastInstallResult.category }}</strong>
+									</div>
+									<div v-if="lastInstallResult.stage">
+										<span>Failed at stage</span>
+										<strong>{{ lastInstallResult.stage }}</strong>
 									</div>
 								</div>
 								<div
@@ -1222,14 +1327,38 @@ watch(debugModeEnabled, () => {
 					</div>
 				</main>
 			</div>
-		</NcAppContent>
-	</NcContent>
+			<SourcesPanel v-show="currentTab === 'sources'" id="sources-panel" role="tabpanel" aria-labelledby="sources-tab" :apps="apps" @bound="onPanelBound" />
+			<TokensPanel v-show="currentTab === 'tokens'" id="tokens-panel" role="tabpanel" aria-labelledby="tokens-tab" />
+			<TrustedSourcesPanel v-show="currentTab === 'trusted'" id="trusted-panel" role="tabpanel" aria-labelledby="trusted-tab" />
+			</div>
+		</div>
+	</div>
 </template>
 
 <style module>
+.section {
+	display: block;
+}
+
 .content {
-	height: 100%;
-	margin: 16px;
+	margin: 0;
+}
+
+.well {
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	background: var(--color-main-background);
+	padding: 16px;
+	margin-top: 8px;
+}
+
+.tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-bottom: 16px;
+	border-bottom: 1px solid var(--color-border);
+	padding-bottom: 12px;
 }
 
 .layout {
@@ -1244,8 +1373,6 @@ watch(debugModeEnabled, () => {
 
 .mainContent {
 	width: 100%;
-	padding-left: 16px;
-	padding-right: 16px;
 	box-sizing: border-box;
 }
 
@@ -1253,11 +1380,8 @@ watch(debugModeEnabled, () => {
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
-	margin-top: 8px;
-	padding: 12px;
-	border: 1px solid var(--color-border);
-	border-radius: 8px;
-	background: var(--color-main-background);
+	padding-bottom: 16px;
+	border-bottom: 1px solid var(--color-border);
 }
 
 .settingsToggles {
@@ -1462,6 +1586,18 @@ watch(debugModeEnabled, () => {
 	font-size: 13px;
 	line-height: 1.35;
 	color: var(--color-text-maxcontrast);
+}
+
+.appCardWarning {
+	margin: 4px 0 0;
+	font-size: 12px;
+	line-height: 1.35;
+	color: var(--color-warning-text, var(--color-text-maxcontrast));
+}
+
+.appCardWarningBlocking {
+	color: var(--color-error-text, var(--color-error));
+	font-weight: 600;
 }
 
 .appCardButton {
@@ -1926,6 +2062,13 @@ watch(debugModeEnabled, () => {
 	font-weight: 600;
 }
 
+.resultHint {
+	margin: 4px 0 0;
+	font-size: 13px;
+	line-height: 1.4;
+	color: var(--color-text-maxcontrast);
+}
+
 .resultGrid {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2048,6 +2191,15 @@ watch(debugModeEnabled, () => {
 .note {
 	font-size: 12px;
 	margin: 2px 0 0;
+	color: var(--color-text-maxcontrast);
+}
+
+.checkingNote {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 8px 0 0;
+	font-size: 13px;
 	color: var(--color-text-maxcontrast);
 }
 
