@@ -1014,7 +1014,7 @@ watch(debugModeEnabled, () => {
 				</div>
 				<div v-show="currentTab === 'apps'" id="apps-panel" role="tabpanel" aria-labelledby="apps-tab" :class="$style.layout">
 					<main :class="$style.mainContent">
-						<h2>App Versions!</h2>
+						<h2>{{ t('app_versions', 'App Versions') }}</h2>
 						<div :class="$style.settingsPanel">
 							<p v-if="updateChannel" :class="$style.updateChannel">
 								Update channel: <strong>{{ updateChannel }}</strong>
