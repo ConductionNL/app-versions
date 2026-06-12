@@ -30,3 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The install result no longer overwrites the backend's actionable message with
   the generic "OCS request failed" text; the structured message and hint are
   shown instead.
+
+### Changed
+
+- App Versions UI moved from the top-level navigation to Settings → Administration (admin-only). Non-admin users who previously had the app in their navigation will no longer see it there.

@@ -39,7 +39,6 @@ type InstallResult = {
 	debug?: InstallDebugEntry[]
 }
 
-const isAdmin = ref(false)
 const isLoading = ref(true)
 const apps = ref<AppOption[]>([])
 const appFilter = ref('')
@@ -186,7 +185,7 @@ const changeActionLabel = computed(() => {
 	return ''
 })
 
-const hasSidebarSelect = computed(() => isAdmin.value)
+const hasSidebarSelect = computed(() => !isLoading.value)
 const sidebarLabel = computed(() => hasSidebarSelect.value ? 'Select an app from store' : 'Loading…')
 const hasInfoPanel = computed(() => selectedApp.value || installedVersion.value || versions.value.length > 0 || availableSource.value || errorMessage.value || hasCheckedVersions.value)
 const hasSplitLayout = computed(() => Boolean(selectedApp.value || installedVersion.value || hasInstallResult.value))
@@ -342,26 +341,7 @@ const installStatusLabel = computed(() => {
 	}
 })
 
-const checkAdmin = async (): Promise<void> => {
-	errorMessage.value = ''
-	try {
-		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/admin-check')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
-		const payload = await unwrapOcsResponse<{ isAdmin: boolean }>(response)
-		isAdmin.value = Boolean(payload.isAdmin)
-	} catch {
-		isAdmin.value = false
-		errorMessage.value = 'Could not verify admin permissions.'
-	} finally {
-		isLoading.value = false
-	}
-}
-
 const checkUpdateChannel = async (): Promise<void> => {
-	if (!isAdmin.value) {
-		updateChannel.value = ''
-		return
-	}
-
 	try {
 		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/update-channel')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
 		const payload = await unwrapOcsResponse<{ updateChannel: string }>(response)
@@ -372,10 +352,6 @@ const checkUpdateChannel = async (): Promise<void> => {
 }
 
 const loadApps = async (): Promise<void> => {
-	if (!isAdmin.value) {
-		return
-	}
-
 	try {
 		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/apps')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
 		const payload = await unwrapOcsResponse<{ apps: AppOption[] }>(response)
@@ -912,9 +888,16 @@ onMounted(async () => {
 		debugModeEnabled.value = storedDebugMode === 'true'
 	}
 
-	await checkAdmin()
-	await checkUpdateChannel()
-	await loadApps()
+	// Access is enforced server-side: the page is an admin-only ISettings
+	// section and every OCS endpoint guards on isAdmin(). No client-side admin
+	// probe is needed — load the data directly so a flaky probe can never blank
+	// out the panel for a confirmed admin.
+	try {
+		await checkUpdateChannel()
+		await loadApps()
+	} finally {
+		isLoading.value = false
+	}
 })
 
 watch([safeModeEnabled, installedVersion, selectedVersion], () => {
