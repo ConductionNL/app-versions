@@ -22,8 +22,13 @@ use OCP\IAppConfig;
 class TrustedSourceList {
 	private const CONFIG_KEY = 'trusted_sources';
 
-	/** @var list<string> */
-	private const DEFAULT_PATTERNS = ['ConductionNL/*'];
+	/**
+	 * Forge-qualified default allowlist. Note the owner differs per forge:
+	 * `ConductionNL` on GitHub, `Conduction` on Codeberg.
+	 *
+	 * @var list<string>
+	 */
+	private const DEFAULT_PATTERNS = ['github:ConductionNL/*', 'codeberg:Conduction/*'];
 
 	public function __construct(
 		private IAppConfig $config,
@@ -90,13 +95,19 @@ class TrustedSourceList {
 	 * @spec openspec/specs/external-sources/spec.md
 	 */
 	public function isAllowed(string $sourceId): bool {
-		$ownerRepo = $this->extractOwnerRepo($sourceId);
-		if ($ownerRepo === null) {
-			return $sourceId === 'appstore';
+		if ($sourceId === 'appstore') {
+			return true;
+		}
+
+		// A forge-release source id is `{forge}:owner/repo`. Patterns are
+		// forge-qualified globs; a legacy bare `owner/repo` pattern is
+		// normalized to `github:owner/repo` (github was the only forge before).
+		if (!$this->isForgeQualified($sourceId)) {
+			return false;
 		}
 
 		foreach ($this->getPatterns() as $pattern) {
-			if (fnmatch($pattern, $ownerRepo, FNM_NOESCAPE)) {
+			if (fnmatch($this->normalizePattern($pattern), $sourceId, FNM_NOESCAPE)) {
 				return true;
 			}
 		}
@@ -131,23 +142,39 @@ class TrustedSourceList {
 		$this->assertAllowed($binding->getId());
 	}
 
-	private function extractOwnerRepo(string $sourceId): ?string {
-		if (!str_starts_with($sourceId, 'github:')) {
-			return null;
+	/**
+	 * Whether a source id is a well-formed forge-qualified id
+	 * (`{forge}:owner/repo` for a known forge).
+	 */
+	private function isForgeQualified(string $sourceId): bool {
+		foreach ([SourceBinding::FORGE_GITHUB, SourceBinding::FORGE_CODEBERG] as $forge) {
+			$prefix = $forge . ':';
+			if (!str_starts_with($sourceId, $prefix)) {
+				continue;
+			}
+			$ownerRepo = substr($sourceId, strlen($prefix));
+
+			return str_contains($ownerRepo, '/')
+				&& !str_starts_with($ownerRepo, '/')
+				&& !str_ends_with($ownerRepo, '/');
 		}
 
-		$ownerRepo = substr($sourceId, strlen('github:'));
-		if (!str_contains($ownerRepo, '/')) {
-			return null;
+		return false;
+	}
+
+	/**
+	 * Normalizes an allowlist pattern to a forge-qualified glob. A pattern that
+	 * already carries a known forge prefix is used as-is; a legacy bare
+	 * `owner/repo` pattern is treated as `github:owner/repo` (github was the
+	 * only forge before this capability existed).
+	 */
+	private function normalizePattern(string $pattern): string {
+		foreach ([SourceBinding::FORGE_GITHUB, SourceBinding::FORGE_CODEBERG] as $forge) {
+			if (str_starts_with($pattern, $forge . ':')) {
+				return $pattern;
+			}
 		}
 
-		$parts = explode('/', $ownerRepo, 2);
-		$owner = $parts[0];
-		$repo = $parts[1] ?? '';
-		if ($owner === '' || $repo === '') {
-			return null;
-		}
-
-		return $owner . '/' . $repo;
+		return SourceBinding::FORGE_GITHUB . ':' . $pattern;
 	}
 }

@@ -17,23 +17,19 @@ use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 
 /**
- * Lists GitHub releases for an `owner/repo` and resolves a release into a
- * downloadable archive URL. Falls back to unauthenticated requests when no
- * applicable PAT exists; uses a PAT (resolved via `PatResolver`) when one
- * matches the binding's `owner/repo` and is visible to the current admin.
+ * Lists releases for an `owner/repo` on a git forge (GitHub, Codeberg/Forgejo)
+ * and resolves a release into a downloadable archive URL. The forge to talk to
+ * is read from the binding's `forge` field via {@see ForgeRegistry}; the only
+ * per-forge differences are the API base URL and the auth-header scheme, both
+ * carried by {@see Forge}. Release JSON is identical across forges.
  *
- * Source binding shape:
- *   {
- *     "kind": "github-release",
- *     "owner": "ConductionNL",
- *     "repo": "openregister",
- *     "assetPattern": "*.tar.gz"
- *   }
+ * Falls back to unauthenticated requests when no applicable PAT exists; uses a
+ * PAT (resolved via `PatResolver`, scoped to the binding's forge) when one
+ * matches and is visible to the current admin.
  *
  * @psalm-api
  */
-class GithubReleaseSource implements SourceInterface {
-	private const API_BASE = 'https://api.github.com';
+class ForgeReleaseSource implements SourceInterface {
 	private const USER_AGENT = 'Nextcloud-AppVersions';
 
 	public function __construct(
@@ -42,6 +38,7 @@ class GithubReleaseSource implements SourceInterface {
 		private PatResolver $patResolver,
 		private PatManager $patManager,
 		private IUserSession $userSession,
+		private ForgeRegistry $forgeRegistry,
 	) {
 	}
 
@@ -54,19 +51,20 @@ class GithubReleaseSource implements SourceInterface {
 	}
 
 	/**
-	 * Lists GitHub release tags (PAT-authenticated when matched), deduped newest-first; see "GitHub releases as a source".
+	 * Lists release tags (PAT-authenticated when matched), deduped newest-first; see "GitHub releases as a source".
 	 *
 	 * @spec openspec/specs/external-sources/spec.md
 	 */
 	public function listVersions(string $appId, SourceBinding $binding): array {
 		$ownerRepo = $binding->getOwnerRepo();
 		if ($ownerRepo === null) {
-			return ['versions' => [], 'error' => 'Source binding is not a github-release binding.'];
+			return ['versions' => [], 'error' => 'Source binding is not a forge-release binding.'];
 		}
+		$forge = $this->forgeRegistry->get($binding->getForge());
 
-		$result = $this->fetchReleases($ownerRepo);
+		$result = $this->fetchReleases($forge, $ownerRepo);
 		if ($result['ok'] === false) {
-			$error = $result['error'] ?? 'GitHub API request failed.';
+			$error = $result['error'] ?? $this->forgeName($forge) . ' API request failed.';
 
 			return ['versions' => [], 'error' => $error];
 		}
@@ -90,7 +88,7 @@ class GithubReleaseSource implements SourceInterface {
 	}
 
 	/**
-	 * Resolves a GitHub release into a download payload, enforcing unambiguous asset selection; see "External install integrity checks".
+	 * Resolves a release into a download payload, enforcing unambiguous asset selection; see "External install integrity checks".
 	 *
 	 * @spec openspec/specs/external-sources/spec.md
 	 */
@@ -99,8 +97,9 @@ class GithubReleaseSource implements SourceInterface {
 		if ($ownerRepo === null) {
 			return null;
 		}
+		$forge = $this->forgeRegistry->get($binding->getForge());
 
-		$result = $this->fetchReleases($ownerRepo);
+		$result = $this->fetchReleases($forge, $ownerRepo);
 		if ($result['ok'] === false) {
 			return null;
 		}
@@ -130,32 +129,36 @@ class GithubReleaseSource implements SourceInterface {
 	/**
 	 * @return array{ok: true, releases: array<int, mixed>}|array{ok: false, error: string}
 	 */
-	private function fetchReleases(string $ownerRepo): array {
+	private function fetchReleases(Forge $forge, string $ownerRepo): array {
 		$user = $this->userSession->getUser();
 		$uid = $user?->getUID();
-		$pat = $uid !== null ? $this->patResolver->findFor($ownerRepo, $uid) : null;
+		$pat = $uid !== null ? $this->patResolver->findFor($forge->id, $ownerRepo, $uid) : null;
 
-		$endpoint = sprintf('%s/repos/%s/releases?per_page=100', self::API_BASE, $ownerRepo);
+		$endpoint = $forge->releasesEndpoint($ownerRepo);
 
 		if ($pat === null) {
-			return $this->performFetch($endpoint, null);
+			return $this->performFetch($forge, $endpoint, null);
 		}
 
 		/** @var array{ok: true, releases: array<int, mixed>}|array{ok: false, error: string} */
-		return $this->patManager->useToken($pat, fn (string $token): array => $this->performFetch($endpoint, $token));
+		return $this->patManager->useToken($pat, fn (string $token): array => $this->performFetch($forge, $endpoint, $token));
 	}
 
 	/**
 	 * @return array{ok: true, releases: array<int, mixed>}|array{ok: false, error: string}
 	 */
-	private function performFetch(string $endpoint, ?string $token): array {
+	private function performFetch(Forge $forge, string $endpoint, ?string $token): array {
 		$headers = [
-			'Accept' => 'application/vnd.github+json',
+			'Accept' => 'application/json',
 			'User-Agent' => self::USER_AGENT,
-			'X-GitHub-Api-Version' => '2022-11-28',
 		];
+		// GitHub-specific content negotiation; harmless to omit on Forgejo.
+		if ($forge->id === ForgeRegistry::FORGE_GITHUB) {
+			$headers['Accept'] = 'application/vnd.github+json';
+			$headers['X-GitHub-Api-Version'] = '2022-11-28';
+		}
 		if ($token !== null) {
-			$headers['Authorization'] = 'Bearer ' . $token;
+			$headers['Authorization'] = $forge->authHeaderValue($token);
 		}
 
 		try {
@@ -165,38 +168,42 @@ class GithubReleaseSource implements SourceInterface {
 				// IClient throws on 4xx by default; we want to inspect the
 				// status code ourselves to produce useful errors.
 				'http_errors' => false,
+				// SSRF defence-in-depth: only public forge hosts are configured.
+				'nextcloud' => ['allow_local_address' => false],
 			]);
 		} catch (Exception $error) {
-			$this->logger->warning('GithubReleaseSource: fetch failed', [
+			$this->logger->warning('ForgeReleaseSource: fetch failed', [
+				'forge' => $forge->id,
 				'endpoint' => $endpoint,
 				'message' => $error->getMessage(),
 			]);
 
-			return ['ok' => false, 'error' => $this->humanizeError($error->getMessage())];
+			return ['ok' => false, 'error' => $this->humanizeError($forge, $error->getMessage())];
 		}
 
 		$status = $response->getStatusCode();
+		$name = $this->forgeName($forge);
 		if ($status === 404) {
-			return ['ok' => false, 'error' => 'GitHub repository not found.'];
+			return ['ok' => false, 'error' => $name . ' repository not found.'];
 		}
 		if ($status === 401) {
-			return ['ok' => false, 'error' => 'GitHub authentication failed — the configured PAT may be revoked or expired.'];
+			return ['ok' => false, 'error' => $name . ' authentication failed — the configured PAT may be revoked or expired.'];
 		}
 		if ($status === 403) {
-			return ['ok' => false, 'error' => 'GitHub rate limit exceeded — try again later, or configure a PAT.'];
+			return ['ok' => false, 'error' => $name . ' rate limit exceeded — try again later, or configure a PAT.'];
 		}
 		if ($status !== 200) {
-			return ['ok' => false, 'error' => sprintf('GitHub API returned HTTP %d.', $status)];
+			return ['ok' => false, 'error' => sprintf('%s API returned HTTP %d.', $name, $status)];
 		}
 
 		try {
 			$decoded = json_decode((string)$response->getBody(), true, 32, JSON_THROW_ON_ERROR);
 		} catch (\JsonException) {
-			return ['ok' => false, 'error' => 'GitHub API returned malformed JSON.'];
+			return ['ok' => false, 'error' => $name . ' API returned malformed JSON.'];
 		}
 
 		if (!is_array($decoded) || !array_is_list($decoded)) {
-			return ['ok' => false, 'error' => 'GitHub API returned an unexpected payload shape.'];
+			return ['ok' => false, 'error' => $name . ' API returned an unexpected payload shape.'];
 		}
 
 		return ['ok' => true, 'releases' => $decoded];
@@ -302,14 +309,23 @@ class GithubReleaseSource implements SourceInterface {
 		return $unique;
 	}
 
-	private function humanizeError(string $raw): string {
+	private function humanizeError(Forge $forge, string $raw): string {
+		$name = $this->forgeName($forge);
 		if (stripos($raw, 'rate limit') !== false) {
-			return 'GitHub rate limit exceeded — try again later, or configure a PAT.';
+			return $name . ' rate limit exceeded — try again later, or configure a PAT.';
 		}
-		if (stripos($raw, 'could not resolve host') !== false) {
-			return 'Could not reach api.github.com — check network connectivity.';
+		$host = parse_url($forge->apiBaseUrl, PHP_URL_HOST);
+		if (is_string($host) && stripos($raw, 'could not resolve host') !== false) {
+			return sprintf('Could not reach %s — check network connectivity.', $host);
 		}
 
-		return 'GitHub API request failed.';
+		return $name . ' API request failed.';
+	}
+
+	/**
+	 * Human display name for a forge, used in error messages.
+	 */
+	private function forgeName(Forge $forge): string {
+		return $forge->id === ForgeRegistry::FORGE_GITHUB ? 'GitHub' : ucfirst($forge->id);
 	}
 }

@@ -21,7 +21,7 @@ use InvalidArgumentException;
 class SourceRegistry {
 	public function __construct(
 		private AppStoreSource $appStore,
-		private GithubReleaseSource $github,
+		private ForgeReleaseSource $forgeSource,
 	) {
 	}
 
@@ -33,7 +33,8 @@ class SourceRegistry {
 	public function get(SourceBinding $binding): SourceInterface {
 		return match ($binding->kind) {
 			SourceBinding::KIND_APPSTORE => $this->appStore,
-			SourceBinding::KIND_GITHUB_RELEASE => $this->github,
+			// One driver serves all forges; it reads the forge from the binding.
+			SourceBinding::KIND_GITHUB_RELEASE => $this->forgeSource,
 			default => throw new InvalidArgumentException('Unsupported source kind: ' . $binding->kind),
 		};
 	}
@@ -56,6 +57,11 @@ class SourceRegistry {
 				'kind' => SourceBinding::KIND_GITHUB_RELEASE,
 				'label' => 'GitHub Releases (public)',
 			],
+			[
+				'id' => 'codeberg',
+				'kind' => SourceBinding::KIND_GITHUB_RELEASE,
+				'label' => 'Codeberg Releases (public)',
+			],
 		];
 	}
 
@@ -70,19 +76,25 @@ class SourceRegistry {
 			return SourceBinding::appStore();
 		}
 
-		if (str_starts_with($sourceId, 'github:')) {
-			$ownerRepo = substr($sourceId, strlen('github:'));
+		foreach ([SourceBinding::FORGE_GITHUB, SourceBinding::FORGE_CODEBERG] as $forge) {
+			$prefix = $forge . ':';
+			if (!str_starts_with($sourceId, $prefix)) {
+				continue;
+			}
+			$ownerRepo = substr($sourceId, strlen($prefix));
 			if (!str_contains($ownerRepo, '/')) {
-				throw new InvalidArgumentException('GitHub source id must be of the form github:owner/repo');
+				throw new InvalidArgumentException(sprintf('%s source id must be of the form %s:owner/repo', $forge, $forge));
 			}
 			$parts = explode('/', $ownerRepo, 2);
 			$owner = $parts[0];
 			$repo = $parts[1] ?? '';
 			if ($owner === '' || $repo === '') {
-				throw new InvalidArgumentException('GitHub source id has empty owner or repo');
+				throw new InvalidArgumentException(sprintf('%s source id has empty owner or repo', $forge));
 			}
 
-			return SourceBinding::github($owner, $repo);
+			return $forge === SourceBinding::FORGE_CODEBERG
+				? SourceBinding::codeberg($owner, $repo)
+				: SourceBinding::github($owner, $repo);
 		}
 
 		throw new InvalidArgumentException('Unknown source id: ' . $sourceId);

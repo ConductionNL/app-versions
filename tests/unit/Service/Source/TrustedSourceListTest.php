@@ -78,4 +78,29 @@ final class TrustedSourceListTest extends TestCase {
 		$this->assertFalse($list->isAllowed('github:'));
 		$this->assertFalse($list->isAllowed('github://repo'));
 	}
+
+	public function testCodebergDefaultAllowedAndCrossForgeIsolated(): void {
+		$list = $this->withPatterns('');
+
+		// Default trusts Conduction on Codeberg but ConductionNL on GitHub.
+		$this->assertTrue($list->isAllowed('codeberg:Conduction/pipelinq'));
+		$this->assertFalse($list->isAllowed('codeberg:ConductionNL/pipelinq'));
+		// Cross-forge isolation: the github default owner is not trusted on codeberg and vice-versa.
+		$this->assertFalse($list->isAllowed('github:Conduction/pipelinq'));
+	}
+
+	public function testLegacyBarePatternNormalizesToGithub(): void {
+		$list = $this->withPatterns('["acme/*"]');
+
+		$this->assertTrue($list->isAllowed('github:acme/widget'));
+		// A bare legacy pattern only trusts GitHub, never Codeberg.
+		$this->assertFalse($list->isAllowed('codeberg:acme/widget'));
+	}
+
+	public function testForgeQualifiedCustomPattern(): void {
+		$list = $this->withPatterns('["codeberg:acme/*"]');
+
+		$this->assertTrue($list->isAllowed('codeberg:acme/widget'));
+		$this->assertFalse($list->isAllowed('github:acme/widget'));
+	}
 }

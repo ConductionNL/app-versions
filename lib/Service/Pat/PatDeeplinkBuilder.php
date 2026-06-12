@@ -11,12 +11,14 @@ namespace OCA\AppVersions\Service\Pat;
 
 use InvalidArgumentException;
 use OCA\AppVersions\Db\Pat;
+use OCA\AppVersions\Service\Source\ForgeRegistry;
 use OCP\IRequest;
 
 /**
- * Builds prefilled GitHub URLs for PAT creation. Classic PATs accept full
- * scope+description prefill; fine-grained PATs only accept the page link, so
- * we return a structured `instructions` array for the UI to render.
+ * Builds prefilled token-creation URLs per forge/kind. GitHub classic PATs
+ * accept full scope+description prefill; GitHub fine-grained PATs and Codeberg
+ * (Forgejo) tokens only accept the page link, so we return a structured
+ * `instructions` array for the UI to render.
  *
  * @psalm-api
  */
@@ -26,11 +28,12 @@ class PatDeeplinkBuilder {
 
 	public function __construct(
 		private IRequest $request,
+		private ForgeRegistry $forgeRegistry,
 	) {
 	}
 
 	/**
-	 * Builds a prefilled GitHub PAT-creation deeplink per kind; see "PAT management API" (deeplink scenarios).
+	 * Builds a prefilled token-creation deeplink per kind; see "PAT management API" (deeplink scenarios).
 	 *
 	 * @spec openspec/specs/pat-management/spec.md
 	 * @return array{kind:string, url:string, instructions:list<string>}
@@ -39,8 +42,25 @@ class PatDeeplinkBuilder {
 		return match ($kind) {
 			Pat::KIND_CLASSIC => $this->buildClassic(),
 			Pat::KIND_FINE_GRAINED => $this->buildFineGrained(),
+			Pat::KIND_FORGE_TOKEN => $this->buildCodeberg(),
 			default => throw new InvalidArgumentException('Unknown PAT kind: ' . $kind),
 		};
+	}
+
+	/**
+	 * @return array{kind:string, url:string, instructions:list<string>}
+	 */
+	private function buildCodeberg(): array {
+		return [
+			'kind' => Pat::KIND_FORGE_TOKEN,
+			'url' => $this->forgeRegistry->get(ForgeRegistry::FORGE_CODEBERG)->tokenCreateUrl,
+			'instructions' => [
+				'Open the link to create a Codeberg access token (Settings → Applications → Manage access tokens).',
+				'Give it a name like "Nextcloud App Versions" and select read-only repository scopes only.',
+				'Set an expiration if your policy requires one.',
+				'Click "Generate Token" and paste the resulting value back into App Versions.',
+			],
+		];
 	}
 
 	/**
