@@ -32,13 +32,13 @@ The system MUST provide admin-only, password-confirmed endpoints to curate the t
 #### Scenario: Remove a pattern
 
 - **GIVEN** the allowlist contains `codeberg:Conduction/openregister`
-- **WHEN** an admin calls `DELETE /api/trusted-sources/{pattern}` with the URL-encoded pattern `codeberg%3AConduction%2Fopenregister` and a confirmed password
+- **WHEN** an admin calls `DELETE /api/trusted-sources?pattern=codeberg%3AConduction%2Fopenregister` (pattern as a query parameter) and a confirmed password
 - **THEN** the system MUST remove exactly that pattern and persist the result
 - **AND** a subsequent `GET /api/sources` MUST NOT return that pattern in `trustedPatterns`
 
 #### Scenario: Non-admin forbidden
 
-- **GIVEN** a non-admin user calls `POST /api/trusted-sources` or `DELETE /api/trusted-sources/{pattern}`
+- **GIVEN** a non-admin user calls `POST /api/trusted-sources` or `DELETE /api/trusted-sources?pattern=…`
 - **THEN** the system MUST return HTTP 403 Forbidden
 - **AND** the allowlist MUST remain unchanged
 
@@ -92,6 +92,6 @@ The system MUST provide HTTP endpoints for listing registered sources and the tr
 
 #### Scenario: Allowlist write delegates to TrustedSourceList
 
-- **GIVEN** an admin curates the allowlist via `POST /api/trusted-sources` or `DELETE /api/trusted-sources/{pattern}`
+- **GIVEN** an admin curates the allowlist via `POST /api/trusted-sources` or `DELETE /api/trusted-sources?pattern=…`
 - **THEN** the system MUST persist the change through `TrustedSourceList::setPatterns()`
 - **AND** the change MUST survive a Nextcloud restart (config-backed via `IAppConfig`)

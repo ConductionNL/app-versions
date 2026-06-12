@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import NcAppContent from '@nextcloud/vue/components/NcAppContent'
-import NcContent from '@nextcloud/vue/components/NcContent'
+import NcButton from '@nextcloud/vue/components/NcButton'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { t } from '@nextcloud/l10n'
+import SourcesPanel from './components/SourcesPanel.vue'
+import TokensPanel from './components/TokensPanel.vue'
+import TrustedSourcesPanel from './components/TrustedSourcesPanel.vue'
 
 type AppOption = {
 	id: string
@@ -69,6 +72,50 @@ const lastInstallResult = ref<InstallResult | null>(null)
 const hasInstallResult = ref(false)
 const installRequestFromVersion = ref('')
 const installRequestToVersion = ref('')
+
+// Admin-settings tabs: the existing apps→versions→install view plus the
+// source / token / trusted-source management panels.
+const tabs = [
+	{ id: 'apps' },
+	{ id: 'sources' },
+	{ id: 'tokens' },
+	{ id: 'trusted' },
+]
+const currentTab = ref('apps')
+const tablistEl = ref<HTMLElement | null>(null)
+
+// Literal strings (not interpolated) so they remain extractable for translation.
+const tabLabel = (id: string): string => ({
+	apps: t('app_versions', 'Apps'),
+	sources: t('app_versions', 'Sources'),
+	tokens: t('app_versions', 'Tokens'),
+	trusted: t('app_versions', 'Trusted sources'),
+}[id] ?? id)
+
+// WAI-ARIA tablist keyboard support: Left/Right (and Home/End) move between
+// tabs and move focus to the newly selected tab, per the tabs pattern.
+const onTabKeydown = async (event: KeyboardEvent): Promise<void> => {
+	const keys = ['ArrowRight', 'ArrowLeft', 'Home', 'End']
+	if (!keys.includes(event.key)) {
+		return
+	}
+	event.preventDefault()
+	const index = tabs.findIndex((tab) => tab.id === currentTab.value)
+	let next = index
+	if (event.key === 'ArrowRight') {
+		next = (index + 1) % tabs.length
+	} else if (event.key === 'ArrowLeft') {
+		next = (index - 1 + tabs.length) % tabs.length
+	} else if (event.key === 'Home') {
+		next = 0
+	} else if (event.key === 'End') {
+		next = tabs.length - 1
+	}
+	currentTab.value = tabs[next].id
+	await nextTick()
+	const buttons = tablistEl.value?.querySelectorAll<HTMLElement>('[role="tab"]')
+	buttons?.[next]?.focus()
+}
 
 type VersionRangeInfo = {
 	major: number
@@ -453,6 +500,13 @@ const ensurePasswordConfirmation = async (): Promise<void> => {
 const onSelectApp = (appId: string) => {
 	selectedApp.value = appId
 	resetSelectedAppState()
+}
+
+// A source was (re)bound via the Sources panel; refresh versions if that app is selected.
+const onPanelBound = async (appId: string): Promise<void> => {
+	if (selectedApp.value === appId) {
+		await checkVersions(true)
+	}
 }
 
 const onPickApp = async (appId: string) => {
@@ -922,8 +976,8 @@ watch(debugModeEnabled, () => {
 </script>
 
 <template>
-	<NcContent app-name="app_versions">
-		<NcAppContent :class="$style.content">
+	<div :class="$style.section">
+		<div :class="$style.content">
 			<NcDialog
 				:open="isDowngradeConfirmOpen"
 				name="Confirm downgrade"
@@ -945,7 +999,20 @@ watch(debugModeEnabled, () => {
 					Downgrading can break database schema assumptions if migrations were already applied in newer versions. Continue only if you are sure no incompatible schema changes are involved.
 				</p>
 				</NcDialog>
-				<div :class="$style.layout">
+				<div ref="tablistEl" :class="$style.tabs" role="tablist" :aria-label="t('app_versions', 'App Versions sections')" @keydown="onTabKeydown">
+					<NcButton v-for="tab in tabs"
+						:id="`${tab.id}-tab`"
+						:key="tab.id"
+						role="tab"
+						:aria-selected="currentTab === tab.id ? 'true' : 'false'"
+						:aria-controls="`${tab.id}-panel`"
+						:tabindex="currentTab === tab.id ? 0 : -1"
+						:type="currentTab === tab.id ? 'primary' : 'tertiary'"
+						@click="currentTab = tab.id">
+						{{ tabLabel(tab.id) }}
+					</NcButton>
+				</div>
+				<div v-show="currentTab === 'apps'" id="apps-panel" role="tabpanel" aria-labelledby="apps-tab" :class="$style.layout">
 					<main :class="$style.mainContent">
 						<h2>App Versions!</h2>
 						<div :class="$style.settingsPanel">
@@ -1251,14 +1318,29 @@ watch(debugModeEnabled, () => {
 					</div>
 				</main>
 			</div>
-		</NcAppContent>
-	</NcContent>
+			<SourcesPanel v-show="currentTab === 'sources'" id="sources-panel" role="tabpanel" aria-labelledby="sources-tab" :apps="apps" @bound="onPanelBound" />
+			<TokensPanel v-show="currentTab === 'tokens'" id="tokens-panel" role="tabpanel" aria-labelledby="tokens-tab" />
+			<TrustedSourcesPanel v-show="currentTab === 'trusted'" id="trusted-panel" role="tabpanel" aria-labelledby="trusted-tab" />
+		</div>
+	</div>
 </template>
 
 <style module>
+.section {
+	display: block;
+}
+
 .content {
-	height: 100%;
-	margin: 16px;
+	margin: 0;
+}
+
+.tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-bottom: 16px;
+	border-bottom: 1px solid var(--color-border);
+	padding-bottom: 8px;
 }
 
 .layout {
