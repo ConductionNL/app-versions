@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
+import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { t } from '@nextcloud/l10n'
 import SourcesPanel from './components/SourcesPanel.vue'
@@ -438,6 +439,8 @@ const checkVersions = async (preserveInstallResult = false): Promise<void> => {
 
 	isCheckingVersions.value = true
 	errorMessage.value = ''
+	availableSource.value = ''
+	installedVersion.value = ''
 
 		try {
 			const url = withOcsJson(`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(appId)}/versions`)
@@ -1000,6 +1003,8 @@ watch(debugModeEnabled, () => {
 					Downgrading can break database schema assumptions if migrations were already applied in newer versions. Continue only if you are sure no incompatible schema changes are involved.
 				</p>
 				</NcDialog>
+			<h2>{{ t('app_versions', 'App Versions') }}</h2>
+			<div :class="$style.well">
 				<div ref="tablistEl" :class="$style.tabs" role="tablist" :aria-label="t('app_versions', 'App Versions sections')" @keydown="onTabKeydown">
 					<NcButton v-for="tab in tabs"
 						:id="`${tab.id}-tab`"
@@ -1015,7 +1020,6 @@ watch(debugModeEnabled, () => {
 				</div>
 				<div v-show="currentTab === 'apps'" id="apps-panel" role="tabpanel" aria-labelledby="apps-tab" :class="$style.layout">
 					<main :class="$style.mainContent">
-						<h2>{{ t('app_versions', 'App Versions') }}</h2>
 						<div :class="$style.settingsPanel">
 							<p v-if="updateChannel" :class="$style.updateChannel">
 								Update channel: <strong>{{ updateChannel }}</strong>
@@ -1240,6 +1244,10 @@ watch(debugModeEnabled, () => {
 										</p>
 									</div>
 								</div>
+								<p v-if="isCheckingVersions" :class="$style.checkingNote" role="status" aria-live="polite">
+									<NcLoadingIcon :size="20" />
+									<span>{{ t('app_versions', 'Fetching available versions from the source — this can take a few seconds…') }}</span>
+								</p>
 								<p v-if="availableSource" :class="$style.note">
 									Versions source: {{ availableSource }}
 								</p>
@@ -1322,6 +1330,7 @@ watch(debugModeEnabled, () => {
 			<SourcesPanel v-show="currentTab === 'sources'" id="sources-panel" role="tabpanel" aria-labelledby="sources-tab" :apps="apps" @bound="onPanelBound" />
 			<TokensPanel v-show="currentTab === 'tokens'" id="tokens-panel" role="tabpanel" aria-labelledby="tokens-tab" />
 			<TrustedSourcesPanel v-show="currentTab === 'trusted'" id="trusted-panel" role="tabpanel" aria-labelledby="trusted-tab" />
+			</div>
 		</div>
 	</div>
 </template>
@@ -1335,13 +1344,21 @@ watch(debugModeEnabled, () => {
 	margin: 0;
 }
 
+.well {
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	background: var(--color-main-background);
+	padding: 16px;
+	margin-top: 8px;
+}
+
 .tabs {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 4px;
 	margin-bottom: 16px;
 	border-bottom: 1px solid var(--color-border);
-	padding-bottom: 8px;
+	padding-bottom: 12px;
 }
 
 .layout {
@@ -1356,8 +1373,6 @@ watch(debugModeEnabled, () => {
 
 .mainContent {
 	width: 100%;
-	padding-left: 16px;
-	padding-right: 16px;
 	box-sizing: border-box;
 }
 
@@ -1365,11 +1380,8 @@ watch(debugModeEnabled, () => {
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
-	margin-top: 8px;
-	padding: 12px;
-	border: 1px solid var(--color-border);
-	border-radius: 8px;
-	background: var(--color-main-background);
+	padding-bottom: 16px;
+	border-bottom: 1px solid var(--color-border);
 }
 
 .settingsToggles {
@@ -2179,6 +2191,15 @@ watch(debugModeEnabled, () => {
 .note {
 	font-size: 12px;
 	margin: 2px 0 0;
+	color: var(--color-text-maxcontrast);
+}
+
+.checkingNote {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 8px 0 0;
+	font-size: 13px;
 	color: var(--color-text-maxcontrast);
 }
 

@@ -55,7 +55,7 @@ class InstallerService {
 	 * Returns installed apps enriched with metadata for frontend cards; see "List Installed Apps".
 	 *
 	 * @spec openspec/specs/version-management/spec.md
-	 * @return list<array{id:string,label:string,description:string,summary:string,preview:string,isCore:bool,boundSourceId:?string,manageable:bool,warning:?string}>
+	 * @return list<array{id:string,label:string,description:string,summary:string,preview:string,isCore:bool,isShipped:bool,boundSourceId:?string,manageable:bool,warning:?string}>
 	 */
 	public function getInstalledApps(): array {
 		$installedApps = array_values(array_filter(
@@ -103,6 +103,7 @@ class InstallerService {
 					'summary' => $summary,
 					'preview' => $preview,
 					'isCore' => in_array($appId, $alwaysEnabledApps, true),
+					'isShipped' => $appManager->isShipped($appId),
 					'boundSourceId' => $binding?->getId(),
 					'manageable' => $env['manageable'],
 					'warning' => $env['warning'],
@@ -142,6 +143,15 @@ class InstallerService {
 
 		$source = $this->sourceRegistry->get($binding);
 		$result = $source->listVersions($appId, $binding);
+
+		// Shipped apps (bundled with the server release) are never published to
+		// the App Store, so a store miss is expected — explain it instead of
+		// surfacing a generic "not available" error.
+		if ($result['error'] === 'App is not available in the Nextcloud App Store.'
+			&& $this->appManager->isShipped($appId)
+		) {
+			$result['error'] = 'This app ships with Nextcloud itself: its version follows the server release and it is not distributed via the App Store. Bind a forge source to manage it from a repository instead.';
+		}
 
 		$installedVersion = null;
 		try {
