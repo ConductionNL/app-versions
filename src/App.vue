@@ -447,11 +447,12 @@ const checkVersions = async (preserveInstallResult = false): Promise<void> => {
 			versions?: AppVersion[]
 			installedVersion: string | null
 			source?: string
+			sourceId?: string
 			error?: string
 		}>(response)
 		versions.value = payload.availableVersions || payload.versions || []
 		installedVersion.value = payload.installedVersion || ''
-		availableSource.value = payload.source || ''
+		availableSource.value = payload.sourceId || payload.source || ''
 		errorMessage.value = payload.error ?? ''
 		hasCheckedVersions.value = true
 	} catch (error) {
