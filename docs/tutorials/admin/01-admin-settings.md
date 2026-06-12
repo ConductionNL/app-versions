@@ -10,11 +10,6 @@ A first look at the App Versions admin panel — where it lives, what
 the installed-apps list looks like, and how to tell the App Store
 source is wired up.
 
-> **This guide is being written as App Versions approaches feature-completeness.**
-> Bodies and screenshots fill in once the admin UI lands. Follow the
-> [Codeberg repository](https://codeberg.org/Conduction/app-versions) for
-> milestones.
-
 ## Goal
 
 By the end of this guide you will have opened App Versions from the
@@ -31,9 +26,18 @@ responds without an error banner.
 
 ## Steps
 
-The numbered steps land here once the UI is built. Each step that
-warrants a screenshot will get a matching shoot() call in the
-`docs-screenshots` capture spec (see ADR-030 / journeydoc).
+1. Sign in as an admin and open **Settings → Administration → App
+   Versions** (it has its own section in the left sidebar — App
+   Versions deliberately has no entry in the top app navigation).
+2. The panel opens on the **Apps** tab: the update channel and safe-mode
+   toggles at the top, then the searchable grid of installed apps. The
+   other tabs (**Sources**, **Tokens**, **Trusted sources**) configure
+   [external forge sources](./03-github-source.md).
+3. Pick any app card via **Choose app**. A status note shows while the
+   version list is fetched from the active source; the footer then names
+   that source (`appstore` by default).
+
+![The App Versions admin panel on the Apps tab](/img/tutorials/admin-overview.png)
 
 ## Verification
 
