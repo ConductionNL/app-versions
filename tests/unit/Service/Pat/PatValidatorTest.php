@@ -7,6 +7,7 @@ namespace OCA\AppVersions\Tests\Unit\Service\Pat;
 use Exception;
 use OCA\AppVersions\Db\Pat;
 use OCA\AppVersions\Service\Pat\PatValidator;
+use OCA\AppVersions\Service\Source\ForgeRegistry;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
@@ -31,7 +32,7 @@ final class PatValidatorTest extends TestCase {
 
 		$logger = $this->createMock(LoggerInterface::class);
 
-		return new PatValidator($clientService, $logger);
+		return new PatValidator($clientService, $logger, new ForgeRegistry());
 	}
 
 	private function buildValidatorWithException(Exception $error): PatValidator {
@@ -41,7 +42,7 @@ final class PatValidatorTest extends TestCase {
 		$clientService = $this->createMock(IClientService::class);
 		$clientService->method('newClient')->willReturn($client);
 
-		return new PatValidator($clientService, $this->createMock(LoggerInterface::class));
+		return new PatValidator($clientService, $this->createMock(LoggerInterface::class), new ForgeRegistry());
 	}
 
 	public function testDetectKindClassic(): void {
@@ -75,6 +76,18 @@ final class PatValidatorTest extends TestCase {
 		$this->assertNotNull($result->error);
 		$this->assertStringContainsString('write:packages', $result->error);
 		$this->assertStringContainsString('admin:org', $result->error);
+	}
+
+	public function testUnknownForgeRejectedInBandNotThrown(): void {
+		// An unknown forge must fail closed as a rejected ValidationResult (-> 400),
+		// not throw InvalidArgumentException (which would surface as HTTP 500).
+		$validator = $this->buildValidator(200);
+
+		$result = $validator->validate('ghp_anyclassic1234567890abcdef1234567890abcdef', 'gitlab');
+
+		$this->assertFalse($result->ok);
+		$this->assertNotNull($result->error);
+		$this->assertStringContainsString('Unknown forge', $result->error);
 	}
 
 	public function testInvalidTokenRejectedOn401(): void {
@@ -138,5 +151,27 @@ final class PatValidatorTest extends TestCase {
 
 		$this->assertTrue($result->ok);
 		$this->assertSame(['public_repo'], $result->scopes);
+	}
+
+	public function testCodebergTokenAcceptedWithUnverifiableScope(): void {
+		// Forgejo exposes no scope header, so a valid (HTTP 200) token is accepted best-effort.
+		$validator = $this->buildValidator(200);
+
+		$result = $validator->validate('cb-opaque-token-value', 'codeberg');
+
+		$this->assertTrue($result->ok);
+		$this->assertSame([], $result->scopes);
+		$this->assertNull($result->expiresAt);
+		$this->assertNotEmpty($result->warnings);
+		$this->assertStringContainsString('unverifiable_scope', $result->warnings[0]);
+	}
+
+	public function testCodebergInvalidTokenRejected(): void {
+		$validator = $this->buildValidator(401);
+
+		$result = $validator->validate('cb-bad-token', 'codeberg');
+
+		$this->assertFalse($result->ok);
+		$this->assertSame('Token is invalid or revoked.', $result->error);
 	}
 }

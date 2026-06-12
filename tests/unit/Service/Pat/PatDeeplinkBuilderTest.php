@@ -7,6 +7,7 @@ namespace OCA\AppVersions\Tests\Unit\Service\Pat;
 use InvalidArgumentException;
 use OCA\AppVersions\Db\Pat;
 use OCA\AppVersions\Service\Pat\PatDeeplinkBuilder;
+use OCA\AppVersions\Service\Source\ForgeRegistry;
 use OCP\IRequest;
 use PHPUnit\Framework\TestCase;
 
@@ -15,7 +16,7 @@ final class PatDeeplinkBuilderTest extends TestCase {
 		$request = $this->createMock(IRequest::class);
 		$request->method('getServerHost')->willReturn($host);
 
-		return new PatDeeplinkBuilder($request);
+		return new PatDeeplinkBuilder($request, new ForgeRegistry());
 	}
 
 	public function testClassicDeeplinkContainsScopeAndDescription(): void {
@@ -39,6 +40,14 @@ final class PatDeeplinkBuilderTest extends TestCase {
 			str_contains(implode(' ', $result['instructions']), 'Read-only'),
 			'Instructions should remind admin to use Read-only permissions'
 		);
+	}
+
+	public function testCodebergDeeplinkReturnsForgeTokenKindAndUrl(): void {
+		$result = $this->buildBuilder()->build(Pat::KIND_FORGE_TOKEN);
+
+		$this->assertSame(Pat::KIND_FORGE_TOKEN, $result['kind']);
+		$this->assertStringContainsString('codeberg.org', $result['url']);
+		$this->assertNotEmpty($result['instructions']);
 	}
 
 	public function testUnknownKindRejected(): void {

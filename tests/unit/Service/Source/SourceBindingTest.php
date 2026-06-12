@@ -68,4 +68,42 @@ final class SourceBindingTest extends TestCase {
 
 		$this->assertSame('*.tar.gz', $binding->getAssetPattern());
 	}
+
+	public function testCodebergFactoryIdAndForge(): void {
+		$binding = SourceBinding::codeberg('Conduction', 'pipelinq');
+
+		$this->assertSame(SourceBinding::KIND_GITHUB_RELEASE, $binding->kind);
+		$this->assertSame('codeberg', $binding->getForge());
+		$this->assertSame('codeberg:Conduction/pipelinq', $binding->getId());
+	}
+
+	public function testGithubIdAndForgeUnchanged(): void {
+		$binding = SourceBinding::github('ConductionNL', 'openregister');
+
+		$this->assertSame('github', $binding->getForge());
+		$this->assertSame('github:ConductionNL/openregister', $binding->getId());
+	}
+
+	public function testLegacyBindingWithoutForgeDefaultsToGithub(): void {
+		// A persisted pre-forge row has no `forge` key.
+		$binding = SourceBinding::fromArray([
+			'kind' => SourceBinding::KIND_GITHUB_RELEASE,
+			'owner' => 'ConductionNL',
+			'repo' => 'openregister',
+		]);
+
+		$this->assertSame('github', $binding->getForge());
+		$this->assertSame('github:ConductionNL/openregister', $binding->getId());
+	}
+
+	public function testUnknownForgeRejected(): void {
+		$this->expectException(InvalidArgumentException::class);
+
+		SourceBinding::fromArray([
+			'kind' => SourceBinding::KIND_GITHUB_RELEASE,
+			'forge' => 'gitlab',
+			'owner' => 'a',
+			'repo' => 'b',
+		]);
+	}
 }

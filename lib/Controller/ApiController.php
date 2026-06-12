@@ -282,6 +282,10 @@ class ApiController extends OCSController {
 			);
 		}
 
+		// TODO(#13 / PR #17): pass the selected $forge through to validate() once
+		// the sources UI sends it. Until then this hardwires GitHub validation, so
+		// the Codeberg PAT path (Pat.forge, PatResolver/PatValidator/PatDeeplinkBuilder
+		// Codeberg branches) is inert at runtime even though it is fully built here.
 		$result = $this->patValidator->validate($token);
 		if (!$result->ok) {
 			return new DataResponse(['message' => $result->error ?? 'PAT validation failed.'], Http::STATUS_BAD_REQUEST);

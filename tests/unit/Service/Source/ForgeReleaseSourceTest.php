@@ -7,7 +7,8 @@ namespace OCA\AppVersions\Tests\Unit\Service\Source;
 use Exception;
 use OCA\AppVersions\Service\Pat\PatManager;
 use OCA\AppVersions\Service\Pat\PatResolver;
-use OCA\AppVersions\Service\Source\GithubReleaseSource;
+use OCA\AppVersions\Service\Source\ForgeRegistry;
+use OCA\AppVersions\Service\Source\ForgeReleaseSource;
 use OCA\AppVersions\Service\Source\SourceBinding;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
@@ -16,8 +17,8 @@ use OCP\IUserSession;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
-final class GithubReleaseSourceTest extends TestCase {
-	private function buildSource(IClient $client): GithubReleaseSource {
+final class ForgeReleaseSourceTest extends TestCase {
+	private function buildSource(IClient $client): ForgeReleaseSource {
 		$clientService = $this->createMock(IClientService::class);
 		$clientService->method('newClient')->willReturn($client);
 
@@ -33,7 +34,7 @@ final class GithubReleaseSourceTest extends TestCase {
 		$userSession = $this->createMock(IUserSession::class);
 		$userSession->method('getUser')->willReturn(null);
 
-		return new GithubReleaseSource($clientService, $logger, $patResolver, $patManager, $userSession);
+		return new ForgeReleaseSource($clientService, $logger, $patResolver, $patManager, $userSession, new ForgeRegistry());
 	}
 
 	private function mockResponse(int $status, string $body): IResponse {
@@ -195,5 +196,44 @@ final class GithubReleaseSourceTest extends TestCase {
 		);
 
 		$this->assertNull($release);
+	}
+
+	public function testListVersionsForCodebergUsesForgejoEndpoint(): void {
+		$body = json_encode([
+			['tag_name' => 'v1.2.0'],
+			['tag_name' => '1.1.0'],
+		], JSON_THROW_ON_ERROR);
+
+		$capturedUrl = null;
+		$client = $this->createMock(IClient::class);
+		$client->method('get')->willReturnCallback(function (string $url) use (&$capturedUrl, $body): IResponse {
+			$capturedUrl = $url;
+
+			return $this->mockResponse(200, $body);
+		});
+
+		$result = $this->buildSource($client)->listVersions(
+			'pipelinq',
+			SourceBinding::codeberg('Conduction', 'pipelinq')
+		);
+
+		// The driver targets Forgejo's API base, not GitHub's.
+		$this->assertIsString($capturedUrl);
+		$this->assertStringContainsString('https://codeberg.org/api/v1/repos/Conduction/pipelinq/releases', (string)$capturedUrl);
+		$this->assertNull($result['error']);
+		$this->assertSame('1.2.0', $result['versions'][0]['version']);
+	}
+
+	public function testCodebergRepoNotFoundUsesCodebergWording(): void {
+		$client = $this->createMock(IClient::class);
+		$client->method('get')->willReturn($this->mockResponse(404, ''));
+
+		$result = $this->buildSource($client)->listVersions(
+			'pipelinq',
+			SourceBinding::codeberg('Conduction', 'pipelinq')
+		);
+
+		$this->assertSame([], $result['versions']);
+		$this->assertSame('Codeberg repository not found.', $result['error']);
 	}
 }
