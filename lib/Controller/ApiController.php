@@ -140,14 +140,21 @@ class ApiController extends OCSController {
 		}
 
 		$kind = $this->stringParam('kind', '');
+		$forge = $this->stringParam('forge', SourceBinding::FORGE_GITHUB);
 		try {
 			$binding = match ($kind) {
 				SourceBinding::KIND_APPSTORE => SourceBinding::appStore(),
-				SourceBinding::KIND_GITHUB_RELEASE => SourceBinding::github(
-					$this->stringParam('owner', ''),
-					$this->stringParam('repo', ''),
-					$this->stringParam('assetPattern', '*.tar.gz'),
-				),
+				SourceBinding::KIND_GITHUB_RELEASE => $forge === SourceBinding::FORGE_CODEBERG
+					? SourceBinding::codeberg(
+						$this->stringParam('owner', ''),
+						$this->stringParam('repo', ''),
+						$this->stringParam('assetPattern', '*.tar.gz'),
+					)
+					: SourceBinding::github(
+						$this->stringParam('owner', ''),
+						$this->stringParam('repo', ''),
+						$this->stringParam('assetPattern', '*.tar.gz'),
+					),
 				default => throw new InvalidArgumentException('Unknown source kind: ' . $kind),
 			};
 		} catch (InvalidArgumentException $error) {
@@ -165,6 +172,65 @@ class ApiController extends OCSController {
 			'sourceId' => $binding->getId(),
 			'binding' => $binding->toArray(),
 		]);
+	}
+
+	/**
+	 * Curated add of a forge-qualified trusted-source pattern; see "Source management API".
+	 *
+	 * Admin access is enforced by the runtime isAdmin() guard below (covered by
+	 * both the 403 and 200 controller tests). The declarative
+	 * #[AuthorizedAdminSetting] attribute is intentionally not used here: it
+	 * requires a class-string<IDelegatedSettings>, whereas Settings\Admin is a
+	 * plain ISettings — adopting it would also opt this endpoint into admin
+	 * delegation semantics, a product change to make deliberately.
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
+	#[PasswordConfirmationRequired(strict: false)]
+	#[ApiRoute(verb: 'POST', url: '/api/trusted-sources')]
+	public function addTrustedSource(): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$forge = $this->stringParam('forge', '');
+		$owner = $this->stringParam('owner', '');
+		/** @var mixed $repoRaw */
+		$repoRaw = $this->request->getParam('repo');
+		$repo = is_string($repoRaw) && trim($repoRaw) !== '' ? trim($repoRaw) : null;
+
+		try {
+			$patterns = $this->installerService->addTrustedPattern($forge, $owner, $repo);
+		} catch (InvalidArgumentException $error) {
+			return new DataResponse(['message' => $error->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+
+		return new DataResponse(['trustedPatterns' => $patterns]);
+	}
+
+	/**
+	 * Removes a trusted-source pattern. The pattern is passed as a `pattern`
+	 * query parameter (not a path segment) because patterns contain `/`, and
+	 * Apache rejects encoded slashes in the path (`AllowEncodedSlashes Off`) with
+	 * a 404 before the request reaches Nextcloud; query strings carry `%2F` fine.
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
+	#[PasswordConfirmationRequired(strict: false)]
+	#[ApiRoute(verb: 'DELETE', url: '/api/trusted-sources')]
+	public function removeTrustedSource(): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$pattern = $this->stringParam('pattern', '');
+		if ($pattern === '') {
+			return new DataResponse(['message' => 'A pattern is required.'], Http::STATUS_BAD_REQUEST);
+		}
+
+		$patterns = $this->installerService->removeTrustedPattern($pattern);
+
+		return new DataResponse(['trustedPatterns' => $patterns]);
 	}
 
 	/**
@@ -275,6 +341,7 @@ class ApiController extends OCSController {
 		$label = $this->stringParam('label', '');
 		$targetPattern = $this->stringParam('targetPattern', '');
 		$token = $this->stringParam('token', '');
+		$forge = $this->stringParam('forge', SourceBinding::FORGE_GITHUB);
 		if ($label === '' || $targetPattern === '' || $token === '') {
 			return new DataResponse(
 				['message' => 'label, targetPattern and token are required.'],
@@ -282,24 +349,26 @@ class ApiController extends OCSController {
 			);
 		}
 
-		// TODO(#13 / PR #17): pass the selected $forge through to validate() once
-		// the sources UI sends it. Until then this hardwires GitHub validation, so
-		// the Codeberg PAT path (Pat.forge, PatResolver/PatValidator/PatDeeplinkBuilder
-		// Codeberg branches) is inert at runtime even though it is fully built here.
-		$result = $this->patValidator->validate($token);
+		$result = $this->patValidator->validate($token, $forge);
 		if (!$result->ok) {
 			return new DataResponse(['message' => $result->error ?? 'PAT validation failed.'], Http::STATUS_BAD_REQUEST);
 		}
 
+		// Codeberg/Forgejo tokens are opaque; GitHub tokens are classified by prefix.
+		$kind = $forge === SourceBinding::FORGE_CODEBERG
+			? Pat::KIND_FORGE_TOKEN
+			: $this->patValidator->detectKind($token);
+
 		$pat = $this->patManager->create(
 			$user->getUID(),
 			$label,
-			$this->patValidator->detectKind($token),
+			$kind,
 			$targetPattern,
 			$token,
 			$result->scopes,
 			$result->warnings,
 			$result->expiresAt,
+			$forge,
 		);
 
 		return new DataResponse(['pat' => $pat->toRedacted(), 'warnings' => $result->warnings]);
@@ -429,7 +498,12 @@ class ApiController extends OCSController {
 			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
 		}
 
-		$kind = $this->stringParam('kind', Pat::KIND_FINE_GRAINED);
+		// A codeberg forge maps to the opaque forge-token deeplink; otherwise the
+		// caller selects a GitHub kind (classic / fine-grained).
+		$forge = $this->stringParam('forge', SourceBinding::FORGE_GITHUB);
+		$kind = $forge === SourceBinding::FORGE_CODEBERG
+			? Pat::KIND_FORGE_TOKEN
+			: $this->stringParam('kind', Pat::KIND_FINE_GRAINED);
 		try {
 			return new DataResponse($this->deeplinkBuilder->build($kind));
 		} catch (InvalidArgumentException $error) {
