@@ -13,16 +13,14 @@ status: implemented
 Version management is the core capability of App Versions. It allows Nextcloud administrators to view all available versions of any installed app, select a specific version (older or newer), and install it — replacing the currently installed version. This enables rollback after broken updates, testing compatibility with specific versions, and controlled upgrades.
 
 Each app may be bound to a single source (App Store or external such as GitHub releases) that is authoritative for its version listings. See the companion [external-sources spec](../external-sources/spec.md) for how external sources are validated and installed.
-
 ## Requirements
-
 ### Requirement: List Installed Apps [MVP]
 
 The system MUST display all currently installed Nextcloud apps with their name, current version, description, and icon. Core/always-enabled apps SHOULD be visually distinguished but still listed.
 
 #### Scenario: Admin views installed apps
 
-- GIVEN an admin user opens App Versions
+- GIVEN an admin user opens App Versions via Settings → Administration → App Versions
 - WHEN the app list loads
 - THEN all installed apps MUST be displayed as selectable cards
 - AND each card MUST show: app name, current version, icon, and summary
@@ -31,12 +29,13 @@ The system MUST display all currently installed Nextcloud apps with their name, 
 
 #### Scenario: Non-admin user is blocked
 
-- GIVEN a non-admin user navigates to App Versions
-- WHEN the page loads
-- THEN the system MUST show a "Forbidden" message
+- GIVEN a non-admin user
+- WHEN they open Settings
+- THEN the Administration section (and therefore App Versions) SHALL NOT be visible to them at the framework level
+- AND there MUST be no top-level navigation entry or page route through which they could reach the UI
+- AND if the user calls any App Versions API endpoint directly
+- THEN the system MUST return a "Forbidden" response
 - AND no app data MUST be returned from the API
-
----
 
 ### Requirement: Fetch Available Versions [MVP]
 
@@ -121,7 +120,7 @@ The version-list and install endpoints MUST accept an optional `source` paramete
 
 ### Requirement: Install Specific Version [MVP]
 
-The system MUST allow an admin to install any available version of an app, replacing the currently installed version. This operation MUST require password confirmation for security.
+The system MUST allow an admin to install any available version of an app, replacing the currently installed version. This operation MUST require password confirmation for security. Every install failure MUST return a structured payload — independent of the debug toggle — carrying `stage` (the last installer stage reached, e.g. `backup`, `download`, `checksum`, `archive-extracted`, `info-validated`, `finalize`), `category` (one of `preflight_permission | download | checksum_mismatch | extract | appid_mismatch | version_mismatch | incompatible | finalize | unknown`), and a `hint` (a human, actionable, translatable remediation string). The HTTP status MUST reflect the category and MUST NOT be a blanket 500 for classified failures; 500 is reserved for `unknown`/unexpected errors.
 
 #### Scenario: Install an older version (rollback)
 
@@ -131,6 +130,7 @@ The system MUST allow an admin to install any available version of an app, repla
 - AND replace the current app files with the downloaded version
 - AND show a success message with the new version number
 - AND the app MUST remain enabled after the version change
+- AND the payload `installStatus` MUST be `installed`
 
 #### Scenario: Install a newer version (upgrade)
 
@@ -145,7 +145,23 @@ The system MUST allow an admin to install any available version of an app, repla
 - WHEN the admin attempts to install a version
 - THEN the system MUST show a clear error message
 - AND the previous version MUST remain intact (no partial installs)
-- AND the error MUST include actionable information (e.g., "Insufficient disk space" or "Download failed: HTTP 404")
+- AND the response payload MUST include `stage`, `category`, and `hint` fields even when debug mode is OFF
+- AND the `hint` MUST be an actionable, translatable remediation string
+
+#### Scenario: Failure category drives HTTP status
+
+- GIVEN an install fails with category `preflight_permission`
+- WHEN the response is returned
+- THEN the HTTP status MUST NOT be 500
+- AND the status MUST be a category-appropriate code (e.g. 409 for `preflight_permission`, 422 for `incompatible`/`version_mismatch`/`appid_mismatch`/`checksum_mismatch`)
+- AND a genuinely unexpected error MUST map to category `unknown` with HTTP 500
+
+#### Scenario: Frontend surfaces the structured message
+
+- GIVEN the backend returns a failure payload with `message` and `hint`
+- WHEN the frontend renders the install result
+- THEN the frontend MUST display the backend `message`/`hint` rather than the generic OCS meta message
+- AND the result card MUST render the `stage`, `category`, and `hint`
 
 #### Scenario: Password confirmation required
 
@@ -154,17 +170,167 @@ The system MUST allow an admin to install any available version of an app, repla
 - THEN the system MUST require password re-confirmation before proceeding
 - AND the install MUST NOT proceed without valid password confirmation
 
----
-
 ### Requirement: Debug Mode [MVP]
 
-The system SHOULD provide a debug mode that returns detailed installation logs for troubleshooting.
+The system MUST provide a debug mode that returns detailed installation logs for troubleshooting.
 
 #### Scenario: Enable debug output
 
 - GIVEN an admin enables the "Debug" toggle before installing
 - WHEN the installation completes (success or failure)
 - THEN the response MUST include detailed logs: download URL, file sizes, extraction steps, any warnings
+
+### Requirement: Pre-flight Environment Checks [MVP]
+
+The system MUST detect environment conditions that prevent a successful install before downloading a release, and surface them both proactively (on the app card) and as a fail-fast guard at install time. The authoritative functional check MUST be whether the parent directory of the app's install destination is writable by the web-server user (`is_writable(dirname($destination))`, because `rename()` of the existing folder requires write permission on the parent). Dev-checkout heuristics — presence of a `.git` directory in the app folder, and/or the app-folder owner differing from the web-server uid — MAY be used to enrich the human-readable warning but MUST NOT, by themselves, block an install.
+
+#### Scenario: Non-manageable app is flagged on its card
+
+- GIVEN an app folder whose parent directory is not writable by the web-server user (e.g. a bind-mounted dev checkout)
+- WHEN the installed-apps list loads
+- THEN that app's card data MUST include `manageable: false`
+- AND a `warning` reason MUST be present explaining that the folder is not writable and installs will fail
+- AND the warning MUST be a translatable string
+- AND the warning MUST NOT prevent the card from being displayed
+
+#### Scenario: Writable app reports manageable
+
+- GIVEN an app folder whose parent directory is writable by the web-server user
+- WHEN the installed-apps list loads
+- THEN that app's card data MUST include `manageable: true`
+- AND no blocking `warning` MUST be set for writability
+
+#### Scenario: Install aborts fast on non-writable destination
+
+- GIVEN an app folder whose parent directory is not writable by the web-server user
+- WHEN the admin attempts to install a version of that app
+- THEN the system MUST abort before downloading any release
+- AND the failure payload MUST have category `preflight_permission`
+- AND the HTTP status MUST NOT be 500
+- AND the `hint` MUST advise fixing folder ownership/permissions (likely a bind-mounted dev checkout)
+
+#### Scenario: Dev-checkout heuristics enrich but do not block
+
+- GIVEN an app folder that is writable but contains a `.git` directory
+- WHEN the installed-apps list loads
+- THEN the install MUST NOT be blocked by the guard
+- AND any `warning` derived from the `.git`/owner heuristic MUST be advisory only
+
+### Requirement: Install Outcome Taxonomy and Finalize-Phase Recovery [MVP]
+
+The install result MUST report one of three outcomes via `installStatus`: `installed` (clean success), `reverted` (a pre-finalize failure occurred and the previous files were restored from backup — fully safe), or `installed-but-broken` (the finalize phase failed, or the previous files could not be cleanly restored, leaving state uncertain). To make `reverted` possible for finalize-phase failures, the backup folder (`.appversion-backup`) MUST be retained until `finalize()` succeeds in BOTH installers; on a finalize-phase throw the system MUST attempt to restore the previous files from the backup. Because Nextcloud database migrations are forward-only, the system MUST NOT claim a clean rollback after a finalize-phase failure; the outcome MUST surface that files were reverted but database state is uncertain and a manual check is advised. The system does NOT handle database migration rollbacks.
+
+#### Scenario: Clean install reports installed
+
+- GIVEN a download, extraction, file-swap, and finalize all succeed
+- WHEN the install completes
+- THEN `installStatus` MUST be `installed`
+- AND the backup folder MUST have been removed only after `finalize()` succeeded
+
+#### Scenario: Pre-finalize failure reports reverted
+
+- GIVEN the file copy fails before `finalize()` runs
+- WHEN the failure is handled
+- THEN the previous app files MUST be restored from the backup
+- AND `installStatus` MUST be `reverted`
+- AND the message MUST indicate the previous version is intact
+
+#### Scenario: Finalize-phase failure reports installed-but-broken
+
+- GIVEN `finalize()` throws (e.g. a declared migration or repair step fails)
+- WHEN the failure is handled
+- THEN the system MUST attempt to restore the previous files from the retained backup
+- AND `installStatus` MUST be `installed-but-broken`
+- AND the failure `category` MUST be `finalize`
+- AND the `hint` MUST state that files were reverted but database migrations may have partially applied and cannot be rolled back automatically, advising a manual check
+
+#### Scenario: Finalize failure with failed restore reports indeterminate state
+
+- GIVEN `finalize()` throws AND restoring the previous files from backup also fails
+- WHEN the failure is handled
+- THEN `installStatus` MUST be `installed-but-broken`
+- AND the `hint` MUST state that the install is in an indeterminate state requiring manual intervention
+
+#### Scenario: App that swallows its own init error is out of scope
+
+- GIVEN an installed app catches and logs its own initialization/boot exception (no exception propagates to App Versions)
+- WHEN the install otherwise completes the file swap and finalize successfully
+- THEN App Versions MUST report `installed`
+- AND App Versions is NOT required to detect the app's internal init failure (this is explicitly out of scope and undetectable)
+
+### Requirement: Admin Settings Placement [MVP]
+
+The App Versions UI MUST be surfaced exclusively as a section in the Nextcloud Administration settings panel, registered via `appinfo/info.xml` `<settings>` using an `OCP\Settings\IIconSection` (the sidebar section) and an `OCP\Settings\ISettings` (the form body). The previous top-level `<navigations>` entry MUST be removed, and the standalone page route (`PageController` / `FrontpageRoute`) MUST be removed so the only entry point is the admin settings section. The section name and any user-facing strings MUST be translatable.
+
+#### Scenario: Admin sees App Versions in Administration settings
+
+- GIVEN a Nextcloud administrator opens Settings
+- WHEN the administrator navigates to the Administration area
+- THEN an "App Versions" entry MUST appear in the Administration sidebar
+- AND the entry MUST display the translated section name and the app icon
+
+#### Scenario: Top-level navigation entry is absent
+
+- GIVEN any logged-in Nextcloud user
+- WHEN they view the top-level application navigation menu
+- THEN no "App Versions" entry MUST appear in the menu
+
+#### Scenario: No standalone page route remains
+
+- GIVEN the move to admin settings is complete
+- WHEN any user requests the former front-page route of the app
+- THEN no `FrontpageRoute`/page controller MUST serve the UI
+- AND the UI MUST be reachable only through Settings → Administration → App Versions
+
+### Requirement: Settings Form Renders the Existing SPA [MVP]
+
+The admin settings form MUST render the existing App Versions Vue SPA inside the settings panel, reusing the existing template and JS/CSS bundle without modification. The SPA MUST be fully functional (app list, version picker, install) within the embedded settings context.
+
+#### Scenario: SPA loads and functions inside the settings panel
+
+- GIVEN an administrator opens Settings → Administration → App Versions
+- WHEN the settings panel loads
+- THEN the App Versions Vue SPA MUST render within the settings page
+- AND its JavaScript and CSS bundles MUST be loaded (via `Util::addScript` / `Util::addStyle`)
+- AND the installed-apps list MUST populate and version management MUST be usable without leaving the settings panel
+
+### Requirement: Tabbed admin UI in the settings context [MVP]
+
+The admin UI MUST present a tab/section switcher with at least the sections Apps, Sources, Tokens, and Trusted sources, with the existing apps → versions → install view as the default tab. The UI MUST render cleanly inside the Nextcloud admin Settings panel (Settings → Administration), without the full app-shell chrome.
+
+#### Scenario: Tabs rendered in admin settings
+
+- **GIVEN** an admin opens Settings → Administration → App Versions
+- **WHEN** the panel loads
+- **THEN** the UI MUST display a tab/section switcher with Apps, Sources, Tokens, and Trusted sources
+- **AND** the Apps tab (the existing apps → versions → install view) MUST be selected by default
+
+#### Scenario: Switching tabs
+
+- **GIVEN** the admin is on the Apps tab
+- **WHEN** the admin selects the Sources, Tokens, or Trusted sources tab
+- **THEN** the corresponding panel (`SourcesPanel`, `TokensPanel`, or `TrustedSourcesPanel`) MUST be shown
+- **AND** the previously shown panel MUST be hidden
+
+#### Scenario: Settings-context shell adaptation
+
+- **GIVEN** the app is mounted inside the admin Settings section (per `move-to-admin-settings`)
+- **WHEN** the UI renders
+- **THEN** the UI MUST NOT render the full app-shell chrome (`NcContent`/`NcAppContent` navigation rail)
+- **AND** MUST use a settings-appropriate container so the SPA fits within the settings panel
+
+#### Scenario: Existing apps/versions flow preserved
+
+- **GIVEN** an admin is on the default Apps tab
+- **WHEN** the admin selects an app and views its versions
+- **THEN** the existing version list and install flow MUST behave as before this change
+
+#### Scenario: Non-admin user is blocked
+
+- **GIVEN** a non-admin user reaches the panel
+- **WHEN** it loads
+- **THEN** the UI MUST show a "Forbidden" state
+- **AND** the write endpoints MUST return HTTP 403
 
 ## User Stories
 
