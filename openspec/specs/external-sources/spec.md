@@ -11,9 +11,7 @@ status: implemented
 ## Purpose
 
 External sources allow App Versions to install Nextcloud apps from origins outside the Nextcloud App Store — most importantly GitHub releases — while keeping the App Store install path with its full code-signing chain unchanged. The trade-off (no Nextcloud-issued certificate) is made visible through a trusted-source allowlist, archive-content integrity checks, and clear UI labelling.
-
-## ADDED Requirements
-
+## Requirements
 ### Requirement: Source abstraction [MVP]
 
 The system MUST expose every install origin (App Store, GitHub releases, future others) through a single `SourceInterface` so the version picker and installer are not hard-coded to one source.
@@ -27,7 +25,7 @@ The system MUST expose every install origin (App Store, GitHub releases, future 
 
 ### Requirement: GitHub releases as a source [MVP]
 
-The system MUST support querying public GitHub releases as a source. For a source id of the form `github:{owner}/{repo}`, the system queries `GET https://api.github.com/repos/{owner}/{repo}/releases` and normalizes the response into the same shape as App Store responses.
+The system MUST support querying public releases from any registered forge through a single generic driver (`ForgeReleaseSource`). For a source id of the form `{forge}:{owner}/{repo}`, the system queries `GET {forge.apiBaseUrl}/repos/{owner}/{repo}/releases` and normalizes the response into the same shape as App Store responses. For `forge = github` the behaviour MUST be identical to the prior GitHub-only driver (`https://api.github.com/...`, `Authorization: Bearer`). The installer kind MUST remain `INSTALLER_EXTERNAL`.
 
 #### Scenario: Public releases available
 
@@ -42,47 +40,59 @@ The system MUST support querying public GitHub releases as a source. For a sourc
 - **GIVEN** the GitHub API responds with status 403 and `X-RateLimit-Remaining: 0`
 - **WHEN** the system tries to list versions
 - **THEN** the system MUST log the rate-limit reset time
-- **AND** the API response to the frontend MUST include a clear message ("GitHub rate limit exceeded — try again at HH:MM, or configure a PAT in proposal 2")
+- **AND** the API response to the frontend MUST include a clear message ("GitHub rate limit exceeded — try again later, or configure a PAT")
 - **AND** the system MUST NOT crash or expose stack traces
 
 #### Scenario: Repository not found
 
-- **GIVEN** the GitHub API responds with 404 for the repo
+- **GIVEN** the forge API responds with 404 for the repo
 - **WHEN** the version picker loads
 - **THEN** the system MUST return an empty version list with a "Repository not found" message
 
+#### Scenario: GitHub behaviour preserved under generic driver
+
+- **GIVEN** the driver is now `ForgeReleaseSource` parameterized by the `github` forge
+- **WHEN** a `github:owner/repo` binding lists versions
+- **THEN** the request URL, headers (`Authorization: Bearer`, `X-GitHub-Api-Version`), parsing, dedupe and sort MUST be unchanged from the prior GitHub-only behaviour
+
 ### Requirement: Trusted-source allowlist [MVP]
 
-The system MUST reject external installs from sources not in the configured allowlist. The allowlist is stored in `app_versions.trusted_sources` as a JSON array of `owner/repo` glob patterns. When unset, the default is `["ConductionNL/*"]`.
+The system MUST reject external installs from sources not in the configured allowlist. Allowlist patterns are **forge-qualified** globs of the form `{forge}:owner/repo` (e.g. `github:ConductionNL/*`, `codeberg:Conduction/*`), stored in `app_versions.trusted_sources` as a JSON array. Matching is performed against the binding's `{forge}:owner/repo` id. A stored pattern with **no** forge prefix (legacy bare `owner/repo`) MUST be treated as `github:owner/repo`. When unset, the default is `["github:ConductionNL/*", "codeberg:Conduction/*"]`. The existing fnmatch and owner/repo path-traversal protections MUST be preserved.
 
-#### Scenario: Source in allowlist
+#### Scenario: Forge-qualified source in allowlist
 
-- **GIVEN** trusted_sources is `["ConductionNL/*"]`
+- **GIVEN** trusted_sources is `["github:ConductionNL/*", "codeberg:Conduction/*"]`
 - **WHEN** an admin tries to install from `github:ConductionNL/openregister`
 - **THEN** `TrustedSourceList::assertAllowed` MUST succeed
-- **AND** the install MUST proceed
+- **WHEN** an admin tries to install from `codeberg:Conduction/openregister`
+- **THEN** `TrustedSourceList::assertAllowed` MUST succeed
 
-#### Scenario: Source not in allowlist
+#### Scenario: Untrusted Codeberg source rejected
 
-- **GIVEN** trusted_sources is `["ConductionNL/*"]`
-- **WHEN** an admin tries to install from `github:randomuser/randomapp`
+- **GIVEN** trusted_sources is `["github:ConductionNL/*", "codeberg:Conduction/*"]`
+- **WHEN** an admin tries to install from `codeberg:randomuser/randomapp`
 - **THEN** `TrustedSourceList::assertAllowed` MUST throw `UntrustedSourceException`
 - **AND** the system MUST return HTTP 403 with a message naming the rejected source
 - **AND** no download or filesystem change MUST happen
+
+#### Scenario: Legacy bare pattern treated as github
+
+- **GIVEN** trusted_sources is the legacy bare `["ConductionNL/*"]`
+- **WHEN** an admin tries to install from `github:ConductionNL/openregister`
+- **THEN** the pattern MUST be interpreted as `github:ConductionNL/*` and the source MUST be allowed
+- **AND** `codeberg:ConductionNL/openregister` MUST NOT match the bare github-only pattern
+
+#### Scenario: Cross-forge isolation
+
+- **GIVEN** trusted_sources is `["github:Conduction/*"]`
+- **WHEN** an admin tries to install from `codeberg:Conduction/openregister`
+- **THEN** `TrustedSourceList::assertAllowed` MUST throw `UntrustedSourceException` (a github pattern does not authorize a codeberg source)
 
 #### Scenario: Unset allowlist falls back to default
 
 - **GIVEN** `app_versions.trusted_sources` has never been set
 - **WHEN** the system reads the allowlist
-- **THEN** the default `["ConductionNL/*"]` MUST be used
-
-#### Scenario: Glob matching
-
-- **GIVEN** trusted_sources is `["ConductionNL/*", "myorg/myapp"]`
-- **THEN** `github:ConductionNL/anything` MUST match
-- **AND** `github:ConductionNL` (no repo) MUST NOT match
-- **AND** `github:myorg/myapp` MUST match
-- **AND** `github:myorg/otherapp` MUST NOT match
+- **THEN** the default `["github:ConductionNL/*", "codeberg:Conduction/*"]` MUST be used
 
 ### Requirement: External install integrity checks [MVP]
 
@@ -125,26 +135,140 @@ The system MUST verify the integrity of an externally-sourced artifact before in
 
 ### Requirement: Source management API [MVP]
 
-The system MUST provide HTTP endpoints for listing registered sources, the trusted-source allowlist, and binding a source to an app.
+The system MUST provide HTTP endpoints for listing registered sources and the trusted-source allowlist, binding a source to an app, and **curating the trusted-source allowlist** (adding and removing forge-qualified patterns). Allowlist write operations MUST be admin-only and password-confirmed and MUST reject over-broad patterns.
 
 #### Scenario: List sources
 
 - **GIVEN** an admin calls `GET /api/sources`
-- **THEN** the response MUST contain the registered source ids and the trusted-source globs
+- **THEN** the response MUST contain the registered source ids (including both github and codeberg forges) and the trusted-source patterns
 - **AND** the response MUST NOT contain any secrets
 
 #### Scenario: Bind a source
 
-- **GIVEN** an admin calls `POST /api/source/openregister/bind` with body `{kind: "github-release", owner: "ConductionNL", repo: "openregister"}`
+- **GIVEN** an admin calls `POST /api/source/openregister/bind` with body `{forge: "github", kind: "github-release", owner: "ConductionNL", repo: "openregister"}`
 - **THEN** the system MUST validate the source against the trusted-source allowlist
 - **AND** persist the binding in `app_versions.source.openregister`
-- **AND** future version queries for `openregister` MUST go to that GitHub source
+- **AND** future version queries for `openregister` MUST go to that forge source
 
 #### Scenario: Bind rejects untrusted source
 
 - **GIVEN** an admin calls `POST /api/source/foo/bind` with `owner: "untrusted"`
 - **THEN** the system MUST return HTTP 403
 - **AND** the binding MUST NOT be written
+
+#### Scenario: Allowlist write delegates to TrustedSourceList
+
+- **GIVEN** an admin curates the allowlist via `POST /api/trusted-sources` or `DELETE /api/trusted-sources?pattern=…`
+- **THEN** the system MUST persist the change through `TrustedSourceList::setPatterns()`
+- **AND** the change MUST survive a Nextcloud restart (config-backed via `IAppConfig`)
+
+### Requirement: Forge abstraction [MVP]
+
+The system MUST model each supported release forge as a `Forge` configuration entry carrying `id`, `apiBaseUrl`, `webBaseUrl`, `authScheme` (`Bearer` or `token`), `exposesScopeHeader` (bool), and `tokenCreateUrl`, exposed through a `ForgeRegistry`. The generic release driver and the token validator MUST read forge behaviour from this configuration rather than hard-coding GitHub.
+
+#### Scenario: Known forges registered
+
+- **GIVEN** the `ForgeRegistry`
+- **WHEN** `get('github')` and `get('codeberg')` are called
+- **THEN** `github` MUST resolve to apiBaseUrl `https://api.github.com`, authScheme `Bearer`, exposesScopeHeader `true`, tokenCreateUrl `https://github.com/settings/tokens`
+- **AND** `codeberg` MUST resolve to apiBaseUrl `https://codeberg.org/api/v1`, authScheme `token`, exposesScopeHeader `false`, tokenCreateUrl `https://codeberg.org/user/settings/applications`
+
+#### Scenario: Unknown forge rejected
+
+- **GIVEN** the `ForgeRegistry`
+- **WHEN** `get('gitlab')` is called
+- **THEN** the registry MUST throw, so unknown forges cannot reach an outbound call
+
+### Requirement: Codeberg releases as a source [MVP]
+
+The system MUST support querying public Codeberg (Forgejo) releases as a source. For a source id of the form `codeberg:{owner}/{repo}`, the system queries `GET https://codeberg.org/api/v1/repos/{owner}/{repo}/releases` and normalizes the Forgejo response (`tag_name`, `assets[].name`, `assets[].browser_download_url`) into the same shape as GitHub and App Store responses.
+
+#### Scenario: Public Codeberg releases listed via Forgejo API
+
+- **GIVEN** an admin has bound app `openregister` to source `codeberg:Conduction/openregister`
+- **WHEN** the version picker loads
+- **THEN** the system MUST fetch releases from `https://codeberg.org/api/v1/repos/Conduction/openregister/releases`
+- **AND** version strings MUST be derived from the release `tag_name` (stripping a leading `v` if present)
+- **AND** the response MUST be sorted newest-first
+- **AND** for a public repo the request MUST succeed unauthenticated
+
+#### Scenario: Codeberg release resolved to a download asset
+
+- **GIVEN** a Codeberg release `v2.5.0` with a single `*.tar.gz` asset
+- **WHEN** the install resolves the release
+- **THEN** the system MUST return the asset's `browser_download_url`, asset name, optional `.sha256` sibling URL, and normalized version
+- **AND** asset selection MUST enforce the same unambiguous-match rule as GitHub (fail on multiple matches with "set explicit assetPattern")
+
+#### Scenario: Codeberg auth header uses token scheme
+
+- **GIVEN** a matching access token resolves for `codeberg:Conduction/private-build`
+- **WHEN** the release listing runs
+- **THEN** the request MUST carry `Authorization: token <token>` (not `Bearer`)
+
+### Requirement: Trusted-allowlist management API [MVP]
+
+The system MUST provide admin-only, password-confirmed endpoints to curate the trusted-source allowlist by adding and removing forge-qualified patterns, delegating persistence to `TrustedSourceList::setPatterns()`. The system MUST reject over-broad patterns that would trust an entire forge or everything.
+
+#### Scenario: Curated add persists
+
+- **GIVEN** an admin calls `POST /api/trusted-sources` with `{forge: "codeberg", owner: "Conduction", repo: "openregister"}` and a confirmed password
+- **THEN** the system MUST construct the pattern `codeberg:Conduction/openregister`
+- **AND** persist it into the allowlist via `TrustedSourceList::setPatterns()`
+- **AND** a subsequent `GET /api/sources` MUST return `codeberg:Conduction/openregister` in `trustedPatterns`
+
+#### Scenario: Curated add of an owner wildcard
+
+- **GIVEN** an admin calls `POST /api/trusted-sources` with `{forge: "github", owner: "ConductionNL"}` (no `repo`) and a confirmed password
+- **THEN** the system MUST construct the pattern `github:ConductionNL/*`
+- **AND** persist it into the allowlist
+
+#### Scenario: Over-broad glob rejected
+
+- **GIVEN** an admin calls `POST /api/trusted-sources` with a payload that would yield `*`, `*/*`, `{forge}:*`, an empty owner, or an owner of exactly `*`
+- **THEN** the system MUST NOT modify the allowlist
+- **AND** the system MUST return HTTP 400 (or 422) with a clear message stating a concrete owner is required
+
+#### Scenario: Unknown forge or bad charset rejected
+
+- **GIVEN** an admin calls `POST /api/trusted-sources` with an unknown `forge`, or an `owner`/`repo` that does not match the safe charset `[A-Za-z0-9_.\-]+`
+- **THEN** the system MUST NOT modify the allowlist
+- **AND** the system MUST return HTTP 400 with a message naming the rejected forge or invalid characters
+
+#### Scenario: Remove a pattern
+
+- **GIVEN** the allowlist contains `codeberg:Conduction/openregister`
+- **WHEN** an admin calls `DELETE /api/trusted-sources?pattern=codeberg%3AConduction%2Fopenregister` (pattern as a query parameter) and a confirmed password
+- **THEN** the system MUST remove exactly that pattern and persist the result
+- **AND** a subsequent `GET /api/sources` MUST NOT return that pattern in `trustedPatterns`
+
+#### Scenario: Non-admin forbidden
+
+- **GIVEN** a non-admin user calls `POST /api/trusted-sources` or `DELETE /api/trusted-sources?pattern=…`
+- **THEN** the system MUST return HTTP 403 Forbidden
+- **AND** the allowlist MUST remain unchanged
+
+### Requirement: Source binding UI surfacing [MVP]
+
+The admin UI MUST surface source binding so an admin can view an app's current binding and bind a forge repository to it, for both github and codeberg forges, using the existing `GET /api/source/{appId}/binding` and `POST /api/source/{appId}/bind` endpoints.
+
+#### Scenario: Bind a Codeberg repo via the UI
+
+- **GIVEN** an admin opens the Sources tab and selects an installed app
+- **WHEN** the admin chooses forge `codeberg`, enters owner `Conduction` and repo `openregister`, and submits
+- **THEN** the UI MUST call `POST /api/source/{appId}/bind` with the forge-qualified binding
+- **AND** on success the version list for that app MUST load from the bound Codeberg source
+
+#### Scenario: Current binding displayed
+
+- **GIVEN** an app is bound to `github:ConductionNL/openregister`
+- **WHEN** the admin opens the Sources tab for that app
+- **THEN** the UI MUST display the current binding (forge, owner, repo) from `GET /api/source/{appId}/binding`
+
+#### Scenario: Allowlist surfaced for both forges
+
+- **GIVEN** the allowlist contains `github:ConductionNL/*` and `codeberg:Conduction/*`
+- **WHEN** the admin opens the Trusted sources tab
+- **THEN** the UI MUST list both forge-qualified patterns
 
 ## User Stories
 
