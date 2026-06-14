@@ -12,7 +12,7 @@ status: implemented
 
 A multi-source search aggregator that lets admins find Nextcloud apps to install across the App Store, their PAT-visible private GitHub repos, and (opt-in) public GitHub topic search — via a single API endpoint with a uniform result shape.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Provider interface [MVP]
 
