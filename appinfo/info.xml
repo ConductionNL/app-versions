@@ -8,7 +8,7 @@
 
 App Versions gives Nextcloud administrators the ability to roll back apps to previous versions or install specific newer versions. Essential for debugging, testing compatibility, and recovering from broken updates.</description>
 	<version>1.0.0</version>
-	<licence>agpl</licence>
+	<licence>EUPL-1.2</licence>
 	<author mail="info@conduction.nl" homepage="https://conduction.nl">Conduction B.V.</author>
 	<namespace>AppVersions</namespace>
 	<category>tools</category>
