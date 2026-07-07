@@ -10,6 +10,7 @@
 		<directory suffix="Test.php">unit/Service/Source</directory>
 		<directory suffix="Test.php">unit/Service/Pat</directory>
 		<directory suffix="Test.php">unit/Service/Discovery</directory>
+		<directory suffix="Test.php">unit/Service/Advisory</directory>
 		<directory suffix="Test.php">unit/Controller</directory>
 	</testsuite>
 	<source>
@@ -17,6 +18,7 @@
 			<directory suffix=".php">../lib/Service/Source</directory>
 			<directory suffix=".php">../lib/Service/Pat</directory>
 			<directory suffix=".php">../lib/Service/Discovery</directory>
+			<directory suffix=".php">../lib/Service/Advisory</directory>
 			<directory suffix=".php">../lib/Controller</directory>
 		</include>
 	</source>

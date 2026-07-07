@@ -15,6 +15,7 @@ namespace OCA\AppVersions\Controller;
 use InvalidArgumentException;
 use OCA\AppVersions\Db\Pat;
 use OCA\AppVersions\Db\PatMapper;
+use OCA\AppVersions\Service\Advisory\AdvisoryService;
 use OCA\AppVersions\Service\Discovery\DiscoveryAggregator;
 use OCA\AppVersions\Service\InstallerService;
 use OCA\AppVersions\Service\Pat\PatDeeplinkBuilder;
@@ -49,6 +50,7 @@ class ApiController extends OCSController {
 		private PatValidator $patValidator,
 		private PatDeeplinkBuilder $deeplinkBuilder,
 		private DiscoveryAggregator $discoveryAggregator,
+		private AdvisoryService $advisoryService,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -75,6 +77,23 @@ class ApiController extends OCSController {
 		}
 
 		return new DataResponse(['apps' => $this->installerService->getInstalledApps()]);
+	}
+
+	/**
+	 * Correlates each installed app's version against known security advisories
+	 * (admin-only, read-only). Returns a per-app map of advisory state
+	 * (`none` | `advisory-available` | `pinned-to-vulnerable`), the matching
+	 * advisories, and the recommended safe version. Never changes a version.
+	 *
+	 * @spec openspec/specs/security-advisory-correlation/spec.md
+	 */
+	#[ApiRoute(verb: 'GET', url: '/api/advisories')]
+	public function advisories(): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		return new DataResponse(['advisories' => $this->advisoryService->correlateAll()]);
 	}
 
 	/**

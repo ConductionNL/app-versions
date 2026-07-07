@@ -17,6 +17,9 @@ App Versions gives Nextcloud administrators the ability to roll back apps to pre
 	<dependencies>
 		<nextcloud min-version="31" max-version="34"/>
 	</dependencies>
+	<background-jobs>
+		<job>OCA\AppVersions\BackgroundJob\AdvisoryRefreshJob</job>
+	</background-jobs>
 	<settings>
 		<admin>OCA\AppVersions\Settings\Admin</admin>
 		<admin-section>OCA\AppVersions\Sections\AdminSection</admin-section>

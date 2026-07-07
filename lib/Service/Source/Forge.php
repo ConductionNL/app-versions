@@ -59,4 +59,13 @@ final class Forge {
 	public function userEndpoint(): string {
 		return $this->apiBaseUrl . '/user';
 	}
+
+	/**
+	 * Repository security-advisories endpoint for an `owner/repo`. GitHub and
+	 * Forgejo both expose `/repos/{owner}/{repo}/security-advisories`; the JSON
+	 * shape (ghsa_id / severity / summary / vulnerabilities[]) is compatible.
+	 */
+	public function advisoriesEndpoint(string $ownerRepo): string {
+		return sprintf('%s/repos/%s/security-advisories?per_page=100', $this->apiBaseUrl, $ownerRepo);
+	}
 }
