@@ -52,5 +52,5 @@ clearly as such.
 - Curious how it works at the API level? The specs linked above are
   the source of truth while the user-facing documentation catches up.
 
-Free and open source under the AGPL-3.0-or-later license. For support,
+Free and open source under the EUPL-1.2 license. For support,
 contact support@conduction.nl.
