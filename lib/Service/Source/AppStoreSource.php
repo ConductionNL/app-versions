@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace OCA\AppVersions\Service\Source;
 
 use Exception;
+use OCA\AppVersions\Service\Advisory\AdvisorySourceInterface;
 use OCP\Http\Client\IClientService;
 use OCP\IConfig;
 
@@ -26,7 +27,7 @@ use OCP\IConfig;
  *
  * @psalm-api
  */
-class AppStoreSource implements SourceInterface {
+class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 	private const PRIMARY_ENDPOINT = 'https://garm3.nextcloud.com/api/v1/apps.json';
 	private const PLATFORM_ENDPOINT = 'https://garm3.nextcloud.com/api/v1/platform/%s/apps.json';
 	private const MAX_PAGES = 20;
@@ -100,6 +101,84 @@ class AppStoreSource implements SourceInterface {
 		}
 
 		return null;
+	}
+
+	/**
+	 * Lists security advisories the App Store publishes for an app. The App
+	 * Store app payload may carry a `securityAdvisories` list (id, severity,
+	 * summary, affected version clauses, first patched version); when the feed
+	 * does not carry advisory data for an app, an empty list is returned (a
+	 * clean state, not an error). Reuses the existing app-payload fetch — no
+	 * new HTTP client.
+	 *
+	 * @spec openspec/specs/security-advisory-correlation/spec.md
+	 * @return array{advisories: list<array{id: string, severity: string, summary: string, affected: list<string>, firstPatchedVersion: ?string}>, error: ?string}
+	 */
+	public function listAdvisories(string $appId, SourceBinding $binding): array {
+		try {
+			$payload = $this->fetchAppPayload($appId);
+		} catch (Exception $error) {
+			return ['advisories' => [], 'error' => 'Could not fetch advisories from the app store: ' . $error->getMessage()];
+		}
+
+		if ($payload === null) {
+			return ['advisories' => [], 'error' => null];
+		}
+
+		/** @var mixed $raw */
+		$raw = $payload['securityAdvisories'] ?? $payload['security_advisories'] ?? null;
+		if (!is_array($raw)) {
+			return ['advisories' => [], 'error' => null];
+		}
+
+		return ['advisories' => $this->normalizeAdvisories($raw), 'error' => null];
+	}
+
+	/**
+	 * @param array<array-key, mixed> $raw
+	 * @return list<array{id: string, severity: string, summary: string, affected: list<string>, firstPatchedVersion: ?string}>
+	 */
+	private function normalizeAdvisories(array $raw): array {
+		$advisories = [];
+		/** @var mixed $entry */
+		foreach ($raw as $entry) {
+			if (!is_array($entry)) {
+				continue;
+			}
+			/** @var mixed $id */
+			$id = $entry['id'] ?? $entry['ghsa_id'] ?? null;
+			if (!is_string($id) || $id === '') {
+				continue;
+			}
+			$severity = $entry['severity'] ?? 'medium';
+			$summary = $entry['summary'] ?? ($entry['title'] ?? '');
+			$affected = [];
+			/** @var mixed $affectedRaw */
+			$affectedRaw = $entry['affected'] ?? $entry['affectedVersions'] ?? [];
+			if (is_string($affectedRaw)) {
+				$affectedRaw = array_map('trim', explode(',', $affectedRaw));
+			}
+			if (is_array($affectedRaw)) {
+				/** @var mixed $clause */
+				foreach ($affectedRaw as $clause) {
+					if (is_string($clause) && trim($clause) !== '') {
+						$affected[] = trim($clause);
+					}
+				}
+			}
+			/** @var mixed $patched */
+			$patched = $entry['firstPatchedVersion'] ?? $entry['first_patched_version'] ?? null;
+
+			$advisories[] = [
+				'id' => $id,
+				'severity' => is_string($severity) ? strtolower($severity) : 'medium',
+				'summary' => is_string($summary) ? $summary : '',
+				'affected' => $affected,
+				'firstPatchedVersion' => is_string($patched) && $patched !== '' ? $patched : null,
+			];
+		}
+
+		return $advisories;
 	}
 
 	/**

@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace OCA\AppVersions\Service\Source;
 
 use Exception;
+use OCA\AppVersions\Service\Advisory\AdvisorySourceInterface;
 use OCA\AppVersions\Service\Pat\PatManager;
 use OCA\AppVersions\Service\Pat\PatResolver;
 use OCP\Http\Client\IClientService;
@@ -32,7 +33,7 @@ use Psr\Log\LoggerInterface;
  *
  * @psalm-api
  */
-class ForgeReleaseSource implements SourceInterface {
+class ForgeReleaseSource implements SourceInterface, AdvisorySourceInterface {
 	private const USER_AGENT = 'Nextcloud-AppVersions';
 
 	public function __construct(
@@ -127,6 +128,115 @@ class ForgeReleaseSource implements SourceInterface {
 		}
 
 		return null;
+	}
+
+	/**
+	 * Lists published security advisories for the bound `owner/repo` from the
+	 * forge's `/security-advisories` endpoint (GitHub GHSA / Forgejo), reusing
+	 * the same PAT-authenticated fetch path as release listing — no new HTTP
+	 * client, no new secret. Each advisory is normalized to the correlation
+	 * record shape; transient errors return an empty list with a populated
+	 * `error` string rather than throwing.
+	 *
+	 * @spec openspec/specs/security-advisory-correlation/spec.md
+	 * @return array{advisories: list<array{id: string, severity: string, summary: string, affected: list<string>, firstPatchedVersion: ?string}>, error: ?string}
+	 */
+	public function listAdvisories(string $appId, SourceBinding $binding): array {
+		$ownerRepo = $binding->getOwnerRepo();
+		if ($ownerRepo === null) {
+			return ['advisories' => [], 'error' => 'Source binding is not a forge-release binding.'];
+		}
+		$forge = $this->forgeRegistry->get($binding->getForge());
+
+		$result = $this->fetchAdvisories($forge, $ownerRepo);
+		if ($result['ok'] === false) {
+			return ['advisories' => [], 'error' => $result['error'] ?? $this->forgeName($forge) . ' advisory request failed.'];
+		}
+
+		$advisories = [];
+		/** @var mixed $entry */
+		foreach ($result['releases'] as $entry) {
+			if (!is_array($entry)) {
+				continue;
+			}
+			$normalized = $this->normalizeAdvisory($entry);
+			if ($normalized !== null) {
+				$advisories[] = $normalized;
+			}
+		}
+
+		return ['advisories' => $advisories, 'error' => null];
+	}
+
+	/**
+	 * Normalizes a forge (GHSA-shaped) advisory record into the correlation
+	 * record. Reads the affected version range and first-patched version from
+	 * the first vulnerability entry (forge advisories list one package).
+	 *
+	 * @param array<array-key, mixed> $entry
+	 * @return array{id: string, severity: string, summary: string, affected: list<string>, firstPatchedVersion: ?string}|null
+	 */
+	private function normalizeAdvisory(array $entry): ?array {
+		/** @var mixed $id */
+		$id = $entry['ghsa_id'] ?? $entry['id'] ?? $entry['cve_id'] ?? null;
+		if (!is_string($id) || $id === '') {
+			return null;
+		}
+		/** @var mixed $severity */
+		$severity = $entry['severity'] ?? 'medium';
+		/** @var mixed $summary */
+		$summary = $entry['summary'] ?? ($entry['title'] ?? '');
+
+		$affected = [];
+		$firstPatched = null;
+		/** @var mixed $vulnerabilities */
+		$vulnerabilities = $entry['vulnerabilities'] ?? [];
+		if (is_array($vulnerabilities) && isset($vulnerabilities[0]) && is_array($vulnerabilities[0])) {
+			$vuln = $vulnerabilities[0];
+			/** @var mixed $range */
+			$range = $vuln['vulnerable_version_range'] ?? null;
+			if (is_string($range) && trim($range) !== '') {
+				foreach (explode(',', $range) as $clause) {
+					if (trim($clause) !== '') {
+						$affected[] = trim($clause);
+					}
+				}
+			}
+			/** @var mixed $patched */
+			$patched = $vuln['first_patched_version'] ?? null;
+			if (is_array($patched)) {
+				$patched = $patched['identifier'] ?? null;
+			}
+			if (is_string($patched) && $patched !== '') {
+				$firstPatched = $this->normalizeVersion($patched);
+			}
+		}
+
+		return [
+			'id' => $id,
+			'severity' => is_string($severity) ? strtolower($severity) : 'medium',
+			'summary' => is_string($summary) ? $summary : '',
+			'affected' => $affected,
+			'firstPatchedVersion' => $firstPatched,
+		];
+	}
+
+	/**
+	 * @return array{ok: true, releases: array<int, mixed>}|array{ok: false, error: string}
+	 */
+	private function fetchAdvisories(Forge $forge, string $ownerRepo): array {
+		$user = $this->userSession->getUser();
+		$uid = $user?->getUID();
+		$pat = $uid !== null ? $this->patResolver->findFor($forge->id, $ownerRepo, $uid) : null;
+
+		$endpoint = $forge->advisoriesEndpoint($ownerRepo);
+
+		if ($pat === null) {
+			return $this->performFetch($forge, $endpoint, null);
+		}
+
+		/** @var array{ok: true, releases: array<int, mixed>}|array{ok: false, error: string} */
+		return $this->patManager->useToken($pat, fn (string $token): array => $this->performFetch($forge, $endpoint, $token));
 	}
 
 	/**

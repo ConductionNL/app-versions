@@ -23,6 +23,21 @@ type AppVersion = {
 	version: string
 }
 
+type AdvisoryRecord = {
+	id: string
+	severity: string
+	summary: string
+}
+
+type AdvisoryCorrelation = {
+	appId: string
+	installedVersion: string | null
+	state: 'none' | 'advisory-available' | 'pinned-to-vulnerable'
+	advisories: AdvisoryRecord[]
+	recommendedVersion: string | null
+	error: string | null
+}
+
 type InstallDebugEntry = {
 	stage: string
 	data?: unknown
@@ -45,6 +60,7 @@ type InstallResult = {
 
 const isLoading = ref(true)
 const apps = ref<AppOption[]>([])
+const advisories = ref<Record<string, AdvisoryCorrelation>>({})
 const appFilter = ref('')
 const showFilters = ref(false)
 const coreAppsVisibility = ref<'show' | 'hide'>('show')
@@ -407,6 +423,32 @@ const loadApps = async (): Promise<void> => {
 	} catch (error) {
 		errorMessage.value = error instanceof Error ? error.message : 'Could not fetch app list.'
 	}
+}
+
+// Advisory correlation is fetched separately from the app list so a slow or
+// unreachable advisory source never delays the (fast) app list. The badge
+// appears once this resolves. Read-only — it never changes a version.
+const loadAdvisories = async (): Promise<void> => {
+	try {
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/advisories')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
+		const payload = await unwrapOcsResponse<{ advisories: Record<string, AdvisoryCorrelation> }>(response)
+		advisories.value = payload.advisories || {}
+	} catch {
+		// Non-fatal: the app list stays usable without advisory badges.
+		advisories.value = {}
+	}
+}
+
+const advisoryFor = (appId: string): AdvisoryCorrelation | null => advisories.value[appId] ?? null
+
+const advisoryBadgeLabel = (state: AdvisoryCorrelation['state']): string => {
+	if (state === 'pinned-to-vulnerable') {
+		return t('app_versions', 'Vulnerable version')
+	}
+	if (state === 'advisory-available') {
+		return t('app_versions', 'Advisory')
+	}
+	return ''
 }
 
 const resetSelectedAppState = (): void => {
@@ -956,6 +998,8 @@ onMounted(async () => {
 	} finally {
 		isLoading.value = false
 	}
+	// Kick off advisory correlation after the list renders (non-blocking).
+	void loadAdvisories()
 })
 
 watch([safeModeEnabled, installedVersion, selectedVersion], () => {
@@ -1091,8 +1135,24 @@ watch(debugModeEnabled, () => {
 														<div :class="$style.appCardTitleRow">
 															<p :class="$style.appCardTitle">{{ app.label }}</p>
 															<span v-if="app.isCore" :class="$style.appCardCoreFlag">CORE</span>
+															<span
+																v-if="advisoryFor(app.id)?.state && advisoryFor(app.id)?.state !== 'none'"
+																:class="[$style.advisoryBadge, { [$style.advisoryBadgeVulnerable]: advisoryFor(app.id)?.state === 'pinned-to-vulnerable' }]"
+																:title="advisoryFor(app.id)?.advisories?.[0]?.summary ?? ''"
+															>
+																⚠ {{ advisoryBadgeLabel(advisoryFor(app.id)?.state ?? 'none') }}
+															</span>
 														</div>
 														<p :class="$style.appCardMeta">{{ app.id }}</p>
+														<p
+															v-if="advisoryFor(app.id)?.state === 'pinned-to-vulnerable'"
+															:class="$style.advisoryDetail"
+														>
+															{{ advisoryFor(app.id)?.advisories?.[0]?.id ?? '' }}
+															<template v-if="advisoryFor(app.id)?.recommendedVersion">
+																· {{ t('app_versions', 'safe version: {version}', { version: advisoryFor(app.id)?.recommendedVersion ?? '' }) }}
+															</template>
+														</p>
 													</div>
 													<div :class="$style.appCardMedia">
 														<img
@@ -1579,6 +1639,32 @@ watch(debugModeEnabled, () => {
 	font-weight: 700;
 	letter-spacing: 0.04em;
 	flex-shrink: 0;
+}
+
+.advisoryBadge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 8px;
+	border-radius: 9999px;
+	background: var(--color-warning, #f0a020);
+	color: var(--color-warning-text, #000);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	flex-shrink: 0;
+}
+
+.advisoryBadgeVulnerable {
+	background: var(--color-error, #d32f2f);
+	color: var(--color-primary-text, #fff);
+}
+
+.advisoryDetail {
+	margin: 2px 0 0;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--color-error-text, var(--color-error, #d32f2f));
 }
 
 .appCardDescription {
