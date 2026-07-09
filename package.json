@@ -1,7 +1,7 @@
 {
   "name": "app_versions",
   "version": "1.0.0",
-  "license": "AGPL-3.0-or-later",
+  "license": "EUPL-1.2",
   "type": "module",
   "scripts": {
     "build": "vite build",
