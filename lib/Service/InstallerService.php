@@ -330,20 +330,22 @@ class InstallerService {
 	}
 
 	private function resolveBinding(string $appId, ?string $sourceOverride): SourceBinding {
+		// Always run the trust gate — assertBindingAllowed() short-circuits on
+		// appstore internally (extractIdentifier() returns null → sourceId
+		// === 'appstore' passes), so any non-appstore binding (github-release,
+		// gitea-release, or future kinds) is authorised against the allowlist
+		// before any HTTP fetch or filesystem write. Gating on a specific
+		// kind is a foot-gun for every source we add — see PR #21 review F1.
 		if ($sourceOverride !== null && trim($sourceOverride) !== '') {
 			$binding = SourceRegistry::parseSourceId($sourceOverride);
-			if ($binding->kind === SourceBinding::KIND_GITHUB_RELEASE) {
-				$this->trustedSources->assertBindingAllowed($binding);
-			}
+			$this->trustedSources->assertBindingAllowed($binding);
 
 			return $binding;
 		}
 
 		$stored = $this->bindingStore->get($appId);
 		if ($stored !== null) {
-			if ($stored->kind === SourceBinding::KIND_GITHUB_RELEASE) {
-				$this->trustedSources->assertBindingAllowed($stored);
-			}
+			$this->trustedSources->assertBindingAllowed($stored);
 
 			return $stored;
 		}

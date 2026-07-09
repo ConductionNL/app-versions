@@ -36,7 +36,10 @@ interface SourceInterface {
 	 *
 	 * The shape varies by source kind:
 	 *   - App Store releases include `download`, `signature`, `certificate`, `version`
-	 *   - GitHub releases include `download`, `version`, optional `sha256Url`
+	 *   - GitHub releases include `kind: "github-release"`, `download`, `assetName`,
+	 *     `version`, `tagName`, optional `sha256Url`
+	 *   - Gitea/Forgejo releases (including Codeberg) share the GitHub shape
+	 *     but with `kind: "gitea-release"`
 	 *
 	 * @return array<string, mixed>|null
 	 */
