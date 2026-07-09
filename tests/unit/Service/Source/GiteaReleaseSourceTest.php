@@ -218,4 +218,26 @@ final class GiteaReleaseSourceTest extends TestCase {
 
 		$this->assertNull($release);
 	}
+
+	public function testEndpointUrlIsBuiltFromBindingHost(): void {
+		$client = $this->createMock(IClient::class);
+		// Locks in three properties cheaply:
+		//   - the `https://` scheme (no accidental http:// downgrade)
+		//   - the binding's `host` reaches the URL unmodified (no hardcoded codeberg.org)
+		//   - the `/api/v1/repos/…/releases` path prefix (Gitea API contract)
+		$client->expects($this->once())
+			->method('get')
+			->with(
+				$this->stringContains('https://gitea.example.internal/api/v1/repos/myorg/myapp/releases'),
+				$this->anything()
+			)
+			->willReturn($this->mockResponse(200, '[]'));
+
+		$result = $this->buildSource($client)->listVersions(
+			'myapp',
+			SourceBinding::gitea('gitea.example.internal', 'myorg', 'myapp')
+		);
+
+		$this->assertSame([], $result['versions']);
+	}
 }

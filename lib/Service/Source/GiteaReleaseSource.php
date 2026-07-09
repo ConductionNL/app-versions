@@ -68,6 +68,10 @@ class GiteaReleaseSource implements SourceInterface {
 			if (!is_array($release)) {
 				continue;
 			}
+			// Defensive: some Gitea/Forgejo versions surface `draft: true`
+			// entries to public API consumers where GitHub's API would hide
+			// them server-side. Filtering here keeps parity with what an
+			// admin sees in the release-page UI.
 			if ($release['draft'] ?? false) {
 				continue;
 			}
@@ -97,6 +101,8 @@ class GiteaReleaseSource implements SourceInterface {
 			if (!is_array($release)) {
 				continue;
 			}
+			// Same defensive draft filter as listVersions() — resolveRelease
+			// should never surface a draft asset even if Gitea leaks it.
 			if ($release['draft'] ?? false) {
 				continue;
 			}
@@ -122,6 +128,12 @@ class GiteaReleaseSource implements SourceInterface {
 		$host = $hostOwnerRepo['host'];
 		$ownerRepo = $hostOwnerRepo['ownerRepo'];
 
+		// Gitea/Forgejo cap `limit` at 50 for /releases (Codeberg confirmed)
+		// where GitHub allows up to 100 via `per_page`. Neither driver
+		// paginates today, so a repo with >50 releases will truncate here.
+		// For Nextcloud apps that ship <20 releases (the norm) this is not
+		// an issue; if a real deployment needs deeper history the fix is a
+		// `page=N` follow-up loop, not raising `limit` above 50.
 		$endpoint = sprintf('https://%s/api/v1/repos/%s/releases?limit=50', $host, $ownerRepo);
 
 		try {
