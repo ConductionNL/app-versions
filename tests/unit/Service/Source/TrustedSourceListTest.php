@@ -78,4 +78,39 @@ final class TrustedSourceListTest extends TestCase {
 		$this->assertFalse($list->isAllowed('github:'));
 		$this->assertFalse($list->isAllowed('github://repo'));
 	}
+
+	public function testDefaultAllowsCodebergConduction(): void {
+		$list = $this->withPatterns('');
+
+		$this->assertTrue($list->isAllowed('gitea:codeberg.org/Conduction/opencatalogi'));
+		$this->assertTrue($list->isAllowed('gitea:codeberg.org/Conduction/openregister'));
+	}
+
+	public function testDefaultRejectsGiteaOnOtherHost(): void {
+		$list = $this->withPatterns('');
+
+		$this->assertFalse($list->isAllowed('gitea:gitea.example.com/Conduction/opencatalogi'));
+	}
+
+	public function testDefaultRejectsGiteaOnCodebergUnderOtherOwner(): void {
+		$list = $this->withPatterns('');
+
+		$this->assertFalse($list->isAllowed('gitea:codeberg.org/other/opencatalogi'));
+	}
+
+	public function testCustomGiteaGlobIsUsed(): void {
+		$list = $this->withPatterns('["gitea.example.com/myorg/*"]');
+
+		$this->assertTrue($list->isAllowed('gitea:gitea.example.com/myorg/some-app'));
+		$this->assertFalse($list->isAllowed('gitea:gitea.example.com/other/some-app'));
+		$this->assertFalse($list->isAllowed('gitea:codeberg.org/myorg/some-app'));
+	}
+
+	public function testMalformedGiteaSourceIdRejected(): void {
+		$list = $this->withPatterns('');
+
+		$this->assertFalse($list->isAllowed('gitea:Conduction/opencatalogi'));
+		$this->assertFalse($list->isAllowed('gitea:codeberg.org//opencatalogi'));
+		$this->assertFalse($list->isAllowed('gitea:'));
+	}
 }

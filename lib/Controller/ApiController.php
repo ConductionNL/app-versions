@@ -122,6 +122,12 @@ class ApiController extends OCSController {
 					$this->stringParam('repo', ''),
 					$this->stringParam('assetPattern', '*.tar.gz'),
 				),
+				SourceBinding::KIND_GITEA_RELEASE => SourceBinding::gitea(
+					$this->stringParam('host', ''),
+					$this->stringParam('owner', ''),
+					$this->stringParam('repo', ''),
+					$this->stringParam('assetPattern', '*.tar.gz'),
+				),
 				default => throw new InvalidArgumentException('Unknown source kind: ' . $kind),
 			};
 		} catch (InvalidArgumentException $error) {
