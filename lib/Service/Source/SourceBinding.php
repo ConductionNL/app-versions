@@ -14,6 +14,7 @@ use InvalidArgumentException;
 final class SourceBinding {
 	public const KIND_APPSTORE = 'appstore';
 	public const KIND_GITHUB_RELEASE = 'github-release';
+	public const KIND_GITEA_RELEASE = 'gitea-release';
 
 	/**
 	 * @param array<string, mixed> $config
@@ -23,7 +24,9 @@ final class SourceBinding {
 		public readonly array $config = [],
 		public readonly ?string $boundAt = null,
 	) {
-		if ($kind !== self::KIND_APPSTORE && $kind !== self::KIND_GITHUB_RELEASE) {
+		if ($kind !== self::KIND_APPSTORE
+			&& $kind !== self::KIND_GITHUB_RELEASE
+			&& $kind !== self::KIND_GITEA_RELEASE) {
 			throw new InvalidArgumentException('Unknown source kind: ' . $kind);
 		}
 
@@ -35,14 +38,32 @@ final class SourceBinding {
 				throw new InvalidArgumentException('github-release binding requires non-empty repo');
 			}
 		}
+
+		if ($kind === self::KIND_GITEA_RELEASE) {
+			if (!isset($config['host']) || !is_string($config['host']) || $config['host'] === '') {
+				throw new InvalidArgumentException('gitea-release binding requires non-empty host');
+			}
+			// Guard against the caller pasting a full URL — we assemble the
+			// endpoint ourselves and expect a bare host.
+			if (str_contains($config['host'], '/') || str_contains($config['host'], ':')) {
+				throw new InvalidArgumentException('gitea-release host must be a bare hostname (e.g. "codeberg.org"), not a URL');
+			}
+			if (!isset($config['owner']) || !is_string($config['owner']) || $config['owner'] === '') {
+				throw new InvalidArgumentException('gitea-release binding requires non-empty owner');
+			}
+			if (!isset($config['repo']) || !is_string($config['repo']) || $config['repo'] === '') {
+				throw new InvalidArgumentException('gitea-release binding requires non-empty repo');
+			}
+		}
 	}
 
 	public function getId(): string {
-		if ($this->kind === self::KIND_APPSTORE) {
-			return 'appstore';
-		}
-
-		return 'github:' . $this->config['owner'] . '/' . $this->config['repo'];
+		return match ($this->kind) {
+			self::KIND_APPSTORE => 'appstore',
+			self::KIND_GITHUB_RELEASE => 'github:' . $this->config['owner'] . '/' . $this->config['repo'],
+			self::KIND_GITEA_RELEASE => 'gitea:' . $this->config['host'] . '/' . $this->config['owner'] . '/' . $this->config['repo'],
+			default => throw new InvalidArgumentException('Unknown source kind: ' . $this->kind),
+		};
 	}
 
 	public function getOwnerRepo(): ?string {
@@ -51,6 +72,20 @@ final class SourceBinding {
 		}
 
 		return $this->config['owner'] . '/' . $this->config['repo'];
+	}
+
+	/**
+	 * @return array{host: string, ownerRepo: string}|null
+	 */
+	public function getHostOwnerRepo(): ?array {
+		if ($this->kind !== self::KIND_GITEA_RELEASE) {
+			return null;
+		}
+
+		return [
+			'host' => $this->config['host'],
+			'ownerRepo' => $this->config['owner'] . '/' . $this->config['repo'],
+		];
 	}
 
 	public function getAssetPattern(): string {
@@ -99,6 +134,19 @@ final class SourceBinding {
 		return new self(
 			self::KIND_GITHUB_RELEASE,
 			[
+				'owner' => $owner,
+				'repo' => $repo,
+				'assetPattern' => $assetPattern,
+			],
+			(new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format(\DateTimeInterface::ATOM),
+		);
+	}
+
+	public static function gitea(string $host, string $owner, string $repo, string $assetPattern = '*.tar.gz'): self {
+		return new self(
+			self::KIND_GITEA_RELEASE,
+			[
+				'host' => $host,
 				'owner' => $owner,
 				'repo' => $repo,
 				'assetPattern' => $assetPattern,

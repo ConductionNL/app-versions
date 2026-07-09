@@ -46,4 +46,26 @@ final class SourceRegistryTest extends TestCase {
 
 		SourceRegistry::parseSourceId('gitlab:ConductionNL/openregister');
 	}
+
+	public function testParseGiteaProducesBinding(): void {
+		$binding = SourceRegistry::parseSourceId('gitea:codeberg.org/Conduction/opencatalogi');
+
+		$this->assertSame(SourceBinding::KIND_GITEA_RELEASE, $binding->kind);
+		$this->assertSame(
+			['host' => 'codeberg.org', 'ownerRepo' => 'Conduction/opencatalogi'],
+			$binding->getHostOwnerRepo(),
+		);
+	}
+
+	public function testParseGiteaWithoutHostRejected(): void {
+		$this->expectException(InvalidArgumentException::class);
+
+		SourceRegistry::parseSourceId('gitea:Conduction/opencatalogi');
+	}
+
+	public function testParseGiteaWithEmptySegmentRejected(): void {
+		$this->expectException(InvalidArgumentException::class);
+
+		SourceRegistry::parseSourceId('gitea:codeberg.org//opencatalogi');
+	}
 }
