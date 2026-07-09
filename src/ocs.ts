@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: EUPL-1.2
 // Shared OCS request helpers for the App Versions admin UI panels.
 //
 // App.vue keeps its own inline copies of the install flow; these helpers are

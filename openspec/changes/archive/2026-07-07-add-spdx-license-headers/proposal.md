@@ -4,6 +4,12 @@ kind: config
 
 # Proposal: add-spdx-license-headers
 
+> **⚠️ Superseded 2026-07-07.** This proposal declared app-versions as genuinely AGPL-3.0.
+> That decision was later reversed: the app was relicensed to **EUPL-1.2** to match the
+> Conduction fleet standard (LICENSE + composer.json + info.xml + all `lib/` headers). This
+> document is kept as history; the live spec `openspec/specs/source-license-headers/spec.md`
+> now requires EUPL-1.2 headers.
+
 ## Why
 
 App Versions is licensed **AGPL-3.0-or-later** — and, unusually for the fleet,
