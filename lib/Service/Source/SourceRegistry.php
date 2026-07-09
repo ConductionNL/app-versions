@@ -15,6 +15,7 @@ class SourceRegistry {
 	public function __construct(
 		private AppStoreSource $appStore,
 		private GithubReleaseSource $github,
+		private GiteaReleaseSource $gitea,
 	) {
 	}
 
@@ -22,6 +23,7 @@ class SourceRegistry {
 		return match ($binding->kind) {
 			SourceBinding::KIND_APPSTORE => $this->appStore,
 			SourceBinding::KIND_GITHUB_RELEASE => $this->github,
+			SourceBinding::KIND_GITEA_RELEASE => $this->gitea,
 			default => throw new InvalidArgumentException('Unsupported source kind: ' . $binding->kind),
 		};
 	}
@@ -40,6 +42,11 @@ class SourceRegistry {
 				'id' => 'github',
 				'kind' => SourceBinding::KIND_GITHUB_RELEASE,
 				'label' => 'GitHub Releases (public)',
+			],
+			[
+				'id' => 'gitea',
+				'kind' => SourceBinding::KIND_GITEA_RELEASE,
+				'label' => 'Gitea / Forgejo Releases (e.g. Codeberg)',
 			],
 		];
 	}
@@ -61,6 +68,20 @@ class SourceRegistry {
 			}
 
 			return SourceBinding::github($owner, $repo);
+		}
+
+		if (str_starts_with($sourceId, 'gitea:')) {
+			$rest = substr($sourceId, strlen('gitea:'));
+			$parts = explode('/', $rest);
+			if (count($parts) !== 3) {
+				throw new InvalidArgumentException('Gitea source id must be of the form gitea:host/owner/repo');
+			}
+			[$host, $owner, $repo] = $parts;
+			if ($host === '' || $owner === '' || $repo === '') {
+				throw new InvalidArgumentException('Gitea source id has empty host, owner or repo');
+			}
+
+			return SourceBinding::gitea($host, $owner, $repo);
 		}
 
 		throw new InvalidArgumentException('Unknown source id: ' . $sourceId);

@@ -68,4 +68,48 @@ final class SourceBindingTest extends TestCase {
 
 		$this->assertSame('*.tar.gz', $binding->getAssetPattern());
 	}
+
+	public function testGiteaFactoryProducesHostQualifiedId(): void {
+		$binding = SourceBinding::gitea('codeberg.org', 'Conduction', 'opencatalogi');
+
+		$this->assertSame(SourceBinding::KIND_GITEA_RELEASE, $binding->kind);
+		$this->assertSame('gitea:codeberg.org/Conduction/opencatalogi', $binding->getId());
+		$this->assertSame(
+			['host' => 'codeberg.org', 'ownerRepo' => 'Conduction/opencatalogi'],
+			$binding->getHostOwnerRepo(),
+		);
+		$this->assertNull($binding->getOwnerRepo());
+		$this->assertSame('*.tar.gz', $binding->getAssetPattern());
+		$this->assertNotNull($binding->boundAt);
+	}
+
+	public function testGiteaRoundtripThroughArray(): void {
+		$original = SourceBinding::gitea('codeberg.org', 'Conduction', 'opencatalogi', 'opencatalogi-*.tar.gz');
+		$restored = SourceBinding::fromArray($original->toArray());
+
+		$this->assertSame($original->getId(), $restored->getId());
+		$this->assertSame($original->getAssetPattern(), $restored->getAssetPattern());
+		$this->assertSame($original->boundAt, $restored->boundAt);
+	}
+
+	public function testGiteaBindingRequiresHost(): void {
+		$this->expectException(InvalidArgumentException::class);
+
+		new SourceBinding(SourceBinding::KIND_GITEA_RELEASE, ['owner' => 'x', 'repo' => 'y']);
+	}
+
+	public function testGiteaBindingRejectsUrlAsHost(): void {
+		$this->expectException(InvalidArgumentException::class);
+
+		new SourceBinding(
+			SourceBinding::KIND_GITEA_RELEASE,
+			['host' => 'https://codeberg.org', 'owner' => 'x', 'repo' => 'y']
+		);
+	}
+
+	public function testGiteaBindingRequiresOwnerAndRepo(): void {
+		$this->expectException(InvalidArgumentException::class);
+
+		new SourceBinding(SourceBinding::KIND_GITEA_RELEASE, ['host' => 'codeberg.org', 'owner' => 'x']);
+	}
 }
