@@ -8,15 +8,25 @@ use OCA\AppVersions\AppInfo\Application;
 use OCP\IConfig;
 
 /**
- * Reads and enforces the trusted-source allowlist. Bindings whose owner/repo
- * does not match any configured glob are rejected before any HTTP fetch or
- * filesystem write happens.
+ * Reads and enforces the trusted-source allowlist. Bindings whose extracted
+ * identifier does not match any configured glob are rejected before any HTTP
+ * fetch or filesystem write happens.
+ *
+ * Identifier shapes evaluated against the pattern list:
+ *   - GitHub Releases → `owner/repo` (e.g. `ConductionNL/openregister`)
+ *   - Gitea Releases  → `host/owner/repo` (e.g. `codeberg.org/Conduction/opencatalogi`)
+ *
+ * The Nextcloud App Store is always allowed and never checked against the
+ * list.
  */
 class TrustedSourceList {
 	private const CONFIG_KEY = 'trusted_sources';
 
 	/** @var list<string> */
-	private const DEFAULT_PATTERNS = ['ConductionNL/*'];
+	private const DEFAULT_PATTERNS = [
+		'ConductionNL/*',
+		'codeberg.org/Conduction/*',
+	];
 
 	public function __construct(private IConfig $config) {
 	}
@@ -69,13 +79,13 @@ class TrustedSourceList {
 	}
 
 	public function isAllowed(string $sourceId): bool {
-		$ownerRepo = $this->extractOwnerRepo($sourceId);
-		if ($ownerRepo === null) {
+		$identifier = $this->extractIdentifier($sourceId);
+		if ($identifier === null) {
 			return $sourceId === 'appstore';
 		}
 
 		foreach ($this->getPatterns() as $pattern) {
-			if (fnmatch($pattern, $ownerRepo, FNM_NOESCAPE)) {
+			if (fnmatch($pattern, $identifier, FNM_NOESCAPE)) {
 				return true;
 			}
 		}
@@ -102,21 +112,34 @@ class TrustedSourceList {
 		$this->assertAllowed($binding->getId());
 	}
 
-	private function extractOwnerRepo(string $sourceId): ?string {
-		if (!str_starts_with($sourceId, 'github:')) {
-			return null;
+	private function extractIdentifier(string $sourceId): ?string {
+		if (str_starts_with($sourceId, 'github:')) {
+			$ownerRepo = substr($sourceId, strlen('github:'));
+			if (!str_contains($ownerRepo, '/')) {
+				return null;
+			}
+			[$owner, $repo] = explode('/', $ownerRepo, 2);
+			if ($owner === '' || $repo === '') {
+				return null;
+			}
+
+			return $owner . '/' . $repo;
 		}
 
-		$ownerRepo = substr($sourceId, strlen('github:'));
-		if (!str_contains($ownerRepo, '/')) {
-			return null;
+		if (str_starts_with($sourceId, 'gitea:')) {
+			$rest = substr($sourceId, strlen('gitea:'));
+			$parts = explode('/', $rest);
+			if (count($parts) !== 3) {
+				return null;
+			}
+			[$host, $owner, $repo] = $parts;
+			if ($host === '' || $owner === '' || $repo === '') {
+				return null;
+			}
+
+			return $host . '/' . $owner . '/' . $repo;
 		}
 
-		[$owner, $repo] = explode('/', $ownerRepo, 2);
-		if ($owner === '' || $repo === '') {
-			return null;
-		}
-
-		return $owner . '/' . $repo;
+		return null;
 	}
 }
