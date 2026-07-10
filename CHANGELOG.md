@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-10
+
 ### Added
 
 - **In-app source-binding UI** — the App Versions picker now shows a **Version source** card next to the selected app with quick-switch buttons (`App Store` · `Codeberg` · `GitHub` · `Advanced…`). Codeberg and GitHub quick-switches pre-fill Conduction's canonical defaults (`codeberg.org/Conduction/{appId}` and `ConductionNL/{appId}`); the `Advanced…` NcDialog gives full override of `kind`, `host`, `owner`, `repo`, and `assetPattern`. The dialog renders its source-kind options from `/api/sources` so labels + ordering stay in sync with `SourceRegistry::listAvailable()` (the "(recommended)" suffix on Gitea therefore appears automatically). On successful bind the versions list re-fetches in place — no page reload.
