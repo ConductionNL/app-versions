@@ -34,6 +34,29 @@ type InstallResult = {
 	debug?: InstallDebugEntry[]
 }
 
+type SourceOption = {
+	id: string
+	kind: string
+	label: string
+}
+
+type BindingPayload = {
+	kind: string
+	host?: string
+	owner?: string
+	repo?: string
+	assetPattern?: string
+	boundAt?: string
+}
+
+type BindFormState = {
+	kind: 'appstore' | 'gitea-release' | 'github-release'
+	host: string
+	owner: string
+	repo: string
+	assetPattern: string
+}
+
 const isAdmin = ref(false)
 const isLoading = ref(true)
 const apps = ref<AppOption[]>([])
@@ -65,6 +88,21 @@ const lastInstallResult = ref<InstallResult | null>(null)
 const hasInstallResult = ref(false)
 const installRequestFromVersion = ref('')
 const installRequestToVersion = ref('')
+
+const availableSources = ref<SourceOption[]>([])
+const currentBinding = ref<BindingPayload | null>(null)
+const currentBindingSourceId = ref<string>('appstore')
+const isBindDialogOpen = ref(false)
+const isBinding = ref(false)
+const bindError = ref('')
+const isLoadingBinding = ref(false)
+const bindForm = ref<BindFormState>({
+	kind: 'gitea-release',
+	host: 'codeberg.org',
+	owner: 'Conduction',
+	repo: '',
+	assetPattern: '*.tar.gz',
+})
 
 type VersionRangeInfo = {
 	major: number
@@ -374,7 +412,249 @@ const resetSelectedAppState = (): void => {
 	lastInstallDebug.value = []
 	lastInstallResult.value = null
 	hasInstallResult.value = false
+	currentBinding.value = null
+	currentBindingSourceId.value = 'appstore'
+	bindError.value = ''
 }
+
+const loadSources = async (): Promise<void> => {
+	if (!isAdmin.value || availableSources.value.length > 0) {
+		return
+	}
+
+	try {
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/sources')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
+		const payload = await unwrapOcsResponse<{ sources: SourceOption[] }>(response)
+		availableSources.value = payload.sources || []
+	} catch {
+		// Non-fatal: fall back to hardcoded list in the picker.
+		availableSources.value = []
+	}
+}
+
+const loadCurrentBinding = async (appId: string): Promise<void> => {
+	if (!isAdmin.value || !appId) {
+		return
+	}
+
+	isLoadingBinding.value = true
+	try {
+		const response = await fetch(
+			apiUrl(withOcsJson(`/ocs/v2.php/apps/app_versions/api/source/${encodeURIComponent(appId)}/binding`)),
+			{ headers: { ...ocsHeaders, Accept: 'application/json' } }
+		)
+		const payload = await unwrapOcsResponse<{
+			appId: string
+			sourceId: string
+			binding: BindingPayload | null
+		}>(response)
+		currentBinding.value = payload.binding
+		currentBindingSourceId.value = payload.sourceId || 'appstore'
+	} catch {
+		currentBinding.value = null
+		currentBindingSourceId.value = 'appstore'
+	} finally {
+		isLoadingBinding.value = false
+	}
+}
+
+const currentSourceLabel = computed(() => {
+	const sourceId = currentBindingSourceId.value
+	const kind = currentBinding.value?.kind ?? 'appstore'
+
+	if (kind === 'appstore') {
+		return 'Nextcloud App Store'
+	}
+
+	if (kind === 'gitea-release') {
+		return `Codeberg / Gitea (${sourceId.replace(/^gitea:/, '')})`
+	}
+
+	if (kind === 'github-release') {
+		return `GitHub Releases (${sourceId.replace(/^github:/, '')})`
+	}
+
+	return sourceId
+})
+
+const populateBindFormForCurrentApp = (): void => {
+	const appId = selectedApp.value.trim()
+	const binding = currentBinding.value
+
+	if (binding && binding.kind === 'gitea-release') {
+		bindForm.value = {
+			kind: 'gitea-release',
+			host: binding.host || 'codeberg.org',
+			owner: binding.owner || 'Conduction',
+			repo: binding.repo || appId,
+			assetPattern: binding.assetPattern || '*.tar.gz',
+		}
+		return
+	}
+
+	if (binding && binding.kind === 'github-release') {
+		bindForm.value = {
+			kind: 'github-release',
+			host: 'codeberg.org',
+			owner: binding.owner || 'ConductionNL',
+			repo: binding.repo || appId,
+			assetPattern: binding.assetPattern || '*.tar.gz',
+		}
+		return
+	}
+
+	// Appstore or no binding — default to Codeberg for the recommended path.
+	bindForm.value = {
+		kind: 'appstore',
+		host: 'codeberg.org',
+		owner: 'Conduction',
+		repo: appId,
+		assetPattern: '*.tar.gz',
+	}
+}
+
+const openBindDialog = (): void => {
+	if (!selectedApp.value) {
+		return
+	}
+
+	populateBindFormForCurrentApp()
+	bindError.value = ''
+	isBindDialogOpen.value = true
+}
+
+const buildBindPayload = (form: BindFormState): Record<string, string> => {
+	if (form.kind === 'appstore') {
+		return { kind: 'appstore' }
+	}
+
+	if (form.kind === 'gitea-release') {
+		return {
+			kind: 'gitea-release',
+			host: form.host.trim(),
+			owner: form.owner.trim(),
+			repo: form.repo.trim(),
+			assetPattern: form.assetPattern.trim() || '*.tar.gz',
+		}
+	}
+
+	return {
+		kind: 'github-release',
+		owner: form.owner.trim(),
+		repo: form.repo.trim(),
+		assetPattern: form.assetPattern.trim() || '*.tar.gz',
+	}
+}
+
+const submitBind = async (payload: Record<string, string>, options: { closeDialog?: boolean } = {}): Promise<boolean> => {
+	const appId = selectedApp.value.trim()
+	if (!appId || isBinding.value) {
+		return false
+	}
+
+	isBinding.value = true
+	bindError.value = ''
+	errorMessage.value = ''
+
+	try {
+		await ensurePasswordConfirmation()
+
+		const endpoint = withOcsJson(`/ocs/v2.php/apps/app_versions/api/source/${encodeURIComponent(appId)}/bind`)
+		const response = await fetch(apiUrl(endpoint), {
+			method: 'POST',
+			headers: {
+				...ocsHeaders,
+				Accept: 'application/json',
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify(payload),
+		})
+		const { payload: data, metaMessage } = await unwrapOcsResponseWithMeta<{
+			appId?: string
+			sourceId?: string
+			binding?: BindingPayload
+			message?: string
+		}>(response)
+
+		if (metaMessage) {
+			bindError.value = metaMessage
+			errorMessage.value = metaMessage
+			return false
+		}
+
+		currentBinding.value = data.binding ?? null
+		currentBindingSourceId.value = data.sourceId ?? 'appstore'
+
+		if (options.closeDialog) {
+			isBindDialogOpen.value = false
+		}
+
+		// Re-check versions so the picker reflects the new source.
+		await checkVersions(true)
+		return true
+	} catch (error) {
+		const message = error instanceof Error ? error.message : 'Could not switch version source.'
+		bindError.value = message
+		errorMessage.value = message
+		return false
+	} finally {
+		isBinding.value = false
+	}
+}
+
+const quickBindCodeberg = (): Promise<boolean> => submitBind({
+	kind: 'gitea-release',
+	host: 'codeberg.org',
+	owner: 'Conduction',
+	repo: selectedApp.value.trim(),
+	assetPattern: '*.tar.gz',
+})
+
+const quickBindGithub = (): Promise<boolean> => submitBind({
+	kind: 'github-release',
+	owner: 'ConductionNL',
+	repo: selectedApp.value.trim(),
+	assetPattern: '*.tar.gz',
+})
+
+const quickBindAppStore = (): Promise<boolean> => submitBind({ kind: 'appstore' })
+
+const submitBindFromForm = async (): Promise<void> => {
+	const payload = buildBindPayload(bindForm.value)
+	await submitBind(payload, { closeDialog: true })
+}
+
+const bindDialogButtons = computed(() => [
+	{
+		label: 'Cancel',
+		type: 'tertiary',
+		disabled: isBinding.value,
+		callback: () => {
+			isBindDialogOpen.value = false
+		},
+	},
+	{
+		label: 'Save source',
+		variant: 'primary',
+		disabled: isBinding.value,
+		callback: () => {
+			void submitBindFromForm()
+		},
+	},
+])
+
+const canSubmitBindForm = computed(() => {
+	if (isBinding.value) {
+		return false
+	}
+	if (bindForm.value.kind === 'appstore') {
+		return true
+	}
+	if (bindForm.value.kind === 'gitea-release' && bindForm.value.host.trim() === '') {
+		return false
+	}
+	return bindForm.value.owner.trim() !== '' && bindForm.value.repo.trim() !== ''
+})
 
 const checkVersions = async (preserveInstallResult = false): Promise<void> => {
 	const appId = selectedApp.value.trim()
@@ -464,7 +744,10 @@ const onPickApp = async (appId: string) => {
 	}
 
 	onSelectApp(appId)
-	await checkVersions()
+	await Promise.all([
+		checkVersions(),
+		loadCurrentBinding(appId),
+	])
 }
 
 const clearSelectedApp = () => {
@@ -883,7 +1166,7 @@ onMounted(async () => {
 
 	await checkAdmin()
 	await checkUpdateChannel()
-	await loadApps()
+	await Promise.all([loadApps(), loadSources()])
 })
 
 watch([safeModeEnabled, installedVersion, selectedVersion], () => {
@@ -930,6 +1213,70 @@ watch(debugModeEnabled, () => {
 				<p :class="$style.versionItemDegradeMessage">
 					Downgrading can break database schema assumptions if migrations were already applied in newer versions. Continue only if you are sure no incompatible schema changes are involved.
 				</p>
+				</NcDialog>
+				<NcDialog
+					:open="isBindDialogOpen"
+					name="Change version source"
+					:buttons="bindDialogButtons"
+					@update:open="isBindDialogOpen = $event"
+				>
+					<p :class="$style.bindDialogIntro">
+						Choose where <strong>{{ selectedApp || '—' }}</strong> should pull its releases from. Codeberg/Gitea is the recommended alternate; GitHub is a fallback.
+					</p>
+					<div :class="$style.bindFormGrid">
+						<label :class="$style.bindField">
+							<span :class="$style.bindFieldLabel">Source kind</span>
+							<select v-model="bindForm.kind" :class="$style.bindSelect" :disabled="isBinding">
+								<option value="appstore">Nextcloud App Store</option>
+								<option value="gitea-release">Codeberg / Gitea / Forgejo Releases</option>
+								<option value="github-release">GitHub Releases</option>
+							</select>
+						</label>
+						<label v-if="bindForm.kind === 'gitea-release'" :class="$style.bindField">
+							<span :class="$style.bindFieldLabel">Host</span>
+							<input
+								v-model="bindForm.host"
+								type="text"
+								placeholder="codeberg.org"
+								:class="$style.bindInput"
+								:disabled="isBinding"
+							/>
+						</label>
+						<label v-if="bindForm.kind !== 'appstore'" :class="$style.bindField">
+							<span :class="$style.bindFieldLabel">Owner</span>
+							<input
+								v-model="bindForm.owner"
+								type="text"
+								:placeholder="bindForm.kind === 'gitea-release' ? 'Conduction' : 'ConductionNL'"
+								:class="$style.bindInput"
+								:disabled="isBinding"
+							/>
+						</label>
+						<label v-if="bindForm.kind !== 'appstore'" :class="$style.bindField">
+							<span :class="$style.bindFieldLabel">Repo</span>
+							<input
+								v-model="bindForm.repo"
+								type="text"
+								:placeholder="selectedApp"
+								:class="$style.bindInput"
+								:disabled="isBinding"
+							/>
+						</label>
+						<label v-if="bindForm.kind !== 'appstore'" :class="$style.bindField">
+							<span :class="$style.bindFieldLabel">Asset pattern</span>
+							<input
+								v-model="bindForm.assetPattern"
+								type="text"
+								placeholder="*.tar.gz"
+								:class="$style.bindInput"
+								:disabled="isBinding"
+							/>
+						</label>
+					</div>
+					<p v-if="!canSubmitBindForm && bindForm.kind !== 'appstore'" :class="$style.bindHint">
+						Owner and repo are required{{ bindForm.kind === 'gitea-release' ? ', and host must be a bare hostname (e.g. codeberg.org)' : '' }}.
+					</p>
+					<p v-if="bindError" :class="$style.bindError">{{ bindError }}</p>
 				</NcDialog>
 				<div :class="$style.layout">
 					<main :class="$style.mainContent">
@@ -1077,6 +1424,53 @@ watch(debugModeEnabled, () => {
 										:class="$style.versionDegradeSummary"
 									>
 										Downgrade path detected.
+									</p>
+								</div>
+								<div v-if="selectedApp" :class="$style.sourceSection">
+									<span :class="$style.installedLabel">Version source</span>
+									<span :class="$style.installedValue">
+										{{ isLoadingBinding ? 'Loading…' : currentSourceLabel }}
+									</span>
+									<div :class="$style.sourceQuickButtons">
+										<button
+											type="button"
+											:class="[$style.sourceQuickButton, { [$style.sourceQuickButtonActive]: currentBinding?.kind === 'appstore' || !currentBinding }]"
+											:disabled="isBinding || isCheckingVersions || isInstallingVersion"
+											:aria-busy="isBinding"
+											@click="quickBindAppStore"
+										>
+											App Store
+										</button>
+										<button
+											type="button"
+											:class="[$style.sourceQuickButton, $style.sourceQuickButtonCodeberg, { [$style.sourceQuickButtonActive]: currentBinding?.kind === 'gitea-release' }]"
+											:disabled="isBinding || isCheckingVersions || isInstallingVersion"
+											:aria-busy="isBinding"
+											@click="quickBindCodeberg"
+										>
+											Codeberg
+										</button>
+										<button
+											type="button"
+											:class="[$style.sourceQuickButton, { [$style.sourceQuickButtonActive]: currentBinding?.kind === 'github-release' }]"
+											:disabled="isBinding || isCheckingVersions || isInstallingVersion"
+											:aria-busy="isBinding"
+											@click="quickBindGithub"
+										>
+											GitHub
+										</button>
+										<button
+											type="button"
+											:class="[$style.sourceQuickButton, $style.sourceQuickButtonAdvanced]"
+											:disabled="isBinding || isCheckingVersions || isInstallingVersion"
+											@click="openBindDialog"
+										>
+											Advanced…
+										</button>
+									</div>
+									<p v-if="bindError" :class="$style.bindError">{{ bindError }}</p>
+									<p :class="$style.sourceHint">
+										Codeberg quick-switch uses <code>codeberg.org/Conduction/{{ selectedApp }}</code>. GitHub quick-switch uses <code>ConductionNL/{{ selectedApp }}</code>. Use Advanced… to override owner / repo / host.
 									</p>
 								</div>
 								<div v-if="versions.length > 0" :class="$style.versionListContainer">
@@ -1565,6 +1959,133 @@ watch(debugModeEnabled, () => {
 	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 	font-weight: 600;
 	font-size: 14px;
+}
+
+.sourceSection {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px 12px;
+	border: 1px solid var(--color-border-dark);
+	border-radius: 8px;
+	background: var(--color-main-background);
+	margin-top: 8px;
+}
+
+.sourceQuickButtons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 4px;
+}
+
+.sourceQuickButton {
+	appearance: none;
+	-webkit-appearance: none;
+	border-radius: 6px;
+	padding: 4px 12px;
+	font-size: 12px;
+	line-height: 1.2;
+	cursor: pointer;
+	border: 1px solid var(--color-border-dark);
+	background: var(--color-main-background);
+	color: var(--color-main-text);
+}
+
+.sourceQuickButton:hover:not(:disabled) {
+	background: var(--color-background-hover);
+}
+
+.sourceQuickButton:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+.sourceQuickButtonActive {
+	border-color: var(--color-primary-element);
+	background: color-mix(in srgb, var(--color-primary-element) 12%, var(--color-main-background));
+	color: var(--color-primary-element);
+	font-weight: 700;
+}
+
+.sourceQuickButtonCodeberg {
+	border-color: #2185d0;
+}
+
+.sourceQuickButtonCodeberg.sourceQuickButtonActive {
+	background: color-mix(in srgb, #2185d0 15%, var(--color-main-background));
+	color: #144168;
+	border-color: #2185d0;
+}
+
+.sourceQuickButtonAdvanced {
+	margin-left: auto;
+	color: var(--color-text-maxcontrast);
+}
+
+.sourceHint {
+	margin: 4px 0 0;
+	font-size: 11px;
+	color: var(--color-text-maxcontrast);
+	line-height: 1.35;
+}
+
+.sourceHint code {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	background: var(--color-background-dark);
+	padding: 1px 4px;
+	border-radius: 3px;
+}
+
+.bindDialogIntro {
+	margin: 0 0 12px;
+	font-size: 13px;
+	line-height: 1.45;
+}
+
+.bindFormGrid {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.bindField {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.bindFieldLabel {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--color-text-maxcontrast);
+}
+
+.bindSelect,
+.bindInput {
+	width: 100%;
+	box-sizing: border-box;
+	border: 1px solid var(--color-border-dark);
+	border-radius: 6px;
+	padding: 6px 10px;
+	background: var(--color-main-background);
+	font-size: 13px;
+}
+
+.bindHint {
+	margin: 6px 0 0;
+	font-size: 11px;
+	color: var(--color-text-maxcontrast);
+}
+
+.bindError {
+	margin: 8px 0 0;
+	padding: 8px 10px;
+	background: color-mix(in srgb, var(--color-error) 12%, var(--color-main-background));
+	color: var(--color-error);
+	border: 1px solid var(--color-error);
+	border-radius: 6px;
+	font-size: 12px;
 }
 
 .versionList {
