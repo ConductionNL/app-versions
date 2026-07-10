@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-10
+
 ### Added
 
-- **Admin tutorial for binding an alternate source** ([docs/tutorials/admin/02-bind-alternate-source.md](docs/tutorials/admin/02-bind-alternate-source.md)) — step-by-step walkthrough covering the three source kinds (`appstore`, `gitea-release`, `github-release`), trust-list configuration, the `POST /api/source/{appId}/bind` call in bash and PowerShell forms, verification in the UI, and a common-issues table.
+- **In-app source-binding UI** — the App Versions picker now shows a **Version source** card next to the selected app with quick-switch buttons (`App Store` · `Codeberg` · `GitHub` · `Advanced…`). Codeberg and GitHub quick-switches pre-fill Conduction's canonical defaults (`codeberg.org/Conduction/{appId}` and `ConductionNL/{appId}`); the `Advanced…` NcDialog gives full override of `kind`, `host`, `owner`, `repo`, and `assetPattern`. The dialog renders its source-kind options from `/api/sources` so labels + ordering stay in sync with `SourceRegistry::listAvailable()` (the "(recommended)" suffix on Gitea therefore appears automatically). On successful bind the versions list re-fetches in place — no page reload.
+- **Admin tutorial for binding an alternate source** ([docs/tutorials/admin/02-bind-alternate-source.md](docs/tutorials/admin/02-bind-alternate-source.md)) — step-by-step walkthrough covering the three source kinds (`appstore`, `gitea-release`, `github-release`), trust-list configuration, the `POST /api/source/{appId}/bind` call in bash and PowerShell forms, verification in the UI, and a common-issues table. Updated to document both paths — UI (quick-switch buttons + Advanced dialog) and OCS API — side by side in step 3.
 - **Product-oriented README.md** replacing the template scaffold — describes what App Versions does, the three source kinds side by side, quickstart, API summary, and pointers to the OpenAPI spec and admin tutorials.
 - **Full OpenAPI spec** — `composer openapi` regenerated `openapi.json` from the current `#[ApiRoute]` attributes; the spec now covers all 12 endpoints (previously only a single placeholder route).
 
