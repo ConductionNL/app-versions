@@ -1,12 +1,12 @@
 ---
 sidebar_position: 2
 title: Bind an app to an alternate source
-description: Install an app from GitHub Releases or a Gitea/Forgejo instance (e.g. Codeberg) instead of the Nextcloud App Store
+description: Install an app from GitHub Releases or a Gitea/Forgejo instance (e.g. Codeberg) instead of the Nextcloud App Store — via the in-app UI or via the OCS API
 ---
 
 # Bind an app to an alternate source
 
-Step-by-step guide for installing an app version from a **GitHub release feed** or a **Gitea / Forgejo release feed** (including Codeberg) instead of — or alongside — the Nextcloud App Store.
+Step-by-step guide for installing an app version from a **GitHub release feed** or a **Gitea / Forgejo release feed** (including Codeberg) instead of — or alongside — the Nextcloud App Store. Two equivalent paths: click through the App Versions UI, or POST to the OCS API for scripted / CI use.
 
 ## Goal
 
@@ -14,11 +14,20 @@ By the end of this tutorial you will have:
 
 1. Understood the difference between the three source kinds App Versions supports (`appstore`, `github-release`, `gitea-release`).
 2. Reviewed and, if needed, extended the `trusted_sources` allowlist so App Versions is permitted to fetch from your chosen source.
-3. Bound one installed app to a `github-release` OR `gitea-release` source via a single `curl` call.
+3. Bound one installed app to a `github-release` OR `gitea-release` source — either via the App Versions UI's **Version source** card or via the OCS `POST /api/source/{appId}/bind` endpoint.
 4. Verified in the App Versions UI that the versions dropdown now shows releases from the new source.
 5. Installed a specific version from the new source.
 
 The canonical worked example throughout is: **bind `opencatalogi` to `codeberg.org/Conduction/opencatalogi` and install the latest dev-release**.
+
+## Which path — UI or API?
+
+App Versions ships a first-class UI for source binding as of 1.2.0. Both paths hit the same endpoint (`POST /api/source/{appId}/bind`) with the same payload shape — pick whichever fits the situation:
+
+- **UI** — recommended for one-off admin actions. Open `/apps/app_versions/`, pick an installed app, use the quick-switch buttons in the **Version source** card (`App Store` · `Codeberg` · `GitHub`), or click **Advanced…** to override host / owner / repo / asset pattern. The Codeberg and GitHub quick-switch buttons pre-fill Conduction's defaults (`codeberg.org/Conduction/{appId}` and `ConductionNL/{appId}` respectively) so a single click is enough for Conduction apps.
+- **API** — recommended for automation, CI, config-management, or any environment where clicking a button doesn't fit. The step-by-step below walks the API flow.
+
+Steps 1 (trust list) and 2 (find the identifier) apply to both paths. Step 3 shows both the UI and the API side by side.
 
 ## When to use this
 
@@ -104,6 +113,19 @@ The bind endpoint is `POST /ocs/v2.php/apps/app_versions/api/source/{appId}/bind
 | `gitea-release` | `kind=gitea-release, host, owner, repo` | `assetPattern` |
 | `github-release` | `kind=github-release, owner, repo` | `assetPattern` |
 
+#### Path A — via the UI (recommended for one-offs)
+
+1. Open `https://YOUR-NEXTCLOUD/apps/app_versions/` in the browser.
+2. Pick the target app from the "Pick an installed App" list (e.g. `opencatalogi`).
+3. In the info panel on the right you'll see a **Version source** card with the current binding label (e.g. *Nextcloud App Store*) and four buttons: `App Store` · `Codeberg` · `GitHub` · `Advanced…`.
+4. Click **Codeberg** for the recommended path — this posts `{kind:"gitea-release", host:"codeberg.org", owner:"Conduction", repo:"{appId}", assetPattern:"*.tar.gz"}` in the background and re-fetches the versions list from the new source. The active binding gets a blue highlight.
+5. If your target repo is not `codeberg.org/Conduction/{appId}` (self-hosted Gitea, different owner, private repo) click **Advanced…** instead — the dialog gives you full override of `kind`, `host`, `owner`, `repo`, and `assetPattern`, pre-populated from the current binding.
+6. On failure (403 from an untrusted source, 400 from a bad payload, network error) the response message surfaces inline in the dialog / card — the OCS meta status is not swallowed.
+
+Skip to step 4 to verify.
+
+#### Path B — via the OCS API (recommended for automation / CI)
+
 **Worked example — Codeberg via bash:**
 
 ```bash
@@ -156,9 +178,11 @@ Expected 200 response (JSON):
 
 ### 4. Verify in the UI
 
-Refresh `https://YOUR-NEXTCLOUD/apps/app_versions/` in the browser (hard refresh — Ctrl+Shift+R — to bypass caching). Pick OpenCatalogi from the "Pick an installed App" list. Two things should now be different:
+If you took **Path A (UI)**: the picker already updated in place — the `Codeberg` button carries the blue "active" highlight and the version list re-fetched immediately. Nothing more to do.
 
-- The **`Versions source`** line beneath the dropdown reads `gitea:codeberg.org/Conduction/opencatalogi` (previously `appstore`).
+If you took **Path B (API)**: open `https://YOUR-NEXTCLOUD/apps/app_versions/` in the browser (hard refresh — Ctrl+Shift+R — to bypass caching). Pick OpenCatalogi from the "Pick an installed App" list. Two things should now be different:
+
+- The **Version source** card reads `Codeberg / Gitea (codeberg.org/Conduction/opencatalogi)` (previously *Nextcloud App Store*), with the `Codeberg` quick-switch button highlighted.
 - The **versions dropdown** shows tags from Codeberg — including any `-beta.*` and `-dev.*` releases that never made it to the App Store.
 
 ### 5. Install the version you want

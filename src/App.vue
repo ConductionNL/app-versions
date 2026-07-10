@@ -643,6 +643,25 @@ const bindDialogButtons = computed(() => [
 	},
 ])
 
+const bindKindOptions = computed<Array<{ value: BindFormState['kind'], label: string }>>(() => {
+	if (availableSources.value.length > 0) {
+		return availableSources.value
+			.filter((source) => source.kind === 'appstore' || source.kind === 'gitea-release' || source.kind === 'github-release')
+			.map((source) => ({
+				value: source.kind as BindFormState['kind'],
+				label: source.label,
+			}))
+	}
+
+	// Fallback used only when /api/sources failed. Ordering mirrors
+	// SourceRegistry::listAvailable() so the picker stays consistent.
+	return [
+		{ value: 'appstore', label: 'Nextcloud App Store' },
+		{ value: 'gitea-release', label: 'Codeberg / Gitea / Forgejo Releases (recommended)' },
+		{ value: 'github-release', label: 'GitHub Releases' },
+	]
+})
+
 const canSubmitBindForm = computed(() => {
 	if (isBinding.value) {
 		return false
@@ -1227,9 +1246,13 @@ watch(debugModeEnabled, () => {
 						<label :class="$style.bindField">
 							<span :class="$style.bindFieldLabel">Source kind</span>
 							<select v-model="bindForm.kind" :class="$style.bindSelect" :disabled="isBinding">
-								<option value="appstore">Nextcloud App Store</option>
-								<option value="gitea-release">Codeberg / Gitea / Forgejo Releases</option>
-								<option value="github-release">GitHub Releases</option>
+								<option
+									v-for="opt in bindKindOptions"
+									:key="opt.value"
+									:value="opt.value"
+								>
+									{{ opt.label }}
+								</option>
 							</select>
 						</label>
 						<label v-if="bindForm.kind === 'gitea-release'" :class="$style.bindField">
