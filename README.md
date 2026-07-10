@@ -31,8 +31,8 @@ sudo -u www-data php occ app:install app_versions
 | Kind | Binding shape | Default allowlist |
 |---|---|---|
 | `appstore` | (no config) — the Nextcloud App Store | always trusted |
+| `gitea-release` **(recommended)** | `gitea:<host>/<owner>/<repo>` | `codeberg.org/Conduction/*` |
 | `github-release` | `github:<owner>/<repo>` | `ConductionNL/*` |
-| `gitea-release` | `gitea:<host>/<owner>/<repo>` | `codeberg.org/Conduction/*` |
 
 Custom allowlist patterns can be set with:
 

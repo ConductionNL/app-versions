@@ -9,9 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Admin tutorial for binding an alternate source** ([docs/tutorials/admin/02-bind-alternate-source.md](docs/tutorials/admin/02-bind-alternate-source.md)) — step-by-step walkthrough covering the three source kinds (`appstore`, `github-release`, `gitea-release`), trust-list configuration, the `POST /api/source/{appId}/bind` call in bash and PowerShell forms, verification in the UI, and a common-issues table.
+- **Admin tutorial for binding an alternate source** ([docs/tutorials/admin/02-bind-alternate-source.md](docs/tutorials/admin/02-bind-alternate-source.md)) — step-by-step walkthrough covering the three source kinds (`appstore`, `gitea-release`, `github-release`), trust-list configuration, the `POST /api/source/{appId}/bind` call in bash and PowerShell forms, verification in the UI, and a common-issues table.
 - **Product-oriented README.md** replacing the template scaffold — describes what App Versions does, the three source kinds side by side, quickstart, API summary, and pointers to the OpenAPI spec and admin tutorials.
 - **Full OpenAPI spec** — `composer openapi` regenerated `openapi.json` from the current `#[ApiRoute]` attributes; the spec now covers all 12 endpoints (previously only a single placeholder route).
+
+### Changed
+
+- **Codeberg/Gitea is now the recommended alternate source; GitHub is the fallback.** `SourceRegistry::listAvailable()` returns the three kinds in the order App Store → Gitea → GitHub (the picker UI order), with the Gitea entry labelled "Codeberg / Gitea / Forgejo Releases (recommended)" and the GitHub entry simplified to "GitHub Releases". `TrustedSourceList::DEFAULT_PATTERNS` mirrors this — `codeberg.org/Conduction/*` first, `ConductionNL/*` second — reflecting that Conduction apps' source of truth moved to Codeberg after the GitHub org migration. Both changes are ordering-only; no source kind was removed and no trust pattern was dropped, so the change is fully backwards-compatible for existing bindings and custom allowlists.
 
 ## [1.1.0] - 2026-07-09
 

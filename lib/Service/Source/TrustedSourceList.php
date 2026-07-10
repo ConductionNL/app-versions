@@ -22,10 +22,19 @@ use OCP\IConfig;
 class TrustedSourceList {
 	private const CONFIG_KEY = 'trusted_sources';
 
-	/** @var list<string> */
+	/**
+	 * Default trust patterns applied when `trusted_sources` app-config is empty.
+	 *
+	 * Order matches the source picker in `SourceRegistry::listAvailable()` —
+	 * Codeberg first (source of truth for Conduction apps after the
+	 * ConductionNL GitHub → Codeberg migration), GitHub retained for
+	 * backwards compatibility.
+	 *
+	 * @var list<string>
+	 */
 	private const DEFAULT_PATTERNS = [
-		'ConductionNL/*',
 		'codeberg.org/Conduction/*',
+		'ConductionNL/*',
 	];
 
 	public function __construct(private IConfig $config) {

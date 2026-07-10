@@ -45,8 +45,10 @@ The App Store binding (the default) is always available in parallel — App Vers
 | Kind | Source-ID shape | Example | Backing driver |
 |---|---|---|---|
 | `appstore` | `appstore` | (implicit) | `AppStoreSource` — reads the Nextcloud App Store info JSON |
+| `gitea-release` **(recommended)** | `gitea:<host>/<owner>/<repo>` | `gitea:codeberg.org/Conduction/opencatalogi` | `GiteaReleaseSource` — reads `https://<host>/api/v1/repos/<owner>/<repo>/releases` |
 | `github-release` | `github:<owner>/<repo>` | `github:ConductionNL/openregister` | `GithubReleaseSource` — reads `https://api.github.com/repos/<owner>/<repo>/releases` |
-| `gitea-release` | `gitea:<host>/<owner>/<repo>` | `gitea:codeberg.org/Conduction/opencatalogi` | `GiteaReleaseSource` — reads `https://<host>/api/v1/repos/<owner>/<repo>/releases` |
+
+For Conduction apps, `gitea-release` pointed at `codeberg.org/Conduction/<app>` is the recommended default — that's the source of truth after the ConductionNL GitHub → Codeberg migration. `github-release` is retained for apps that still publish releases to GitHub.
 
 Every source binding stores an optional `assetPattern` (default `*.tar.gz`) that decides which release asset to download.
 
@@ -65,15 +67,15 @@ sudo -u www-data php occ config:app:get app_versions trusted_sources
 Empty response = the built-in defaults apply, which are:
 
 ```
-ConductionNL/*
 codeberg.org/Conduction/*
+ConductionNL/*
 ```
 
 If your target does not match, extend the list. **Setting the value replaces the entire list** — always include the built-ins you want to keep:
 
 ```
 sudo -u www-data php occ config:app:set app_versions trusted_sources \
-  '["ConductionNL/*","codeberg.org/Conduction/*","myorg/*","gitea.example.com/team/*"]'
+  '["codeberg.org/Conduction/*","ConductionNL/*","myorg/*","gitea.example.com/team/*"]'
 ```
 
 Glob wildcards are shell-style (`*` matches any characters except `/`). One pattern per line — no whitespace in the JSON.
@@ -99,8 +101,8 @@ The bind endpoint is `POST /ocs/v2.php/apps/app_versions/api/source/{appId}/bind
 | Kind | Required fields | Optional |
 |---|---|---|
 | `appstore` | `kind=appstore` | — |
-| `github-release` | `kind=github-release, owner, repo` | `assetPattern` |
 | `gitea-release` | `kind=gitea-release, host, owner, repo` | `assetPattern` |
+| `github-release` | `kind=github-release, owner, repo` | `assetPattern` |
 
 **Worked example — Codeberg via bash:**
 
