@@ -29,6 +29,14 @@ class SourceRegistry {
 	}
 
 	/**
+	 * Available source kinds, in the order the picker UI should display them.
+	 *
+	 * Order rationale: App Store first (implicit default for every installed
+	 * app), Codeberg / Gitea second (recommended for Conduction apps — that's
+	 * where the source of truth lives after the ConductionNL GitHub → Codeberg
+	 * migration), GitHub third (still supported as an alternative for apps
+	 * that publish releases there).
+	 *
 	 * @return list<array{id: string, kind: string, label: string}>
 	 */
 	public function listAvailable(): array {
@@ -39,14 +47,14 @@ class SourceRegistry {
 				'label' => 'Nextcloud App Store',
 			],
 			[
-				'id' => 'github',
-				'kind' => SourceBinding::KIND_GITHUB_RELEASE,
-				'label' => 'GitHub Releases (public)',
-			],
-			[
 				'id' => 'gitea',
 				'kind' => SourceBinding::KIND_GITEA_RELEASE,
-				'label' => 'Gitea / Forgejo Releases (e.g. Codeberg)',
+				'label' => 'Codeberg / Gitea / Forgejo Releases (recommended)',
+			],
+			[
+				'id' => 'github',
+				'kind' => SourceBinding::KIND_GITHUB_RELEASE,
+				'label' => 'GitHub Releases',
 			],
 		];
 	}
