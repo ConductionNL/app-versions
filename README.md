@@ -9,7 +9,7 @@ Install any earlier or newer version of already-installed Nextcloud apps from th
 By default, Nextcloud installs and updates apps only from the Nextcloud App Store, and only shows you the "latest" version. App Versions extends the App Store layer with three concrete capabilities:
 
 - **Install a specific version.** Pick any published version from a dropdown — including older stable, beta, or nightly — and install it in place of the currently installed release. Useful for rolling back after a broken update, or pinning to a version whose API you rely on.
-- **Bind an app to a non-App-Store source.** Each installed app can be bound to a GitHub release feed (`owner/repo`) or a Gitea / Forgejo release feed (`host/owner/repo`, incl. Codeberg) in addition to the App Store. Versions from the bound source appear alongside App Store versions in the dropdown.
+- **Bind an app to a non-App-Store source.** Each installed app can be bound to a GitHub release feed (`owner/repo`) or a Gitea / Forgejo release feed (`host/owner/repo`, incl. Codeberg) in addition to the App Store. Versions from the bound source appear alongside App Store versions in the dropdown. Switch sources with a single click via the in-app **Version source** card (`App Store` · `Codeberg` · `GitHub` · `Advanced…`), or POST to `/api/source/{appId}/bind` for scripted use.
 - **Discover and install apps from GitHub or Codeberg.** Search across GitHub / Codeberg for Nextcloud apps that aren't in the App Store, view their release history, and install directly. PATs are supported for private repositories.
 
 Trust is enforced by an allowlist (`trusted_sources` app config) — an admin must explicitly permit which owner/repo patterns App Versions may fetch from, so no arbitrary internet URL can be pointed at your instance.
@@ -24,7 +24,7 @@ sudo -u www-data php occ app:install app_versions
 
 **2. Open Files → App Versions** in the Nextcloud sidebar. Pick an installed app from the "Pick an installed App" list, then choose a version from the dropdown. Click Install.
 
-**3. Bind an alternative source** (optional). See [docs/tutorials/admin/02-bind-alternate-source](docs/tutorials/admin/02-bind-alternate-source.md) for how to install versions from GitHub or a Gitea/Forgejo instance (Codeberg, self-hosted Gitea, Forgejo).
+**3. Bind an alternative source** (optional). In the app, use the **Version source** card that appears next to the picked app — one click on `Codeberg` or `GitHub` binds `{owner}/{appId}` on the recommended host with sensible defaults; the `Advanced…` button gives you full control over host, owner, repo, and asset pattern. For scripted / CI use, POST directly to `/api/source/{appId}/bind` — see [docs/tutorials/admin/02-bind-alternate-source](docs/tutorials/admin/02-bind-alternate-source.md) which walks through both paths side by side.
 
 ## Supported sources
 
