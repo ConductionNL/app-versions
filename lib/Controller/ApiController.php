@@ -141,7 +141,9 @@ class ApiController extends OCSController {
 	}
 
 	/**
-	 * Returns the active source binding for an app; see "Source binding".
+	 * Returns the active source binding for an app, including any recorded
+	 * SHA-256 digests (not secrets); see "Source binding" and "Recorded
+	 * digests are binding-scoped and surfaced".
 	 *
 	 * @spec openspec/specs/external-sources/spec.md
 	 */
@@ -200,10 +202,16 @@ class ApiController extends OCSController {
 			return new DataResponse(['message' => $error->getMessage()], Http::STATUS_FORBIDDEN);
 		}
 
+		// Re-read the persisted binding: rebinding to the same source id
+		// preserves any previously recorded SHA-256 digests, so the response
+		// should reflect what was actually written, not the pre-write value —
+		// see "Recorded digests are binding-scoped and surfaced".
+		$persisted = $this->installerService->getBinding($appId);
+
 		return new DataResponse([
 			'appId' => $appId,
 			'sourceId' => $binding->getId(),
-			'binding' => $binding->toArray(),
+			'binding' => ($persisted ?? $binding)->toArray(),
 		]);
 	}
 
@@ -293,10 +301,14 @@ class ApiController extends OCSController {
 	/**
 	 * Installs a specific version (password-confirmed); see "Install Specific
 	 * Version" and, when the app is pinned, "Pins are enforced on App
-	 * Versions' own install path" (`overridePin=repin|unpin`, `pin=1`).
+	 * Versions' own install path" (`overridePin=repin|unpin`, `pin=1`). For an
+	 * external source with a recorded SHA-256 mismatch, `acceptNewSha=1`
+	 * bypasses the check once and replaces the recorded digest on success; see
+	 * "Recorded SHA-256 enforced on reinstall".
 	 *
 	 * @spec openspec/specs/version-management/spec.md
 	 * @spec openspec/specs/version-pinning/spec.md
+	 * @spec openspec/specs/external-sources/spec.md
 	 */
 	#[PasswordConfirmationRequired(strict: false)]
 	#[ApiRoute(verb: 'POST', url: '/api/app/{appId}/versions/{version}/install')]
@@ -322,6 +334,7 @@ class ApiController extends OCSController {
 		$overridePinRaw = $this->stringParam('overridePin', '');
 		$overridePin = $overridePinRaw === '' ? null : $overridePinRaw;
 		$pinRequested = $this->readBinaryBool($this->request->getParam('pin', '0'), false);
+		$acceptNewSha = $this->readBinaryBool($this->request->getParam('acceptNewSha', '0'), false);
 
 		$result = $this->installerService->installAppVersion(
 			$appId,
@@ -330,6 +343,7 @@ class ApiController extends OCSController {
 			$sourceOverride,
 			$overridePin,
 			$pinRequested,
+			$acceptNewSha,
 		);
 		$result['payload']['requestedVersion'] = $requestedVersion;
 		$result['payload']['routeVersion'] = $version;

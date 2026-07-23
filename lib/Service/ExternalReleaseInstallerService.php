@@ -20,6 +20,7 @@ use OCA\AppVersions\Service\Audit\AuditLogger;
 use OCA\AppVersions\Service\Installer\FailureClassifier;
 use OCA\AppVersions\Service\Installer\InstallFailure;
 use OCA\AppVersions\Service\Installer\InstallFinalizer;
+use OCA\AppVersions\Service\Installer\ShaMismatchException;
 use OCA\AppVersions\Service\Pat\PatManager;
 use OCA\AppVersions\Service\Pat\PatResolver;
 use OCA\AppVersions\Service\Source\SourceBinding;
@@ -42,9 +43,14 @@ use Psr\Log\LoggerInterface;
  * Nextcloud-issued code-signing certificate to verify and no per-release
  * signature to check. To compensate we apply:
  *   1. Trusted-source allowlist gate (no download until passed)
- *   2. Optional SHA-256 verification when the release publishes a sibling .sha256 asset
- *   3. Mandatory appId match against the extracted `appinfo/info.xml`
- *   4. Mandatory version match against the extracted `appinfo/info.xml`
+ *   2. Trust-on-first-use: the downloaded archive's SHA-256 MUST match the
+ *      digest recorded on the binding from a previous successful install of
+ *      the same (appId, version, source), if one is recorded — before
+ *      extraction/backup, `acceptNewSha` bypasses once and replaces on
+ *      success; see "Recorded SHA-256 enforced on reinstall"
+ *   3. Optional SHA-256 verification when the release publishes a sibling .sha256 asset
+ *   4. Mandatory appId match against the extracted `appinfo/info.xml`
+ *   5. Mandatory version match against the extracted `appinfo/info.xml`
  *
  * The post-extract finalization (migrations, repair steps, config writes) is
  * delegated to `InstallFinalizer` so signed and external installs cannot drift
@@ -80,13 +86,19 @@ class ExternalReleaseInstallerService {
 	}
 
 	/**
-	 * Downloads, integrity-checks (allowlist, SHA-256, appId/version), and installs an external release;
-	 * see "External install integrity checks".
+	 * Downloads, integrity-checks (allowlist, recorded SHA-256, sibling SHA-256,
+	 * appId/version), and installs an external release; see "External install
+	 * integrity checks", "SHA-256 recorded on first successful external
+	 * install", and "Recorded SHA-256 enforced on reinstall".
 	 *
 	 * @spec openspec/specs/external-sources/spec.md
 	 * @param array<string, mixed> $release
-	 * @return array{status: string, installedVersionBefore: ?string, installedApp?: string, integrityWarning?: ?string, dryRun: bool, debug: list<array{stage: string, data: mixed}>}
+	 * @param bool $acceptNewSha Single-request bypass of the recorded-SHA-256
+	 *                           check; on success the recorded digest is replaced (password-confirmed
+	 *                           at the API layer, warning-logged and audited here).
+	 * @return array{status: string, installedVersionBefore: ?string, installedApp?: string, integrityWarning?: ?string, dryRun: bool, debug: list<array{stage: string, data: mixed}>, binding: SourceBinding, recordedShaMatched: bool}
 	 * @throws Exception
+	 * @throws ShaMismatchException
 	 */
 	public function installFromExternalRelease(
 		string $appId,
@@ -94,6 +106,7 @@ class ExternalReleaseInstallerService {
 		array $release,
 		SourceBinding $binding,
 		bool $dryRun = false,
+		bool $acceptNewSha = false,
 	): array {
 		$this->resetDebug();
 		$this->addDebug('requested-install', [
@@ -142,7 +155,34 @@ class ExternalReleaseInstallerService {
 			}
 			$this->addDebug('downloaded', ['tempFile' => $tempFile, 'sourceUrl' => $downloadUrl]);
 
-			$integrityWarning = $this->verifyChecksum($tempFile, $shaUrl, $authResolution);
+			// Hash the downloaded archive exactly once; both the recorded-digest
+			// (TOFU) check below and the sibling `.sha256` verification reuse
+			// this value — see design.md "Enforcement point".
+			$actualSha = hash_file('sha256', $tempFile);
+			if ($actualSha === false) {
+				throw new Exception('Could not compute SHA-256 of downloaded archive.');
+			}
+			$actualSha = strtolower($actualSha);
+
+			// Trust-on-first-use enforcement: a digest recorded from a previous
+			// successful install of this (appId, version, source) outranks
+			// whatever the source serves now, including a co-published,
+			// possibly-rewritten `.sha256` sibling — see "Recorded SHA-256
+			// enforced on reinstall". Checked before extraction/backup: no
+			// filesystem change happens on mismatch.
+			$recordedSha = $binding->getRecordedSha($version);
+			$recordedShaMatched = $recordedSha !== null && hash_equals($recordedSha, $actualSha);
+			if ($recordedSha !== null && !$acceptNewSha && !$recordedShaMatched) {
+				throw new ShaMismatchException($appId, $version, $recordedSha, $actualSha);
+			}
+			$this->addDebug('recorded-sha-check', [
+				'recordedSha' => $recordedSha,
+				'actualSha' => $actualSha,
+				'matched' => $recordedShaMatched,
+				'acceptNewSha' => $acceptNewSha,
+			]);
+
+			$integrityWarning = $this->verifyChecksum($actualSha, $shaUrl, $authResolution);
 			$this->addDebug('checksum', ['shaUrl' => $shaUrl, 'integrityWarning' => $integrityWarning]);
 
 			$archivePath = $this->extractArchive($tempFile, $tempFolder);
@@ -175,6 +215,8 @@ class ExternalReleaseInstallerService {
 					'integrityWarning' => $integrityWarning,
 					'dryRun' => true,
 					'debug' => $this->debug,
+					'binding' => $binding,
+					'recordedShaMatched' => $recordedShaMatched,
 				];
 			}
 
@@ -234,7 +276,32 @@ class ExternalReleaseInstallerService {
 			}
 			$this->addDebug('finalized', ['appId' => $installedApp, 'enabled' => $enabled]);
 
-			$this->recordInstallAudit($appId, $binding, $installedVersion, $version, AuditLogger::STATUS_SUCCESS, $integrityWarning);
+			// Record the observed digest only now that the install fully
+			// succeeded (never on a failure path) — see "SHA-256 recorded on
+			// first successful external install". Sibling-verified or locally
+			// computed, the value is the same: verifyChecksum() above already
+			// threw if a sibling digest existed and disagreed with $actualSha.
+			$updatedBinding = $binding->withRecordedSha($version, $actualSha);
+			$shaAccepted = $recordedSha !== null && !$recordedShaMatched;
+			$auditMessage = $integrityWarning;
+			if ($shaAccepted) {
+				$this->logger->warning('ExternalReleaseInstallerService: accepted a new SHA-256 for a previously recorded version (acceptNewSha override)', [
+					'appId' => $appId,
+					'version' => $version,
+					'previousSha' => $recordedSha,
+					'newSha' => $actualSha,
+				]);
+				$shaAcceptNote = sprintf(
+					'SHA-256 override accepted for %s@%s: previous %s, new %s.',
+					$appId,
+					$version,
+					$recordedSha,
+					$actualSha,
+				);
+				$auditMessage = $auditMessage !== null ? $auditMessage . ' ' . $shaAcceptNote : $shaAcceptNote;
+			}
+
+			$this->recordInstallAudit($appId, $binding, $installedVersion, $version, AuditLogger::STATUS_SUCCESS, $auditMessage);
 
 			return [
 				'status' => 'installed',
@@ -243,6 +310,8 @@ class ExternalReleaseInstallerService {
 				'integrityWarning' => $integrityWarning,
 				'dryRun' => false,
 				'debug' => $this->debug,
+				'binding' => $updatedBinding,
+				'recordedShaMatched' => $recordedShaMatched,
 			];
 		} catch (\Throwable $error) {
 			// Best-effort audit write on the failure path, before the exception
@@ -322,7 +391,13 @@ class ExternalReleaseInstallerService {
 		});
 	}
 
-	private function verifyChecksum(string $tempFile, ?string $shaUrl, ?\OCA\AppVersions\Db\Pat $pat): ?string {
+	/**
+	 * Verifies the already-computed `$actualSha` (downloaded archive) against
+	 * the release's sibling `.sha256` asset when one exists. This is a
+	 * transport check only — see design.md "Trust model: TOFU" for why the
+	 * recorded-digest check (above, in the caller) takes precedence.
+	 */
+	private function verifyChecksum(string $actualSha, ?string $shaUrl, ?\OCA\AppVersions\Db\Pat $pat): ?string {
 		if ($shaUrl === null) {
 			return 'No SHA-256 checksum available for this artifact.';
 		}
@@ -364,16 +439,11 @@ class ExternalReleaseInstallerService {
 			return 'SHA-256 file format unrecognized; install proceeded without verification.';
 		}
 
-		$actual = hash_file('sha256', $tempFile);
-		if ($actual === false) {
-			return 'Could not compute SHA-256 of downloaded archive.';
-		}
-
-		if (!hash_equals(strtolower($expected), strtolower($actual))) {
+		if (!hash_equals(strtolower($expected), $actualSha)) {
 			throw new Exception(sprintf(
 				'SHA-256 mismatch — expected %s, got %s.',
 				strtolower($expected),
-				strtolower($actual)
+				$actualSha
 			));
 		}
 

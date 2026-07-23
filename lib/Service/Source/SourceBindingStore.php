@@ -16,6 +16,7 @@ use OCA\AppVersions\AppInfo\Application;
 use OCA\AppVersions\Service\Audit\AuditLogger;
 use OCP\IAppConfig;
 use OCP\IUserSession;
+use Psr\Log\LoggerInterface;
 
 /**
  * Reads and writes the per-app source binding stored under app config key
@@ -36,6 +37,7 @@ class SourceBindingStore {
 		private IAppConfig $config,
 		private AuditLogger $auditLogger,
 		private IUserSession $userSession,
+		private LoggerInterface $logger,
 	) {
 	}
 
@@ -61,21 +63,37 @@ class SourceBindingStore {
 		}
 
 		try {
-			return SourceBinding::fromArray($decoded);
+			$binding = SourceBinding::fromArray($decoded);
 		} catch (\InvalidArgumentException) {
 			return null;
 		}
+
+		$this->logDroppedShaEntries($appId, $decoded, $binding);
+
+		return $binding;
 	}
 
 	/**
-	 * Persists a source binding under `source.{appId}`; see "Source binding"
-	 * and "Source binding changes are recorded".
+	 * Persists a source binding under `source.{appId}`; see "Source binding",
+	 * "Source binding changes are recorded" and "Recorded digests are
+	 * binding-scoped and surfaced". Rebinding to the same source id preserves
+	 * any digest recorded under the previous binding that the incoming
+	 * `$binding` does not already carry; rebinding to a different source id
+	 * discards them.
 	 *
 	 * @spec openspec/specs/external-sources/spec.md
 	 * @spec openspec/specs/audit-trail/spec.md
 	 */
 	public function set(string $appId, SourceBinding $binding): void {
 		$previous = $this->get($appId);
+
+		if ($previous !== null && $previous->getId() === $binding->getId()) {
+			foreach ($previous->getRecordedShaMap() as $version => $sha) {
+				if ($binding->getRecordedSha($version) === null) {
+					$binding = $binding->withRecordedSha($version, $sha);
+				}
+			}
+		}
 
 		$this->config->setValueString(
 			Application::APP_ID,
@@ -111,5 +129,29 @@ class SourceBindingStore {
 
 	private function key(string $appId): string {
 		return 'source.' . $appId;
+	}
+
+	/**
+	 * Logs a warning when the raw persisted `sha256` map contained entries
+	 * that {@see SourceBinding} dropped as invalid (malformed key/digest); see
+	 * "Recorded digests are binding-scoped and surfaced".
+	 *
+	 * @param array<array-key, mixed> $decoded
+	 */
+	private function logDroppedShaEntries(string $appId, array $decoded, SourceBinding $binding): void {
+		/** @var mixed $raw */
+		$raw = $decoded['sha256'] ?? null;
+		if (!is_array($raw)) {
+			return;
+		}
+
+		$validCount = count($binding->getRecordedShaMap());
+		if (count($raw) > $validCount) {
+			$this->logger->warning('SourceBindingStore: dropped invalid recorded SHA-256 entries on read', [
+				'appId' => $appId,
+				'rawCount' => count($raw),
+				'validCount' => $validCount,
+			]);
+		}
 	}
 }

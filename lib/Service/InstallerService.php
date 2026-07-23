@@ -18,6 +18,7 @@ use OCA\AppVersions\AppInfo\Application;
 use OCA\AppVersions\Service\Installer\EnvironmentCheck;
 use OCA\AppVersions\Service\Installer\FailureClassifier;
 use OCA\AppVersions\Service\Installer\InstallFailure;
+use OCA\AppVersions\Service\Installer\ShaMismatchException;
 use OCA\AppVersions\Service\Pin\Pin;
 use OCA\AppVersions\Service\Pin\PinStore;
 use OCA\AppVersions\Service\Source\SourceBinding;
@@ -136,7 +137,8 @@ class InstallerService {
 	 *
 	 * @spec openspec/specs/version-management/spec.md
 	 * @spec openspec/specs/changelog-visibility/spec.md
-	 * @return array{installedVersion: ?string, availableVersions: list<array{version:string, changelog:?string}>, versions: list<array{version:string, changelog:?string}>, source: string, sourceId: string, statusCode: int, hasError: bool, error?: string}
+	 * @spec openspec/specs/external-sources/spec.md
+	 * @return array{installedVersion: ?string, availableVersions: list<array{version:string, changelog:?string, recordedSha:?string}>, versions: list<array{version:string, changelog:?string, recordedSha:?string}>, source: string, sourceId: string, statusCode: int, hasError: bool, error?: string}
 	 */
 	public function getAppVersions(string $appId, ?string $sourceOverride = null): array {
 		$appId = trim($appId);
@@ -183,6 +185,7 @@ class InstallerService {
 		}
 
 		$versions = $this->applyChangelogTruncation($result['versions']);
+		$versions = $this->applyRecordedSha($versions, $binding);
 
 		$envelope = [
 			'installedVersion' => $installedVersion,
@@ -232,6 +235,26 @@ class InstallerService {
 	}
 
 	/**
+	 * Attaches the binding's recorded SHA-256 (if any) to each version entry
+	 * so the picker can badge versions with a first-install checksum on
+	 * record; see "Recorded digests are binding-scoped and surfaced".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 * @param list<array{version:string, changelog:?string}> $versions
+	 * @return list<array{version:string, changelog:?string, recordedSha:?string}>
+	 */
+	private function applyRecordedSha(array $versions, SourceBinding $binding): array {
+		return array_map(
+			static function (array $entry) use ($binding): array {
+				$entry['recordedSha'] = $binding->getRecordedSha($entry['version']);
+
+				return $entry;
+			},
+			$versions
+		);
+	}
+
+	/**
 	 * Installs a target version via the matching installer and persists the
 	 * binding on success; see "Install Specific Version", "Source binding",
 	 * and "Pins are enforced on App Versions' own install path".
@@ -242,8 +265,14 @@ class InstallerService {
 	 * `$pinRequested` pins the resulting version after a successful install
 	 * when the app was not already pinned (atomic install-then-pin).
 	 *
+	 * `$acceptNewSha` bypasses, for this one request, a recorded-SHA-256
+	 * mismatch on an external install and replaces the recorded digest on
+	 * success — see "Recorded SHA-256 enforced on reinstall". Ignored for
+	 * App Store (signed) installs, which do not record digests.
+	 *
 	 * @spec openspec/specs/version-management/spec.md
 	 * @spec openspec/specs/version-pinning/spec.md
+	 * @spec openspec/specs/external-sources/spec.md
 	 * @return array{statusCode:int, payload:array<string, mixed>}
 	 */
 	public function installAppVersion(
@@ -253,6 +282,7 @@ class InstallerService {
 		?string $sourceOverride = null,
 		?string $overridePin = null,
 		bool $pinRequested = false,
+		bool $acceptNewSha = false,
 	): array {
 		$appId = trim($appId);
 		$targetVersion = trim($targetVersion);
@@ -404,12 +434,19 @@ class InstallerService {
 				$this->config->setSystemValue('maintenance', true);
 			}
 
+			$recordedShaMatched = null;
 			if ($source->getInstallerKind() === \OCA\AppVersions\Service\Source\SourceInterface::INSTALLER_SIGNED) {
 				$result = $this->signedInstaller->installFromSelectedRelease($appId, $release, $dryRun);
 				$integrityWarning = null;
 			} else {
-				$result = $this->externalInstaller->installFromExternalRelease($appId, $targetVersion, $release, $binding, $dryRun);
+				$result = $this->externalInstaller->installFromExternalRelease($appId, $targetVersion, $release, $binding, $dryRun, $acceptNewSha);
 				$integrityWarning = $result['integrityWarning'] ?? null;
+				$recordedShaMatched = $result['recordedShaMatched'] ?? null;
+				// The external installer may have recorded/replaced a SHA-256 on
+				// the binding — persist that updated binding, not the pre-install
+				// one, so the digest is not lost; see "SHA-256 recorded on first
+				// successful external install".
+				$binding = $result['binding'];
 			}
 
 			if (!$dryRun) {
@@ -449,6 +486,12 @@ class InstallerService {
 			];
 			if ($integrityWarning !== null) {
 				$payload['integrityWarning'] = $integrityWarning;
+			}
+			if ($recordedShaMatched !== null) {
+				// See "Recorded SHA-256 enforced on reinstall" — Scenario
+				// "Matching digest proceeds": the response indicates the
+				// artifact matched the first-install checksum.
+				$payload['recordedShaMatched'] = $recordedShaMatched;
 			}
 			if ($includeDebug) {
 				$payload['debug'] = (array)($result['debug'] ?? []);
@@ -490,6 +533,31 @@ class InstallerService {
 					'sourceId' => $binding->getId(),
 				] + ($includeDebug ? ['debug' => []] : []),
 			];
+		} catch (ShaMismatchException $error) {
+			// Recorded-digest mismatch: no filesystem change happened (thrown
+			// before extraction/backup). Machine-readable `code` lets the
+			// frontend render the explicit "accept new checksum" escape hatch;
+			// see "Recorded SHA-256 enforced on reinstall".
+			$classification = $this->failureClassifier->classify($error, FailureClassifier::STAGE_CHECKSUM, FailureClassifier::CATEGORY_SHA_MISMATCH);
+			$payload = [
+				'appId' => $appId,
+				'fromVersion' => $installedVersion === '' ? null : $installedVersion,
+				'toVersion' => $targetVersion,
+				'message' => $error->getMessage(),
+				'category' => $classification['category'],
+				'code' => 'sha_mismatch',
+				'stage' => FailureClassifier::STAGE_CHECKSUM,
+				'hint' => $classification['hint'],
+				'installStatus' => 'failed',
+				'sourceId' => $binding->getId(),
+				'expectedSha' => $error->expectedSha,
+				'actualSha' => $error->actualSha,
+			];
+			if ($includeDebug) {
+				$payload['debug'] = $this->installerDebugLog($source);
+			}
+
+			return ['statusCode' => $classification['statusCode'], 'payload' => $payload];
 		} catch (InstallFailure $failure) {
 			// The installer already handled filesystem recovery; report the
 			// honest outcome (reverted / installed-but-broken) instead of a 500.
@@ -727,7 +795,7 @@ class InstallerService {
 	}
 
 	/**
-	 * @return array{installedVersion: ?string, availableVersions: list<array{version:string}>, versions: list<array{version:string}>, source: string, sourceId: string, statusCode: int, hasError: bool, error: string}
+	 * @return array{installedVersion: ?string, availableVersions: list<array{version:string, changelog:?string, recordedSha:?string}>, versions: list<array{version:string, changelog:?string, recordedSha:?string}>, source: string, sourceId: string, statusCode: int, hasError: bool, error: string}
 	 */
 	private function errorEnvelope(string $message, int $statusCode): array {
 		return [

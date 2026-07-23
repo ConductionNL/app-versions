@@ -34,6 +34,13 @@ class FailureClassifier {
 	public const CATEGORY_PREFLIGHT_PERMISSION = 'preflight_permission';
 	public const CATEGORY_DOWNLOAD = 'download';
 	public const CATEGORY_CHECKSUM_MISMATCH = 'checksum_mismatch';
+	/**
+	 * A recorded (trust-on-first-use) SHA-256 mismatch — distinct from
+	 * {@see CATEGORY_CHECKSUM_MISMATCH} (the source-published sibling
+	 * checksum): this is a history check the source cannot rewrite. See
+	 * "Recorded SHA-256 enforced on reinstall".
+	 */
+	public const CATEGORY_SHA_MISMATCH = 'sha_mismatch';
 	public const CATEGORY_EXTRACT = 'extract';
 	public const CATEGORY_APPID_MISMATCH = 'appid_mismatch';
 	public const CATEGORY_VERSION_MISMATCH = 'version_mismatch';
@@ -88,7 +95,8 @@ class FailureClassifier {
 			self::CATEGORY_INCOMPATIBLE,
 			self::CATEGORY_VERSION_MISMATCH,
 			self::CATEGORY_APPID_MISMATCH,
-			self::CATEGORY_CHECKSUM_MISMATCH => Http::STATUS_UNPROCESSABLE_ENTITY,
+			self::CATEGORY_CHECKSUM_MISMATCH,
+			self::CATEGORY_SHA_MISMATCH => Http::STATUS_UNPROCESSABLE_ENTITY,
 			self::CATEGORY_DOWNLOAD => Http::STATUS_BAD_GATEWAY,
 			default => Http::STATUS_INTERNAL_SERVER_ERROR,
 		};
@@ -152,6 +160,7 @@ class FailureClassifier {
 			self::CATEGORY_PREFLIGHT_PERMISSION => $l->t('The app folder is not writable by the web-server user. If this is a bind-mounted dev checkout, fix the folder ownership/permissions (or install the app into a writable apps directory).'),
 			self::CATEGORY_DOWNLOAD => $l->t('The release could not be downloaded from its source. Check connectivity to the source and that the release asset still exists.'),
 			self::CATEGORY_CHECKSUM_MISMATCH => $l->t('The downloaded archive failed its integrity check. The release may be corrupted or tampered with; do not install it.'),
+			self::CATEGORY_SHA_MISMATCH => $l->t('The downloaded artifact does not match the SHA-256 recorded the first time this version was installed. The upstream release may have been rewritten. Only proceed if you are certain the new artifact is legitimate, then explicitly accept the new checksum to install it.'),
 			self::CATEGORY_EXTRACT => $l->t('The release archive could not be extracted. The downloaded file may be incomplete or not a valid app archive.'),
 			self::CATEGORY_APPID_MISMATCH => $l->t('The downloaded archive is for a different app than requested. Verify the source binding points at the correct repository.'),
 			self::CATEGORY_VERSION_MISMATCH => $l->t('The downloaded archive declares a different version than requested. The source metadata and asset may be out of sync.'),

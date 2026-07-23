@@ -40,6 +40,7 @@ final class FailureClassifierTest extends TestCase {
 			'version' => [FailureClassifier::CATEGORY_VERSION_MISMATCH, Http::STATUS_UNPROCESSABLE_ENTITY],
 			'appid' => [FailureClassifier::CATEGORY_APPID_MISMATCH, Http::STATUS_UNPROCESSABLE_ENTITY],
 			'checksum' => [FailureClassifier::CATEGORY_CHECKSUM_MISMATCH, Http::STATUS_UNPROCESSABLE_ENTITY],
+			'sha_mismatch' => [FailureClassifier::CATEGORY_SHA_MISMATCH, Http::STATUS_UNPROCESSABLE_ENTITY],
 			'download' => [FailureClassifier::CATEGORY_DOWNLOAD, Http::STATUS_BAD_GATEWAY],
 			'extract' => [FailureClassifier::CATEGORY_EXTRACT, Http::STATUS_INTERNAL_SERVER_ERROR],
 			'filesystem' => [FailureClassifier::CATEGORY_FILESYSTEM, Http::STATUS_INTERNAL_SERVER_ERROR],
@@ -102,6 +103,7 @@ final class FailureClassifierTest extends TestCase {
 			FailureClassifier::CATEGORY_PREFLIGHT_PERMISSION,
 			FailureClassifier::CATEGORY_DOWNLOAD,
 			FailureClassifier::CATEGORY_CHECKSUM_MISMATCH,
+			FailureClassifier::CATEGORY_SHA_MISMATCH,
 			FailureClassifier::CATEGORY_EXTRACT,
 			FailureClassifier::CATEGORY_APPID_MISMATCH,
 			FailureClassifier::CATEGORY_VERSION_MISMATCH,
@@ -142,5 +144,21 @@ final class FailureClassifierTest extends TestCase {
 
 	public function testRevertedHintIsNonEmpty(): void {
 		self::assertNotSame('', $this->build()->revertedHint());
+	}
+
+	public function testClassifyWithForcedShaMismatchCategoryIgnoresMessageSniffing(): void {
+		// The exception message contains "checksum" (see ShaMismatchException),
+		// which categoryFor() would otherwise sniff as CATEGORY_CHECKSUM_MISMATCH
+		// — the caller forces CATEGORY_SHA_MISMATCH instead.
+		$classifier = $this->build();
+		$result = $classifier->classify(
+			new Exception('Artifact for openregister@2.3.0 does not match the checksum recorded at first install.'),
+			FailureClassifier::STAGE_CHECKSUM,
+			FailureClassifier::CATEGORY_SHA_MISMATCH,
+		);
+
+		self::assertSame(FailureClassifier::CATEGORY_SHA_MISMATCH, $result['category']);
+		self::assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $result['statusCode']);
+		self::assertNotSame('', $result['hint']);
 	}
 }

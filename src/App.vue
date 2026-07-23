@@ -15,6 +15,7 @@ import VersionChangelog from './components/VersionChangelog.vue'
 import PinDialog from './dialogs/PinDialog.vue'
 import type { PinRecord } from './dialogs/PinDialog.vue'
 import PinOverrideDialog from './dialogs/PinOverrideDialog.vue'
+import ShaMismatchDialog from './dialogs/ShaMismatchDialog.vue'
 import { buildChangelogRange } from './utils/changelog'
 import { compareVersions, parseVersionCore } from './utils/versionCompare'
 
@@ -32,6 +33,7 @@ type AppOption = {
 type AppVersion = {
 	version: string
 	changelog?: string | null
+	recordedSha?: string | null
 }
 
 type AdvisoryRecord = {
@@ -67,6 +69,7 @@ type InstallResult = {
 	category?: string | null
 	hint?: string | null
 	debug?: InstallDebugEntry[]
+	recordedShaMatched?: boolean | null
 }
 
 const isLoading = ref(true)
@@ -113,6 +116,15 @@ const pinOverrideAppId = ref('')
 const pinOverridePinnedVersion = ref('')
 const pinOverrideTargetVersion = ref('')
 let pinOverrideResolve: ((choice: 'repin' | 'unpin' | 'cancel') => void) | null = null
+
+// SHA-256 mismatch on reinstall (trust-on-first-use enforcement) — see
+// "Recorded SHA-256 enforced on reinstall".
+const isShaMismatchDialogOpen = ref(false)
+const shaMismatchAppId = ref('')
+const shaMismatchVersion = ref('')
+const shaMismatchExpectedSha = ref('')
+const shaMismatchActualSha = ref('')
+let shaMismatchResolve: ((accept: boolean) => void) | null = null
 
 // Admin-settings tabs: the existing apps→versions→install view plus the
 // source / token / trusted-source management panels, and the Discover tab
@@ -325,6 +337,7 @@ const normalizeInstallResult = (payload: {
 	category?: string | null
 	hint?: string | null
 	debug?: unknown
+	recordedShaMatched?: boolean
 }): InstallResult => {
 	const normalizedUpdateType = payload.updateType ?? 'none'
 	const normalizedFrom = payload.fromVersion ?? null
@@ -351,6 +364,7 @@ const normalizeInstallResult = (payload: {
 		category: payload.category ?? null,
 		hint: payload.hint ?? null,
 		debug: Array.isArray(payload.debug) ? payload.debug as InstallDebugEntry[] : [],
+		recordedShaMatched: payload.recordedShaMatched ?? null,
 	}
 }
 
@@ -427,6 +441,18 @@ const loadAdvisories = async (): Promise<void> => {
 }
 
 const advisoryFor = (appId: string): AdvisoryCorrelation | null => advisories.value[appId] ?? null
+
+// Badge shown next to a version with a recorded SHA-256 on the binding — see
+// "Recorded digests are binding-scoped and surfaced". After a reinstall that
+// verified the digest against that same version, the badge is upgraded to
+// reflect the fresh verification instead of just "on record".
+const recordedShaBadgeLabel = (version: string): string => {
+	const lastResult = lastInstallResult.value
+	if (lastResult?.recordedShaMatched === true && lastResult.toVersion === version) {
+		return t('app_versions', 'Matches first-install checksum')
+	}
+	return t('app_versions', 'Checksum recorded')
+}
 
 const advisoryBadgeLabel = (state: AdvisoryCorrelation['state']): string => {
 	if (state === 'pinned-to-vulnerable') {
@@ -932,7 +958,11 @@ type InstallApiPayload = {
 	installStatus?: string
 	debug?: unknown
 	category?: string
+	code?: string
 	pinnedVersion?: string
+	expectedSha?: string
+	actualSha?: string
+	recordedShaMatched?: boolean
 }
 
 const requestInstall = async (
@@ -940,6 +970,7 @@ const requestInstall = async (
 	version: string,
 	overridePin?: 'repin' | 'unpin',
 	pinRequested = false,
+	acceptNewSha = false,
 ): Promise<{ payload: InstallApiPayload, metaMessage?: string }> => {
 	const query: Record<string, string> = {
 		debug: includeDebug.value ? '1' : '0',
@@ -950,6 +981,9 @@ const requestInstall = async (
 	}
 	if (pinRequested) {
 		query.pin = '1'
+	}
+	if (acceptNewSha) {
+		query.acceptNewSha = '1'
 	}
 	const endpoint = withOcsJson(
 		`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(appId)}/versions/${encodeURIComponent(version)}/install`,
@@ -990,6 +1024,32 @@ const confirmPinOverride = (appId: string, pinnedVersion: string, targetVersion:
 const onPinOverrideResolve = (choice: 'repin' | 'unpin' | 'cancel'): void => {
 	pinOverrideResolve?.(choice)
 	pinOverrideResolve = null
+}
+
+// Offers "Accept new checksum and install" / Cancel when the install endpoint
+// refuses to reinstall because the downloaded artifact does not match the
+// SHA-256 recorded at first install (422, code "sha_mismatch"); see
+// "Recorded SHA-256 enforced on reinstall".
+const confirmShaMismatch = (appId: string, version: string, expectedSha: string, actualSha: string): Promise<boolean> => {
+	if (shaMismatchResolve) {
+		shaMismatchResolve(false)
+		shaMismatchResolve = null
+	}
+
+	shaMismatchAppId.value = appId
+	shaMismatchVersion.value = version
+	shaMismatchExpectedSha.value = expectedSha
+	shaMismatchActualSha.value = actualSha
+
+	return new Promise((resolve) => {
+		shaMismatchResolve = resolve
+		isShaMismatchDialogOpen.value = true
+	})
+}
+
+const onShaMismatchResolve = (accept: boolean): void => {
+	shaMismatchResolve?.(accept)
+	shaMismatchResolve = null
 }
 
 // Re-pin from the drift banner reinstalls the pinned version through this
@@ -1058,6 +1118,20 @@ const performInstall = async (): Promise<void> => {
 				return
 			}
 			installResponse = await requestInstall(selectedAppValue, selectedVersionValue, choice)
+		}
+
+		if (installResponse.metaMessage && installResponse.payload?.code === 'sha_mismatch') {
+			const accept = await confirmShaMismatch(
+				selectedAppValue,
+				selectedVersionValue,
+				installResponse.payload.expectedSha || '',
+				installResponse.payload.actualSha || '',
+			)
+			if (!accept) {
+				hasInstallResult.value = false
+				return
+			}
+			installResponse = await requestInstall(selectedAppValue, selectedVersionValue, undefined, false, true)
 		}
 
 		const { payload, metaMessage } = installResponse
@@ -1201,6 +1275,14 @@ watch(debugModeEnabled, () => {
 				:target-version="pinOverrideTargetVersion"
 				@update:open="isPinOverrideDialogOpen = $event"
 				@resolve="onPinOverrideResolve" />
+			<ShaMismatchDialog
+				:open="isShaMismatchDialogOpen"
+				:app-id="shaMismatchAppId"
+				:version="shaMismatchVersion"
+				:expected-sha="shaMismatchExpectedSha"
+				:actual-sha="shaMismatchActualSha"
+				@update:open="isShaMismatchDialogOpen = $event"
+				@resolve="onShaMismatchResolve" />
 			<h2>{{ t('app_versions', 'App Versions') }}</h2>
 			<div :class="$style.well">
 				<div ref="tablistEl"
@@ -1454,6 +1536,12 @@ watch(debugModeEnabled, () => {
 													<li v-for="version in visibleVersions" :key="version.version" :class="$style.versionItem">
 														<div :class="$style.versionItemMain">
 															<span>{{ version.version }}</span>
+															<span
+																v-if="version.recordedSha"
+																:class="$style.recordedShaBadge"
+																:title="version.recordedSha">
+																{{ recordedShaBadgeLabel(version.version) }}
+															</span>
 															<button
 																v-if="selectedVersion !== version.version"
 																type="button"
@@ -2094,6 +2182,20 @@ watch(debugModeEnabled, () => {
 	align-items: center;
 	gap: 10px;
 	width: 100%;
+}
+
+.recordedShaBadge {
+	display: inline-flex;
+	align-items: center;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--color-success-text, var(--color-success));
+	background: var(--color-success-hover, rgba(0, 158, 116, 0.1));
+	border: 1px solid var(--color-success);
+	border-radius: 9999px;
+	padding: 1px 8px;
+	line-height: 1.4;
+	white-space: nowrap;
 }
 
 .versionActionGroup {

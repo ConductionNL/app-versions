@@ -24,7 +24,8 @@
                 "type": "object",
                 "required": [
                     "version",
-                    "changelog"
+                    "changelog",
+                    "recordedSha"
                 ],
                 "properties": {
                     "version": {
@@ -34,6 +35,11 @@
                         "type": "string",
                         "nullable": true,
                         "description": "Release notes for this version (App Store translation or forge release body), truncated to 8 KiB server-side; null when the source provides none."
+                    },
+                    "recordedSha": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "SHA-256 recorded on the source binding from a previous successful external install of this version (trust-on-first-use); null when none is recorded, e.g. App Store versions or a version never installed from this binding."
                     }
                 }
             },
