@@ -4,11 +4,15 @@ import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { t } from '@nextcloud/l10n'
+import ChangelogRangePanel from './components/ChangelogRangePanel.vue'
 import DiscoverPanel, { type PrefillBindPayload } from './components/DiscoverPanel.vue'
 import HistoryPanel from './components/HistoryPanel.vue'
 import SourcesPanel from './components/SourcesPanel.vue'
 import TokensPanel from './components/TokensPanel.vue'
 import TrustedSourcesPanel from './components/TrustedSourcesPanel.vue'
+import VersionChangelog from './components/VersionChangelog.vue'
+import { buildChangelogRange } from './utils/changelog'
+import { compareVersions, parseVersionCore } from './utils/versionCompare'
 
 type AppOption = {
 	id: string
@@ -23,6 +27,7 @@ type AppOption = {
 
 type AppVersion = {
 	version: string
+	changelog?: string | null
 }
 
 type AdvisoryRecord = {
@@ -191,91 +196,6 @@ type VersionRangeInfo = {
 	direction: 'upgrade' | 'degrade'
 	from: string
 	to: string
-}
-
-const parseVersionCore = (version: string): { major: number, minor: number, patch: number } => {
-	const [core] = version.split('-', 2)
-	const [rawMajor, rawMinor, rawPatch] = core.split('.')
-
-	return {
-		major: Number.parseInt(rawMajor || '0', 10) || 0,
-		minor: Number.parseInt(rawMinor || '0', 10) || 0,
-		patch: Number.parseInt(rawPatch || '0', 10) || 0,
-	}
-}
-
-const compareVersions = (left: string, right: string): number => {
-	const [leftCore, leftPre = ''] = left.split('-', 2)
-	const [rightCore, rightPre = ''] = right.split('-', 2)
-	const leftParts = leftCore.split('.').map((part) => Number(part || '0'))
-	const rightParts = rightCore.split('.').map((part) => Number(part || '0'))
-
-	for (let index = 0; index < Math.max(leftParts.length, rightParts.length); index++) {
-		const leftPart = leftParts[index] ?? 0
-		const rightPart = rightParts[index] ?? 0
-
-		if (leftPart > rightPart) {
-			return 1
-		}
-		if (leftPart < rightPart) {
-			return -1
-		}
-	}
-
-	if (leftPre === rightPre) {
-		return 0
-	}
-	if (!leftPre) {
-		return 1
-	}
-	if (!rightPre) {
-		return -1
-	}
-
-	const leftPreParts = leftPre.split('.')
-	const rightPreParts = rightPre.split('.')
-	for (let index = 0; index < Math.max(leftPreParts.length, rightPreParts.length); index++) {
-		const leftPart = leftPreParts[index]
-		const rightPart = rightPreParts[index]
-
-		if (leftPart === undefined) {
-			return -1
-		}
-		if (rightPart === undefined) {
-			return 1
-		}
-
-		const leftNumeric = /^\d+$/.test(leftPart)
-		const rightNumeric = /^\d+$/.test(rightPart)
-
-		if (leftNumeric && rightNumeric) {
-			const leftNum = Number(leftPart)
-			const rightNum = Number(rightPart)
-			if (leftNum > rightNum) {
-				return 1
-			}
-			if (leftNum < rightNum) {
-				return -1
-			}
-			continue
-		}
-
-		if (leftNumeric) {
-			return -1
-		}
-		if (rightNumeric) {
-			return 1
-		}
-
-		if (leftPart > rightPart) {
-			return 1
-		}
-		if (leftPart < rightPart) {
-			return -1
-		}
-	}
-
-	return 0
 }
 
 const changeActionLabel = computed(() => {
@@ -842,6 +762,11 @@ const selectedVersionRange = computed(() => {
 
 const downgradeVersionRange = computed(() => getVersionRangeSummary(downgradeConfirmFromVersion.value, downgradeConfirmToVersion.value))
 
+// Aggregate "changes between installed → target" panel — reuses the
+// already-fetched `versions` array, zero extra requests; see "Aggregate
+// range changelog on target selection".
+const changelogRange = computed(() => buildChangelogRange(installedVersion.value, selectedVersion.value, versions.value))
+
 const versionRangeText = (summary: VersionRangeInfo | null): string => {
 	if (!summary) {
 		return ''
@@ -1297,6 +1222,7 @@ watch(debugModeEnabled, () => {
 											:class="$style.versionDegradeSummary">
 											Downgrade path detected.
 										</p>
+										<ChangelogRangePanel :entries="changelogRange" />
 									</div>
 									<template v-if="appDetailTab === 'versions'">
 										<div v-if="versions.length > 0" :class="$style.versionListContainer">
@@ -1329,6 +1255,7 @@ watch(debugModeEnabled, () => {
 																Selected
 															</span>
 														</div>
+														<VersionChangelog :version="version.version" :changelog="version.changelog ?? null" />
 														<div
 															v-if="selectedVersion === version.version && selectedVersion !== ''"
 															:class="$style.versionActionGroup">

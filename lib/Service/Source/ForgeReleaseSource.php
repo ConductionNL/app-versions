@@ -19,6 +19,8 @@ use OCA\AppVersions\Service\Pat\PatResolver;
 use OCP\Http\Client\IClientService;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
+use Throwable;
+use UnexpectedValueException;
 
 /**
  * Lists releases for an `owner/repo` on a git forge (GitHub, Codeberg/Forgejo)
@@ -55,9 +57,11 @@ class ForgeReleaseSource implements SourceInterface, AdvisorySourceInterface {
 	}
 
 	/**
-	 * Lists release tags (PAT-authenticated when matched), deduped newest-first; see "GitHub releases as a source".
+	 * Lists release tags (PAT-authenticated when matched), deduped newest-first; see "GitHub releases as a source"
+	 * and "Version listings carry release notes".
 	 *
 	 * @spec openspec/specs/external-sources/spec.md
+	 * @spec openspec/specs/changelog-visibility/spec.md
 	 */
 	public function listVersions(string $appId, SourceBinding $binding): array {
 		$ownerRepo = $binding->getOwnerRepo();
@@ -85,7 +89,10 @@ class ForgeReleaseSource implements SourceInterface, AdvisorySourceInterface {
 			if (!is_string($tag) || $tag === '') {
 				continue;
 			}
-			$versions[] = ['version' => $this->normalizeVersion($tag)];
+			$versions[] = [
+				'version' => $this->normalizeVersion($tag),
+				'changelog' => $this->extractChangelog($release),
+			];
 		}
 
 		return ['versions' => $this->dedupeAndSort($versions), 'error' => null];
@@ -396,30 +403,68 @@ class ForgeReleaseSource implements SourceInterface, AdvisorySourceInterface {
 	}
 
 	/**
-	 * @param list<array{version: string}> $versions
-	 * @return list<array{version: string}>
+	 * @param list<array{version: string, changelog: ?string}> $versions
+	 * @return list<array{version: string, changelog: ?string}>
 	 */
 	private function dedupeAndSort(array $versions): array {
-		$seen = [];
+		$seenAt = [];
 		$unique = [];
 		foreach ($versions as $entry) {
-			if (isset($seen[$entry['version']])) {
+			if (!isset($seenAt[$entry['version']])) {
+				$seenAt[$entry['version']] = count($unique);
+				$unique[] = $entry;
 				continue;
 			}
-			$seen[$entry['version']] = true;
-			$unique[] = $entry;
+			// Duplicate tag (e.g. re-listed across pagination); keep the
+			// first-seen entry but backfill its changelog if it was empty.
+			$index = $seenAt[$entry['version']];
+			if ($unique[$index]['changelog'] === null && $entry['changelog'] !== null) {
+				$unique[$index]['changelog'] = $entry['changelog'];
+			}
 		}
 
 		usort(
 			$unique,
 			/**
-			 * @param array{version: string} $a
-			 * @param array{version: string} $b
+			 * @param array{version: string, changelog: ?string} $a
+			 * @param array{version: string, changelog: ?string} $b
 			 */
 			static fn (array $a, array $b): int => version_compare($b['version'], $a['version'])
 		);
 
 		return $unique;
+	}
+
+	/**
+	 * Maps a forge release's `body` (release notes markdown) into the
+	 * changelog field. Fail-soft: any mapping failure is caught and yields
+	 * `null` so a single malformed release never fails the whole listing.
+	 *
+	 * @spec openspec/specs/changelog-visibility/spec.md
+	 * @param array<array-key, mixed> $release
+	 */
+	private function extractChangelog(array $release): ?string {
+		try {
+			return $this->rawChangelogFrom($release);
+		} catch (Throwable) {
+			return null;
+		}
+	}
+
+	/**
+	 * @param array<array-key, mixed> $release
+	 */
+	private function rawChangelogFrom(array $release): ?string {
+		/** @var mixed $body */
+		$body = $release['body'] ?? null;
+		if ($body === null) {
+			return null;
+		}
+		if (!is_string($body)) {
+			throw new UnexpectedValueException('Release body is not a string.');
+		}
+
+		return trim($body) === '' ? null : $body;
 	}
 
 	private function humanizeError(Forge $forge, string $raw): string {
