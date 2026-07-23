@@ -18,7 +18,15 @@
         "{appId} is pinned to {pinnedVersion} but is now running {observedVersion} — something other than App Versions changed it.": "{appId} is vastgezet op {pinnedVersion}, maar draait nu {observedVersion} — iets anders dan App Versions heeft dit gewijzigd.",
         "Re-pin {version}": "Opnieuw vastzetten op {version}",
         "Accept: move pin to {version}": "Accepteren: vastzetting verplaatsen naar {version}",
-        "Accept: remove pin": "Accepteren: vastzetting verwijderen"
+        "Accept: remove pin": "Accepteren: vastzetting verwijderen",
+        "Checksum does not match first install": "Checksum komt niet overeen met de eerste installatie",
+        "Accept new checksum and install": "Nieuwe checksum accepteren en installeren",
+        "{appId} {version} was previously installed with a different SHA-256 checksum. The upstream release may have been rewritten since — App Versions blocks the install to protect you from a silently altered artifact.": "{appId} {version} is eerder geïnstalleerd met een andere SHA-256-checksum. De release bij de bron is mogelijk sindsdien herschreven — App Versions blokkeert de installatie om je te beschermen tegen een stilzwijgend gewijzigd bestand.",
+        "Recorded at first install": "Vastgelegd bij eerste installatie",
+        "Just downloaded": "Zojuist gedownload",
+        "Only accept if you are certain this change is legitimate — for example the maintainer re-tagged the release to fix a packaging error.": "Accepteer dit alleen als je zeker weet dat deze wijziging legitiem is — bijvoorbeeld wanneer de maintainer de release opnieuw heeft getagd om een verpakkingsfout te herstellen.",
+        "Matches first-install checksum": "Komt overeen met checksum van eerste installatie",
+        "Checksum recorded": "Checksum vastgelegd"
     },
     "pluralForm": "nplurals=2; plural=(n != 1);"
 }

@@ -73,7 +73,7 @@ class PatExpiryEvaluator {
 		$expiry = new \DateTimeImmutable($expiresAt, new \DateTimeZone('UTC'));
 		$diffSeconds = $expiry->getTimestamp() - $now->getTimestamp();
 
-		return (int) ceil($diffSeconds / 86400);
+		return (int)ceil($diffSeconds / 86400);
 	}
 
 	/**

@@ -33,6 +33,15 @@ final class SourceBinding {
 	private const ALLOWED_FORGES = [self::FORGE_GITHUB, self::FORGE_CODEBERG];
 
 	/**
+	 * Cap on the number of `version => sha256` entries carried in the binding's
+	 * `sha256` map, oldest evicted first; see "Recorded digests are
+	 * binding-scoped and surfaced".
+	 */
+	public const MAX_RECORDED_SHA = 200;
+
+	private const SHA256_PATTERN = '/^[a-f0-9]{64}$/';
+
+	/**
 	 * @param array<string, mixed> $config
 	 */
 	public function __construct(
@@ -120,6 +129,89 @@ final class SourceBinding {
 	}
 
 	/**
+	 * Returns the SHA-256 recorded for `$version` (from a prior successful
+	 * external install), or null when none is recorded or the stored value is
+	 * not a valid 64-character lowercase hex digest; see "SHA-256 recorded on
+	 * first successful external install".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
+	public function getRecordedSha(string $version): ?string {
+		return $this->sanitizedShaMap()[$version] ?? null;
+	}
+
+	/**
+	 * Returns the full recorded-digest map (`version => hex digest`),
+	 * sanitized: invalid entries are dropped; see "Recorded digests are
+	 * binding-scoped and surfaced".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 * @return array<string, string>
+	 */
+	public function getRecordedShaMap(): array {
+		return $this->sanitizedShaMap();
+	}
+
+	/**
+	 * Returns an immutable copy with the recorded digest for `$version` set to
+	 * `$sha`. The map is capped at `MAX_RECORDED_SHA` entries, evicting the
+	 * oldest (by insertion order) first; see "SHA-256 recorded on first
+	 * successful external install".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 * @throws InvalidArgumentException when `$sha` is not a 64-character lowercase hex digest
+	 */
+	public function withRecordedSha(string $version, string $sha): self {
+		$sha = strtolower($sha);
+		if (preg_match(self::SHA256_PATTERN, $sha) !== 1) {
+			throw new InvalidArgumentException('Recorded SHA-256 must be a 64-character hex digest.');
+		}
+		if ($version === '') {
+			throw new InvalidArgumentException('Cannot record a SHA-256 for an empty version.');
+		}
+
+		$map = $this->sanitizedShaMap();
+		// Re-insert at the end so this version counts as the most recent entry
+		// for oldest-first eviction.
+		unset($map[$version]);
+		$map[$version] = $sha;
+		while (count($map) > self::MAX_RECORDED_SHA) {
+			array_shift($map);
+		}
+
+		$config = $this->config;
+		$config['sha256'] = $map;
+
+		return new self($this->kind, $config, $this->boundAt);
+	}
+
+	/**
+	 * @return array<string, string>
+	 */
+	private function sanitizedShaMap(): array {
+		/** @var mixed $map */
+		$map = $this->config['sha256'] ?? [];
+		if (!is_array($map)) {
+			return [];
+		}
+
+		$sanitized = [];
+		/** @var mixed $sha */
+		foreach ($map as $version => $sha) {
+			if (!is_string($version) || $version === '' || !is_string($sha)) {
+				continue;
+			}
+			$lower = strtolower($sha);
+			if (preg_match(self::SHA256_PATTERN, $lower) !== 1) {
+				continue;
+			}
+			$sanitized[$version] = $lower;
+		}
+
+		return $sanitized;
+	}
+
+	/**
 	 * Returns a config value as a string, or '' when absent/non-string.
 	 */
 	private function configString(string $key): string {
@@ -130,13 +222,22 @@ final class SourceBinding {
 	}
 
 	/**
-	 * Serializes the binding to its persisted JSON shape; see "Source binding".
+	 * Serializes the binding to its persisted JSON shape; see "Source binding"
+	 * and "Recorded digests are binding-scoped and surfaced".
 	 *
 	 * @spec openspec/specs/external-sources/spec.md
 	 * @return array<string, mixed>
 	 */
 	public function toArray(): array {
 		$payload = array_merge(['kind' => $this->kind], $this->config);
+
+		$shaMap = $this->sanitizedShaMap();
+		if ($shaMap !== []) {
+			$payload['sha256'] = $shaMap;
+		} else {
+			unset($payload['sha256']);
+		}
+
 		if ($this->boundAt !== null) {
 			$payload['boundAt'] = $this->boundAt;
 		}
