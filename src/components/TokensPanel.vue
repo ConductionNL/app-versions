@@ -52,6 +52,7 @@ const loadPats = async (): Promise<void> => {
 /**
  * Badge label for a token's derived expiry state; see "Expiry state in the
  * PAT API and UI" ("Badges reflect state").
+ * @param pat
  * @spec openspec/specs/pat-management/spec.md
  */
 const expiryBadgeLabel = (pat: Pat): string => {
@@ -187,8 +188,7 @@ onMounted(loadPats)
 						:class="[$style.expiryBadge, {
 							[$style.expiryBadgeError]: pat.expiryState === 'expired',
 							[$style.expiryBadgeNeutral]: pat.expiryState === 'unknown',
-						}]"
-					>
+						}]">
 						{{ expiryBadgeLabel(pat) }}
 					</span>
 					<span v-if="pat.tokenHint" :class="$style.hint">…{{ pat.tokenHint }}</span>
