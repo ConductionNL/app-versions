@@ -16,6 +16,7 @@ use Exception;
 use OC\Archive\TAR;
 use OC\Archive\ZIP;
 use OC\Files\FilenameValidator;
+use OCA\AppVersions\Service\Audit\AuditLogger;
 use OCA\AppVersions\Service\Installer\FailureClassifier;
 use OCA\AppVersions\Service\Installer\InstallFailure;
 use OCA\AppVersions\Service\Installer\InstallFinalizer;
@@ -67,6 +68,7 @@ class ExternalReleaseInstallerService {
 		private PatResolver $patResolver,
 		private PatManager $patManager,
 		private IUserSession $userSession,
+		private AuditLogger $auditLogger,
 	) {
 	}
 
@@ -101,143 +103,187 @@ class ExternalReleaseInstallerService {
 			'dryRun' => $dryRun,
 		]);
 
-		if (!preg_match('/^[a-z][a-z0-9_\-]*$/', $appId)) {
-			throw new Exception('Invalid app id.');
-		}
-
-		$this->trustedSources->assertBindingAllowed($binding);
-
-		$downloadUrl = isset($release['download']) && is_string($release['download']) ? $release['download'] : '';
-		$shaUrl = isset($release['sha256Url']) && is_string($release['sha256Url']) && $release['sha256Url'] !== ''
-			? $release['sha256Url']
-			: null;
-		if ($downloadUrl === '') {
-			throw new Exception('No download URL found for the selected release.');
-		}
-
 		try {
 			$installedVersion = $this->appManager->getAppVersion($appId);
 		} catch (Exception) {
 			$installedVersion = '';
 		}
-		$previousEnabled = $this->appConfig->getValueString($appId, 'enabled', 'no');
-
-		$tempFile = $this->tempManager->getTemporaryFile('.tar.gz');
-		$tempFolder = $this->tempManager->getTemporaryFolder('app-version-external');
-		if (!is_string($tempFile) || !is_string($tempFolder)) {
-			throw new Exception('Could not allocate temporary download paths.');
-		}
-
-		$authResolution = $this->resolveAuth($binding);
-		$this->addDebug('auth-resolution', ['hasPat' => $authResolution !== null]);
 
 		try {
-			$this->authenticatedDownload($downloadUrl, $tempFile, $authResolution);
-		} catch (Exception $error) {
-			throw new Exception('Could not download selected release: ' . $error->getMessage());
-		}
-		$this->addDebug('downloaded', ['tempFile' => $tempFile, 'sourceUrl' => $downloadUrl]);
+			if (!preg_match('/^[a-z][a-z0-9_\-]*$/', $appId)) {
+				throw new Exception('Invalid app id.');
+			}
 
-		$integrityWarning = $this->verifyChecksum($tempFile, $shaUrl, $authResolution);
-		$this->addDebug('checksum', ['shaUrl' => $shaUrl, 'integrityWarning' => $integrityWarning]);
+			$this->trustedSources->assertBindingAllowed($binding);
 
-		$archivePath = $this->extractArchive($tempFile, $tempFolder);
-		$this->addDebug('archive-extracted', ['extractedRoot' => $archivePath]);
+			$downloadUrl = isset($release['download']) && is_string($release['download']) ? $release['download'] : '';
+			$shaUrl = isset($release['sha256Url']) && is_string($release['sha256Url']) && $release['sha256Url'] !== ''
+				? $release['sha256Url']
+				: null;
+			if ($downloadUrl === '') {
+				throw new Exception('No download URL found for the selected release.');
+			}
 
-		$info = $this->parseAndValidateInfoXml($archivePath, $appId, $version);
-		$this->addDebug('info-validated', [
-			'appId' => $info['id'],
-			'archiveVersion' => $info['version'],
-		]);
+			$previousEnabled = $this->appConfig->getValueString($appId, 'enabled', 'no');
 
-		try {
-			$previousPath = $this->appManager->getAppPath($appId);
-		} catch (AppPathNotFoundException) {
-			$previousPath = null;
-		}
+			$tempFile = $this->tempManager->getTemporaryFile('.tar.gz');
+			$tempFolder = $this->tempManager->getTemporaryFolder('app-version-external');
+			if (!is_string($tempFile) || !is_string($tempFolder)) {
+				throw new Exception('Could not allocate temporary download paths.');
+			}
 
-		$destination = $previousPath !== null ? $previousPath : $this->getInstallPath() . '/' . $appId;
+			$authResolution = $this->resolveAuth($binding);
+			$this->addDebug('auth-resolution', ['hasPat' => $authResolution !== null]);
 
-		if (!is_dir(dirname($destination))) {
-			throw new Exception('Could not resolve app install folder.');
-		}
+			try {
+				$this->authenticatedDownload($downloadUrl, $tempFile, $authResolution);
+			} catch (Exception $error) {
+				throw new Exception('Could not download selected release: ' . $error->getMessage());
+			}
+			$this->addDebug('downloaded', ['tempFile' => $tempFile, 'sourceUrl' => $downloadUrl]);
 
-		if ($dryRun) {
-			$this->addDebug('dry-run-skip-filesystem', ['destination' => $destination]);
+			$integrityWarning = $this->verifyChecksum($tempFile, $shaUrl, $authResolution);
+			$this->addDebug('checksum', ['shaUrl' => $shaUrl, 'integrityWarning' => $integrityWarning]);
 
-			return [
-				'status' => 'dry-run',
-				'installedVersionBefore' => $installedVersion === '' ? null : $installedVersion,
-				'integrityWarning' => $integrityWarning,
-				'dryRun' => true,
-				'debug' => $this->debug,
-			];
-		}
+			$archivePath = $this->extractArchive($tempFile, $tempFolder);
+			$this->addDebug('archive-extracted', ['extractedRoot' => $archivePath]);
 
-		$backupDestination = null;
-		if (is_dir($destination)) {
-			$backupDestination = $destination . '.appversion-backup';
-			if (is_dir($backupDestination)) {
+			$info = $this->parseAndValidateInfoXml($archivePath, $appId, $version);
+			$this->addDebug('info-validated', [
+				'appId' => $info['id'],
+				'archiveVersion' => $info['version'],
+			]);
+
+			try {
+				$previousPath = $this->appManager->getAppPath($appId);
+			} catch (AppPathNotFoundException) {
+				$previousPath = null;
+			}
+
+			$destination = $previousPath !== null ? $previousPath : $this->getInstallPath() . '/' . $appId;
+
+			if (!is_dir(dirname($destination))) {
+				throw new Exception('Could not resolve app install folder.');
+			}
+
+			if ($dryRun) {
+				$this->addDebug('dry-run-skip-filesystem', ['destination' => $destination]);
+
+				return [
+					'status' => 'dry-run',
+					'installedVersionBefore' => $installedVersion === '' ? null : $installedVersion,
+					'integrityWarning' => $integrityWarning,
+					'dryRun' => true,
+					'debug' => $this->debug,
+				];
+			}
+
+			$backupDestination = null;
+			if (is_dir($destination)) {
+				$backupDestination = $destination . '.appversion-backup';
+				if (is_dir($backupDestination)) {
+					$this->rmdirr($backupDestination);
+				}
+				if (!rename($destination, $backupDestination)) {
+					throw new Exception('Could not backup existing app folder before replacement.');
+				}
+			}
+
+			try {
+				if (!mkdir($destination, 0777, true) && !is_dir($destination)) {
+					throw new Exception('Could not create app destination folder.');
+				}
+				$this->copyRecursive($archivePath, $destination);
+			} catch (Exception $error) {
+				// Pre-finalize failure: restore the previous files and report a clean
+				// revert (the previously installed version is intact). For a fresh
+				// install (no backup) there is nothing to restore — remove the
+				// partially-copied new files so we don't leave a broken app folder.
+				if ($backupDestination === null) {
+					if (is_dir($destination)) {
+						$this->rmdirr($destination);
+					}
+				} else {
+					$this->restoreFromBackup($destination, $backupDestination);
+				}
+				throw InstallFailure::reverted($error->getMessage(), 'copy', $error);
+			}
+
+			if (function_exists('opcache_reset')) {
+				opcache_reset();
+			}
+			$this->addDebug('filesystem-updated', ['destination' => $destination]);
+
+			$enabled = $installedVersion === '' ? 'no' : $previousEnabled;
+
+			// Finalize (migrations + repair steps) is the last, unrecoverable phase.
+			// Keep the backup until it succeeds; on failure restore the previous
+			// files and report installed-but-broken.
+			try {
+				$installedApp = $this->finalizer->finalize($destination, $info, $enabled);
+			} catch (Exception $finalizeError) {
+				$restoreState = $backupDestination === null
+					? FailureClassifier::RESTORE_NONE
+					: ($this->restoreFromBackup($destination, $backupDestination) ? FailureClassifier::RESTORE_CLEAN : FailureClassifier::RESTORE_FAILED);
+				throw InstallFailure::finalizeFailed($finalizeError->getMessage(), $restoreState, $finalizeError);
+			}
+
+			// Finalize succeeded — now it is safe to drop the backup.
+			if ($backupDestination !== null && is_dir($backupDestination)) {
 				$this->rmdirr($backupDestination);
 			}
-			if (!rename($destination, $backupDestination)) {
-				throw new Exception('Could not backup existing app folder before replacement.');
+			$this->addDebug('finalized', ['appId' => $installedApp, 'enabled' => $enabled]);
+
+			$this->recordInstallAudit($appId, $binding, $installedVersion, $version, AuditLogger::STATUS_SUCCESS, $integrityWarning);
+
+			return [
+				'status' => 'installed',
+				'installedVersionBefore' => $installedVersion === '' ? null : $installedVersion,
+				'installedApp' => $installedApp,
+				'integrityWarning' => $integrityWarning,
+				'dryRun' => false,
+				'debug' => $this->debug,
+			];
+		} catch (\Throwable $error) {
+			// Best-effort audit write on the failure path, before the exception
+			// propagates up to the caller's error mapping; see "Failed install
+			// is recorded with the failure reason". Dry runs change nothing, so
+			// they are not audited (mirrors the success path above).
+			if (!$dryRun) {
+				$this->recordInstallAudit($appId, $binding, $installedVersion, $version, AuditLogger::STATUS_FAILURE, null, $error->getMessage());
 			}
+
+			throw $error;
 		}
+	}
 
-		try {
-			if (!mkdir($destination, 0777, true) && !is_dir($destination)) {
-				throw new Exception('Could not create app destination folder.');
-			}
-			$this->copyRecursive($archivePath, $destination);
-		} catch (Exception $error) {
-			// Pre-finalize failure: restore the previous files and report a clean
-			// revert (the previously installed version is intact). For a fresh
-			// install (no backup) there is nothing to restore — remove the
-			// partially-copied new files so we don't leave a broken app folder.
-			if ($backupDestination === null) {
-				if (is_dir($destination)) {
-					$this->rmdirr($destination);
-				}
-			} else {
-				$this->restoreFromBackup($destination, $backupDestination);
-			}
-			throw InstallFailure::reverted($error->getMessage(), 'copy', $error);
-		}
-
-		if (function_exists('opcache_reset')) {
-			opcache_reset();
-		}
-		$this->addDebug('filesystem-updated', ['destination' => $destination]);
-
-		$enabled = $installedVersion === '' ? 'no' : $previousEnabled;
-
-		// Finalize (migrations + repair steps) is the last, unrecoverable phase.
-		// Keep the backup until it succeeds; on failure restore the previous
-		// files and report installed-but-broken.
-		try {
-			$installedApp = $this->finalizer->finalize($destination, $info, $enabled);
-		} catch (Exception $finalizeError) {
-			$restoreState = $backupDestination === null
-				? FailureClassifier::RESTORE_NONE
-				: ($this->restoreFromBackup($destination, $backupDestination) ? FailureClassifier::RESTORE_CLEAN : FailureClassifier::RESTORE_FAILED);
-			throw InstallFailure::finalizeFailed($finalizeError->getMessage(), $restoreState, $finalizeError);
-		}
-
-		// Finalize succeeded — now it is safe to drop the backup.
-		if ($backupDestination !== null && is_dir($backupDestination)) {
-			$this->rmdirr($backupDestination);
-		}
-		$this->addDebug('finalized', ['appId' => $installedApp, 'enabled' => $enabled]);
-
-		return [
-			'status' => 'installed',
-			'installedVersionBefore' => $installedVersion === '' ? null : $installedVersion,
-			'installedApp' => $installedApp,
-			'integrityWarning' => $integrityWarning,
-			'dryRun' => false,
-			'debug' => $this->debug,
-		];
+	/**
+	 * Records one `install` audit entry for the external (GitHub/Codeberg
+	 * release) installer, including the integrity-warning text on success;
+	 * see "Version operations are recorded".
+	 *
+	 * @spec openspec/specs/audit-trail/spec.md
+	 */
+	private function recordInstallAudit(
+		string $appId,
+		SourceBinding $binding,
+		string $installedVersionBefore,
+		string $requestedVersion,
+		string $status,
+		?string $integrityWarning = null,
+		?string $failureMessage = null,
+	): void {
+		$actorUid = $this->userSession->getUser()?->getUID() ?? 'system';
+		$this->auditLogger->record(
+			$actorUid,
+			$appId,
+			AuditLogger::OPERATION_INSTALL,
+			$installedVersionBefore === '' ? null : $installedVersionBefore,
+			$requestedVersion,
+			$binding->getId(),
+			$status,
+			$failureMessage ?? $integrityWarning,
+		);
 	}
 
 	private function resolveAuth(SourceBinding $binding): ?\OCA\AppVersions\Db\Pat {

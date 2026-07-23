@@ -96,8 +96,12 @@ const bind = async (): Promise<void> => {
 			{{ t('app_versions', 'Bind an installed app to a GitHub or Codeberg repository so its versions are pulled from that forge instead of the App Store. The repository must be on the trusted-sources list.') }}
 		</p>
 
-		<NcNoteCard v-if="error" type="error">{{ error }}</NcNoteCard>
-		<NcNoteCard v-if="notice" type="success">{{ notice }}</NcNoteCard>
+		<NcNoteCard v-if="error" type="error">
+			{{ error }}
+		</NcNoteCard>
+		<NcNoteCard v-if="notice" type="success">
+			{{ notice }}
+		</NcNoteCard>
 
 		<form :class="$style.form" @submit.prevent="bind">
 			<NcSelect
@@ -122,7 +126,9 @@ const bind = async (): Promise<void> => {
 			<NcTextField v-model="owner" :label="t('app_versions', 'Owner')" placeholder="ConductionNL" />
 			<NcTextField v-model="repo" :label="t('app_versions', 'Repository')" placeholder="openregister" />
 			<NcTextField v-model="assetPattern" :label="t('app_versions', 'Asset pattern')" placeholder="*.tar.gz" />
-			<NcButton native-type="submit" type="primary" :disabled="loading">{{ t('app_versions', 'Bind source') }}</NcButton>
+			<NcButton native-type="submit" type="primary" :disabled="loading">
+				{{ t('app_versions', 'Bind source') }}
+			</NcButton>
 		</form>
 	</div>
 </template>

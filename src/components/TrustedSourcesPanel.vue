@@ -102,15 +102,23 @@ onMounted(loadPatterns)
 			{{ t('app_versions', 'Only repositories matching these forge-qualified patterns may be installed from external sources. Widening this list extends trust — add concrete owners only.') }}
 		</p>
 
-		<NcNoteCard v-if="error" type="error">{{ error }}</NcNoteCard>
-		<NcNoteCard v-if="notice" type="success">{{ notice }}</NcNoteCard>
+		<NcNoteCard v-if="error" type="error">
+			{{ error }}
+		</NcNoteCard>
+		<NcNoteCard v-if="notice" type="success">
+			{{ notice }}
+		</NcNoteCard>
 
 		<ul :class="$style.list">
 			<li v-for="pattern in patterns" :key="pattern" :class="$style.row">
 				<code>{{ pattern }}</code>
-				<NcButton type="tertiary" :disabled="loading" @click="removePattern(pattern)">{{ t('app_versions', 'Remove') }}</NcButton>
+				<NcButton type="tertiary" :disabled="loading" @click="removePattern(pattern)">
+					{{ t('app_versions', 'Remove') }}
+				</NcButton>
 			</li>
-			<li v-if="patterns.length === 0" :class="$style.empty">{{ t('app_versions', 'No trusted sources configured.') }}</li>
+			<li v-if="patterns.length === 0" :class="$style.empty">
+				{{ t('app_versions', 'No trusted sources configured.') }}
+			</li>
 		</ul>
 
 		<form :class="$style.form" @submit.prevent="addPattern">
@@ -126,7 +134,9 @@ onMounted(loadPatterns)
 			<NcCheckboxRadioSwitch v-model="confirmTrust">
 				{{ t('app_versions', 'I trust this source and understand apps will be installed from it.') }}
 			</NcCheckboxRadioSwitch>
-			<NcButton native-type="submit" type="primary" :disabled="loading">{{ t('app_versions', 'Add trusted source') }}</NcButton>
+			<NcButton native-type="submit" type="primary" :disabled="loading">
+				{{ t('app_versions', 'Add trusted source') }}
+			</NcButton>
 		</form>
 	</div>
 </template>

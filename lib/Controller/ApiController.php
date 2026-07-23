@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace OCA\AppVersions\Controller;
 
 use InvalidArgumentException;
+use OCA\AppVersions\Db\AuditEntryMapper;
 use OCA\AppVersions\Db\Pat;
 use OCA\AppVersions\Db\PatMapper;
 use OCA\AppVersions\Service\Advisory\AdvisoryService;
@@ -51,6 +52,7 @@ class ApiController extends OCSController {
 		private PatDeeplinkBuilder $deeplinkBuilder,
 		private DiscoveryAggregator $discoveryAggregator,
 		private AdvisoryService $advisoryService,
+		private AuditEntryMapper $auditEntryMapper,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -531,6 +533,47 @@ class ApiController extends OCSController {
 		} catch (InvalidArgumentException $error) {
 			return new DataResponse(['message' => $error->getMessage()], Http::STATUS_BAD_REQUEST);
 		}
+	}
+
+	/**
+	 * Lists audit entries, newest-first, admin-only, paginated and optionally
+	 * filtered by app id; see "Audit entries are immutable and admin-readable".
+	 * No mutation endpoint exists for this resource — the retention prune job
+	 * is the only deletion path.
+	 *
+	 * @spec openspec/specs/audit-trail/spec.md
+	 */
+	#[ApiRoute(verb: 'GET', url: '/api/audit')]
+	public function auditLog(): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$appId = $this->stringParam('appId', '');
+		$limit = $this->intParam('limit', 50);
+		$limit = max(1, min($limit, 200));
+		$offset = max(0, $this->intParam('offset', 0));
+
+		$entries = $this->auditEntryMapper->findPage($appId !== '' ? $appId : null, $limit, $offset);
+
+		return new DataResponse([
+			'entries' => $entries,
+			'limit' => $limit,
+			'offset' => $offset,
+		]);
+	}
+
+	private function intParam(string $name, int $default): int {
+		/** @var mixed $value */
+		$value = $this->request->getParam($name, (string)$default);
+		if (is_int($value)) {
+			return $value;
+		}
+		if (is_string($value) && trim($value) !== '' && preg_match('/^-?\d+$/', trim($value))) {
+			return (int)trim($value);
+		}
+
+		return $default;
 	}
 
 	private function stringParam(string $name, string $default): string {
