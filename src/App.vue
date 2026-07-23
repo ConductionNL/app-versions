@@ -4,6 +4,7 @@ import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { t } from '@nextcloud/l10n'
+import DiscoverPanel, { type PrefillBindPayload } from './components/DiscoverPanel.vue'
 import HistoryPanel from './components/HistoryPanel.vue'
 import SourcesPanel from './components/SourcesPanel.vue'
 import TokensPanel from './components/TokensPanel.vue'
@@ -92,13 +93,15 @@ const installRequestFromVersion = ref('')
 const installRequestToVersion = ref('')
 
 // Admin-settings tabs: the existing apps→versions→install view plus the
-// source / token / trusted-source management panels.
+// source / token / trusted-source management panels, and the Discover tab
+// (multi-source search over the previously-unreachable discovery backend).
 const tabs = [
 	{ id: 'apps' },
 	{ id: 'history' },
 	{ id: 'sources' },
 	{ id: 'tokens' },
 	{ id: 'trusted' },
+	{ id: 'discover' },
 ]
 const currentTab = ref('apps')
 const tablistEl = ref<HTMLElement | null>(null)
@@ -110,7 +113,47 @@ const tabLabel = (id: string): string => ({
 	sources: t('app_versions', 'Sources'),
 	tokens: t('app_versions', 'Tokens'),
 	trusted: t('app_versions', 'Trusted sources'),
+	discover: t('app_versions', 'Discover'),
 }[id] ?? id)
+
+// Prefill applied to the Sources bind form when a Discover hit's install
+// action is activated; see "Hits route into existing flows".
+const sourcesPrefill = ref<PrefillBindPayload | null>(null)
+
+/**
+ * Routes an installed Discover hit into the Apps tab with its version picker
+ * expanded; see "Hits route into existing flows" ("Installed hit opens the
+ * picker").
+ *
+ * @spec openspec/specs/app-discovery/spec.md
+ */
+const onDiscoverOpenApp = async (appId: string): Promise<void> => {
+	currentTab.value = 'apps'
+	appFilter.value = appId
+	await onPickApp(appId)
+}
+
+/**
+ * Routes a not-installed Discover hit's installable candidate into the
+ * Sources bind flow, prefilled; see "Hits route into existing flows"
+ * ("Installable candidate prefills bind").
+ *
+ * @spec openspec/specs/app-discovery/spec.md
+ */
+const onDiscoverPrefillBind = (payload: PrefillBindPayload): void => {
+	sourcesPrefill.value = payload
+	currentTab.value = 'sources'
+}
+
+/**
+ * Routes a non-installable Discover hit to the Trusted sources tab; see
+ * "Hits route into existing flows" ("Non-installable explains why").
+ *
+ * @spec openspec/specs/app-discovery/spec.md
+ */
+const onDiscoverOpenTrusted = (): void => {
+	currentTab.value = 'trusted'
+}
 
 // Per-app detail view within the "Apps" tab: the version picker (default) or
 // that app's audit history; see "Per-app history tab".
@@ -1429,6 +1472,7 @@ watch(debugModeEnabled, () => {
 					role="tabpanel"
 					aria-labelledby="sources-tab"
 					:apps="apps"
+					:prefill="sourcesPrefill"
 					@bound="onPanelBound" />
 				<TokensPanel v-show="currentTab === 'tokens'"
 					id="tokens-panel"
@@ -1438,6 +1482,13 @@ watch(debugModeEnabled, () => {
 					id="trusted-panel"
 					role="tabpanel"
 					aria-labelledby="trusted-tab" />
+				<DiscoverPanel v-show="currentTab === 'discover'"
+					id="discover-panel"
+					role="tabpanel"
+					aria-labelledby="discover-tab"
+					@open-app="onDiscoverOpenApp"
+					@prefill-bind="onDiscoverPrefillBind"
+					@open-trusted="onDiscoverOpenTrusted" />
 			</div>
 		</div>
 	</div>

@@ -81,12 +81,18 @@ export const ensurePasswordConfirmation = async (): Promise<void> => {
 
 /**
  * GET an OCS endpoint and return the unwrapped payload (+ optional error).
+ * An optional AbortSignal lets callers cancel in-flight requests (e.g. a
+ * debounced search superseded by newer input) without special-casing every
+ * caller — a request cancelled via `signal` rejects with the fetch
+ * implementation's standard AbortError.
  * @param path
  * @param query
+ * @param signal
  */
-export const ocsGet = async <T>(path: string, query: Record<string, string | number | boolean> = {}): Promise<OcsResult<T>> => {
+export const ocsGet = async <T>(path: string, query: Record<string, string | number | boolean> = {}, signal?: AbortSignal): Promise<OcsResult<T>> => {
 	const response = await fetch(apiUrl(withOcsJson(path, query)), {
 		headers: { ...ocsHeaders, Accept: 'application/json' },
+		signal,
 	})
 	return unwrap<T>(response)
 }

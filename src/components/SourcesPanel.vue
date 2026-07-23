@@ -10,7 +10,20 @@ import { ocsGet, ocsWrite } from '../ocs'
 type AppOption = { id: string, label: string }
 type SelectOption = { id: string, label: string }
 
-const props = defineProps<{ apps: AppOption[] }>()
+/**
+ * Prefill payload for the bind form — set by the Discover tab when an admin
+ * activates a not-installed hit's installable source candidate; see "Hits
+ * route into existing flows" ("Installable candidate prefills bind").
+ */
+type BindPrefill = {
+	appId: string
+	forge?: string
+	owner?: string
+	repo?: string
+	assetPattern?: string
+}
+
+const props = defineProps<{ apps: AppOption[], prefill?: BindPrefill | null }>()
 const emit = defineEmits<{ (e: 'bound', appId: string): void }>()
 
 const selectedAppId = ref('')
@@ -22,6 +35,31 @@ const assetPattern = ref('*.tar.gz')
 const loading = ref(false)
 const error = ref('')
 const notice = ref('')
+
+/**
+ * Applies a Discover-tab prefill into the bind form; optional and additive —
+ * SourcesPanel behaves exactly as before when no prefill is supplied.
+ *
+ * @spec openspec/specs/app-discovery/spec.md
+ */
+watch(() => props.prefill, (value) => {
+	if (!value) {
+		return
+	}
+	selectedAppId.value = value.appId
+	if (value.forge) {
+		forge.value = value.forge
+	}
+	if (value.owner) {
+		owner.value = value.owner
+	}
+	if (value.repo) {
+		repo.value = value.repo
+	}
+	if (value.assetPattern) {
+		assetPattern.value = value.assetPattern
+	}
+}, { immediate: true })
 
 const appOptions = computed<SelectOption[]>(() => props.apps.map((app) => ({ id: app.id, label: `${app.label} (${app.id})` })))
 const forgeOptions: SelectOption[] = [
