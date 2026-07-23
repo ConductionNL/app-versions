@@ -4,7 +4,7 @@ status: implemented
 
 # PAT Management Specification
 
-**Status**: proposed
+**Status**: implemented
 **Standards**: GitHub REST API v2022-11-28 (User endpoint, OAuth-Scopes header), Nextcloud `OCP\Security\ICrypto`
 **Feature tier**: MVP
 
@@ -231,6 +231,38 @@ The admin UI MUST surface access-token (PAT) management so an admin can list red
 - **WHEN** the UI requests `GET /api/pats/deeplink?forge=codeberg`
 - **THEN** the UI MUST present the returned `url` and `instructions` for that forge
 
+### Requirement: PAT expiry warnings [MVP]
+
+A daily background job MUST, for every PAT with a known `expiresAt`, notify the token's owner when expiry is ≤14 days away, again when ≤3 days away, and once upon/after expiry — at most one notification per threshold per token, tracked persistently. Notifications MUST name the token label and forge, state days remaining (or "expired"), and link the per-forge token-renewal deeplink. Tokens without a known expiry MUST NOT be probed or notified.
+
+#### Scenario: 14-day warning fires once
+
+- **GIVEN** a GitHub PAT "conduction-bot" expiring in 12 days, not yet warned
+- **WHEN** the job runs on two consecutive days
+- **THEN** the owner MUST receive exactly one `pat_expiring` notification (from the first run) naming the token, forge, and days remaining, linking the renewal deeplink
+
+#### Scenario: Escalation at 3 days and at expiry
+
+- **GIVEN** the same token reaches 2 days remaining, then expires
+- **WHEN** the job runs on each of those days
+- **THEN** one 3-day-threshold notification and one `pat_expired` notification MUST be delivered (each once)
+
+#### Scenario: Unknown expiry is left alone
+
+- **GIVEN** a Codeberg token whose validation captured no expiry
+- **WHEN** the job runs
+- **THEN** no notification MUST be sent for it
+
+### Requirement: Expiry state in the PAT API and UI [MVP]
+
+`GET /api/pats` MUST expose a derived `expiryState` (`ok` | `expiring` (≤14 d) | `expired` | `unknown`) per token. The Tokens panel MUST badge `expiring` tokens with days remaining (warning tone) and `expired` tokens (error tone), and MUST show "expiry unknown" neutrally for `unknown`.
+
+#### Scenario: Badges reflect state
+
+- **GIVEN** tokens in states ok, expiring (5 d), expired, unknown
+- **WHEN** the Tokens panel renders
+- **THEN** the expiring token MUST show a warning badge "expires in 5 days", the expired one an error badge, the unknown one a neutral "expiry unknown", and the ok one no expiry badge
+
 ## User Stories
 
 1. As an admin, I want to install apps from private ConductionNL repos so I can deploy customer-specific builds without leaving Nextcloud.
@@ -251,4 +283,4 @@ The admin UI MUST surface access-token (PAT) management so an admin can list red
 
 - This proposal does not handle GitHub Apps or OAuth flows. PATs only.
 - Token storage is deliberately **not** the Nextcloud per-user crypto chain — `ICrypto` uses the system secret so PATs survive password changes (and admin handover, via the share toggle).
-- A weekly background job that warns on expiring PATs is **out of scope** here; tracked as a follow-up task in tasks.md.
+- Expiry warnings landed later via the `add-pat-expiry-warnings` change (archived 2026-07-23): a daily job with 14 d / 3 d / expired thresholds plus derived `expiryState` in the API and UI. Tokens whose forge never disclosed an expiry stay unmonitored by design.
