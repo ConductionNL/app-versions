@@ -27,18 +27,26 @@ installed app, with three things working together:
   installed one. That works in both directions: roll back to a
   known-good release after an update breaks production, or pin to a
   newer release candidate to test compatibility before the rest of the
-  fleet catches up.
+  fleet catches up. A pin is **enforced inside App Versions and
+  monitored elsewhere**: App Versions' own install path refuses to
+  overwrite a pinned app without an explicit override, but Nextcloud
+  core exposes no hook to veto its own updater — so if the regular
+  Apps page (or `occ app:update`) updates a pinned app anyway, admins
+  are notified immediately and offered a one-click re-pin. The UI says
+  this plainly; a pin is a guardrail App Versions controls, not a lock
+  on the whole instance.
 - **Audit-trailed.** Every install, downgrade, or pin is logged with
   who, what, and when — so a Friday-evening rollback by an on-call
   admin is visible Monday morning without digging through server logs.
 
-The app is built around four specs (see the openspec tracker on
+The app is built around several specs (see the openspec tracker on
 Codeberg):
 
 - [`version-management`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/version-management) — list installed apps, pick a version, install.
 - [`external-sources`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/external-sources) — GitHub releases as a source alongside the App Store.
 - [`pat-management`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/pat-management) — encrypted PAT storage for private GitHub repos.
 - [`app-discovery`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/app-discovery) — a single search aggregator over the App Store, your PAT-visible repos, and (opt-in) public GitHub topic search.
+- [`version-pinning`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/version-pinning) — pin an app to a version, self-enforced on App Versions' own install path, with drift detection and notification for changes made elsewhere.
 
 ## Getting started
 

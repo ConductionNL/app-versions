@@ -105,7 +105,7 @@ export const ocsGet = async <T>(path: string, query: Record<string, string | num
  * @param body
  */
 export const ocsWrite = async <T>(
-	method: 'POST' | 'PATCH' | 'DELETE',
+	method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
 	path: string,
 	body: Record<string, unknown> = {},
 ): Promise<OcsResult<T>> => {

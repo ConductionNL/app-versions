@@ -18,6 +18,8 @@ use OCA\AppVersions\AppInfo\Application;
 use OCA\AppVersions\Service\Installer\EnvironmentCheck;
 use OCA\AppVersions\Service\Installer\FailureClassifier;
 use OCA\AppVersions\Service\Installer\InstallFailure;
+use OCA\AppVersions\Service\Pin\Pin;
+use OCA\AppVersions\Service\Pin\PinStore;
 use OCA\AppVersions\Service\Source\SourceBinding;
 use OCA\AppVersions\Service\Source\SourceBindingStore;
 use OCA\AppVersions\Service\Source\SourceInterface;
@@ -26,8 +28,10 @@ use OCA\AppVersions\Service\Source\TrustedSourceList;
 use OCA\AppVersions\Service\Source\UntrustedSourceException;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;
 use OCP\IConfig;
+use OCP\IUserSession;
 
 /**
  * Coordinates the version-management flow:
@@ -44,6 +48,9 @@ class InstallerService {
 	private const CHANGELOG_MAX_BYTES = 8192;
 	private const CHANGELOG_TRUNCATION_MARKER = ' …[truncated]';
 
+	public const OVERRIDE_PIN_REPIN = 'repin';
+	public const OVERRIDE_PIN_UNPIN = 'unpin';
+
 	public function __construct(
 		private IAppManager $appManager,
 		private IConfig $config,
@@ -55,6 +62,9 @@ class InstallerService {
 		private ExternalReleaseInstallerService $externalInstaller,
 		private FailureClassifier $failureClassifier,
 		private EnvironmentCheck $environmentCheck,
+		private PinStore $pinStore,
+		private IUserSession $userSession,
+		private ITimeFactory $timeFactory,
 	) {
 	}
 
@@ -222,9 +232,18 @@ class InstallerService {
 	}
 
 	/**
-	 * Installs a target version via the matching installer and persists the binding on success; see "Install Specific Version" and "Source binding".
+	 * Installs a target version via the matching installer and persists the
+	 * binding on success; see "Install Specific Version", "Source binding",
+	 * and "Pins are enforced on App Versions' own install path".
+	 *
+	 * `$overridePin` is `null` (no override requested), `repin`, or `unpin` —
+	 * any other value is rejected with 400 by the caller before this method
+	 * is reached in the normal flow, but is defensively rejected here too.
+	 * `$pinRequested` pins the resulting version after a successful install
+	 * when the app was not already pinned (atomic install-then-pin).
 	 *
 	 * @spec openspec/specs/version-management/spec.md
+	 * @spec openspec/specs/version-pinning/spec.md
 	 * @return array{statusCode:int, payload:array<string, mixed>}
 	 */
 	public function installAppVersion(
@@ -232,6 +251,8 @@ class InstallerService {
 		string $targetVersion,
 		bool $includeDebug,
 		?string $sourceOverride = null,
+		?string $overridePin = null,
+		bool $pinRequested = false,
 	): array {
 		$appId = trim($appId);
 		$targetVersion = trim($targetVersion);
@@ -253,6 +274,16 @@ class InstallerService {
 				],
 			];
 		}
+		if ($overridePin !== null && $overridePin !== self::OVERRIDE_PIN_REPIN && $overridePin !== self::OVERRIDE_PIN_UNPIN) {
+			return [
+				'statusCode' => Http::STATUS_BAD_REQUEST,
+				'payload' => [
+					'appId' => $appId,
+					'toVersion' => $targetVersion,
+					'message' => 'overridePin must be "repin" or "unpin".',
+				],
+			];
+		}
 
 		try {
 			$binding = $this->resolveBinding($appId, $sourceOverride);
@@ -270,7 +301,36 @@ class InstallerService {
 			$installedVersion = '';
 		}
 
+		// Pin guard: App Versions' own install path refuses to overwrite a
+		// pinned app without an explicit override — see "Pins are enforced on
+		// App Versions' own install path". Reinstalling the pinned version
+		// itself is never blocked (no drift, nothing to override).
+		$pin = $this->pinStore->get($appId);
+		$isOverridingPin = $pin !== null && $targetVersion !== $pin->version;
+		if ($isOverridingPin && $overridePin === null) {
+			return [
+				'statusCode' => Http::STATUS_CONFLICT,
+				'payload' => [
+					'appId' => $appId,
+					'fromVersion' => $installedVersion === '' ? null : $installedVersion,
+					'toVersion' => $targetVersion,
+					'message' => sprintf('This app is pinned to version %s. Pass overridePin=repin or overridePin=unpin to proceed.', $pin->version),
+					'category' => 'pinned',
+					'pinnedVersion' => $pin->version,
+					'sourceId' => $binding->getId(),
+				] + ($includeDebug ? ['debug' => []] : []),
+			];
+		}
+
 		if ($installedVersion !== '' && version_compare($targetVersion, $installedVersion, '=')) {
+			// Reinstalling the currently-installed pinned version with a stale
+			// drift marker (e.g. the app was separately restored to the pinned
+			// version) clears that marker — see "Re-pin reinstalls the pinned
+			// version".
+			if ($pin !== null && $targetVersion === $pin->version && $pin->hasDrifted()) {
+				$this->pinStore->set($appId, new Pin($pin->version, $pin->pinnedBy, $pin->pinnedAt, $pin->reason));
+			}
+
 			return [
 				'statusCode' => Http::STATUS_OK,
 				'payload' => [
@@ -392,6 +452,31 @@ class InstallerService {
 			}
 			if ($includeDebug) {
 				$payload['debug'] = (array)($result['debug'] ?? []);
+			}
+
+			// Pin state changes only after a real (non-dry-run) install success;
+			// see "Pins are enforced on App Versions' own install path". Adjusting
+			// the pin here — inside this same request, immediately after the
+			// filesystem swap and before returning — is what keeps a subsequent
+			// drift check from misreading our own override as drift.
+			if (!$dryRun) {
+				// $isOverridingPin implies $pin !== null and, having reached this
+				// point, $overridePin !== null (the guard above already returned
+				// 409 otherwise) — so $overridePin is exactly 'repin' or 'unpin'.
+				if ($isOverridingPin) {
+					if ($overridePin === self::OVERRIDE_PIN_REPIN) {
+						$this->pinStore->set($appId, new Pin($appVersion, $this->currentActorUid(), $this->nowIso(), $pin->reason));
+					} else {
+						$this->pinStore->clear($appId, $this->currentActorUid());
+					}
+				} elseif ($pin === null && $pinRequested) {
+					$this->pinStore->set($appId, new Pin($appVersion, $this->currentActorUid(), $this->nowIso()));
+				} elseif ($pin !== null && $targetVersion === $pin->version && $pin->hasDrifted()) {
+					// Re-pin after drift (Re-pin button reinstalls the pinned
+					// version) — clear the drift markers; see "Re-pin reinstalls
+					// the pinned version".
+					$this->pinStore->set($appId, new Pin($pin->version, $pin->pinnedBy, $pin->pinnedAt, $pin->reason));
+				}
 			}
 
 			return ['statusCode' => Http::STATUS_OK, 'payload' => $payload];
@@ -663,5 +748,13 @@ class InstallerService {
 
 	private function isCoreProtectedApp(string $appId): bool {
 		return in_array(trim($appId), $this->appManager->getAlwaysEnabledApps(), true);
+	}
+
+	private function currentActorUid(): string {
+		return $this->userSession->getUser()?->getUID() ?? 'system';
+	}
+
+	private function nowIso(): string {
+		return $this->timeFactory->getDateTime('now', new \DateTimeZone('UTC'))->format(\DateTimeInterface::ATOM);
 	}
 }

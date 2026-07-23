@@ -12,8 +12,10 @@ declare(strict_types=1);
 
 namespace OCA\AppVersions\AppInfo;
 
+use OCA\AppVersions\Listener\AppUpdatedListener;
 use OCA\AppVersions\Listener\UserDeletedListener;
 use OCA\AppVersions\Notification\Notifier;
+use OCP\App\Events\AppUpdateEvent;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
@@ -30,6 +32,7 @@ class Application extends App implements IBootstrap {
 
 	public function register(IRegistrationContext $context): void {
 		$context->registerEventListener(UserDeletedEvent::class, UserDeletedListener::class);
+		$context->registerEventListener(AppUpdateEvent::class, AppUpdatedListener::class);
 		$context->registerNotifierService(Notifier::class);
 	}
 

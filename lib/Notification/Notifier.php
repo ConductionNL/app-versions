@@ -20,9 +20,10 @@ use OCP\Notification\UnknownNotificationException;
 
 /**
  * Renders App Versions notifications (the `pinned_to_vulnerable` advisory
- * notice, and the `pat_expiring` / `pat_expired` token-expiry notices) into
- * localized subject/message text for the notifications app. Read-only
- * presentation — it never changes a version or a token.
+ * notice, the `pat_expiring` / `pat_expired` token-expiry notices, and the
+ * `pin_drift` version-pinning notice) into localized subject/message text
+ * for the notifications app. Read-only presentation — it never changes a
+ * version, a token, or a pin.
  *
  * @psalm-api
  */
@@ -42,9 +43,11 @@ class Notifier implements INotifier {
 
 	/**
 	 * Renders the localized subject/message for a notification; see
-	 * "PAT expiry warnings" for the `pat_expiring` / `pat_expired` subjects.
+	 * "PAT expiry warnings" for the `pat_expiring` / `pat_expired` subjects
+	 * and "Drift response — notify and offer re-pin" for `pin_drift`.
 	 *
 	 * @spec openspec/specs/pat-management/spec.md
+	 * @spec openspec/specs/version-pinning/spec.md
 	 */
 	public function prepare(INotification $notification, string $languageCode): INotification {
 		if ($notification->getApp() !== Application::APP_ID) {
@@ -87,6 +90,23 @@ class Notifier implements INotifier {
 						$days,
 						[$label, $forge, $days]
 					)
+				);
+
+			return $notification;
+		}
+
+		if ($notification->getSubject() === 'pin_drift') {
+			$parameters = $notification->getSubjectParameters();
+			$app = is_string($parameters['app'] ?? null) ? $parameters['app'] : '';
+			$pinnedVersion = is_string($parameters['pinnedVersion'] ?? null) ? $parameters['pinnedVersion'] : '';
+			$observedVersion = is_string($parameters['observedVersion'] ?? null) ? $parameters['observedVersion'] : '';
+
+			$notification
+				->setParsedSubject(
+					$l->t('A pinned app was updated outside App Versions')
+				)
+				->setParsedMessage(
+					$l->t('%1$s is pinned to %2$s but is now running %3$s. Re-pin to restore the pinned version, or accept the change.', [$app, $pinnedVersion, $observedVersion])
 				);
 
 			return $notification;

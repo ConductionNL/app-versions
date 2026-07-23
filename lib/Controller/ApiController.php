@@ -23,14 +23,18 @@ use OCA\AppVersions\Service\Pat\PatDeeplinkBuilder;
 use OCA\AppVersions\Service\Pat\PatExpiryEvaluator;
 use OCA\AppVersions\Service\Pat\PatManager;
 use OCA\AppVersions\Service\Pat\PatValidator;
+use OCA\AppVersions\Service\Pin\Pin;
+use OCA\AppVersions\Service\Pin\PinStore;
 use OCA\AppVersions\Service\Source\SourceBinding;
 use OCA\AppVersions\Service\Source\UntrustedSourceException;
+use OCP\App\IAppManager;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\ApiRoute;
 use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\OCSController;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IGroupManager;
 use OCP\IRequest;
 use OCP\IUserSession;
@@ -55,6 +59,9 @@ class ApiController extends OCSController {
 		private DiscoveryAggregator $discoveryAggregator,
 		private AdvisoryService $advisoryService,
 		private AuditEntryMapper $auditEntryMapper,
+		private PinStore $pinStore,
+		private IAppManager $appManager,
+		private ITimeFactory $timeFactory,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -284,9 +291,12 @@ class ApiController extends OCSController {
 	}
 
 	/**
-	 * Installs a specific version (password-confirmed); see "Install Specific Version".
+	 * Installs a specific version (password-confirmed); see "Install Specific
+	 * Version" and, when the app is pinned, "Pins are enforced on App
+	 * Versions' own install path" (`overridePin=repin|unpin`, `pin=1`).
 	 *
 	 * @spec openspec/specs/version-management/spec.md
+	 * @spec openspec/specs/version-pinning/spec.md
 	 */
 	#[PasswordConfirmationRequired(strict: false)]
 	#[ApiRoute(verb: 'POST', url: '/api/app/{appId}/versions/{version}/install')]
@@ -309,11 +319,17 @@ class ApiController extends OCSController {
 
 		$includeDebug = $this->readBinaryBool($this->request->getParam('debug', '0'), false);
 
+		$overridePinRaw = $this->stringParam('overridePin', '');
+		$overridePin = $overridePinRaw === '' ? null : $overridePinRaw;
+		$pinRequested = $this->readBinaryBool($this->request->getParam('pin', '0'), false);
+
 		$result = $this->installerService->installAppVersion(
 			$appId,
 			$requestedVersion,
 			$includeDebug,
 			$sourceOverride,
+			$overridePin,
+			$pinRequested,
 		);
 		$result['payload']['requestedVersion'] = $requestedVersion;
 		$result['payload']['routeVersion'] = $version;
@@ -322,6 +338,116 @@ class ApiController extends OCSController {
 			$result['payload'] ?? [],
 			$this->toHttpStatus($result['statusCode'] ?? Http::STATUS_INTERNAL_SERVER_ERROR, Http::STATUS_INTERNAL_SERVER_ERROR)
 		);
+	}
+
+	/**
+	 * Lists all pins joined with the live installed version and current
+	 * drift status; see "Honest pin presentation".
+	 *
+	 * @spec openspec/specs/version-pinning/spec.md
+	 */
+	#[ApiRoute(verb: 'GET', url: '/api/pins')]
+	public function pins(): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$pins = [];
+		foreach ($this->pinStore->all() as $appId => $pin) {
+			try {
+				$installed = $this->appManager->getAppVersion($appId, false);
+				$installedVersion = $installed !== '' ? $installed : null;
+			} catch (\Exception) {
+				$installedVersion = null;
+			}
+
+			$pins[] = $pin->toArray() + [
+				'appId' => $appId,
+				'installedVersion' => $installedVersion,
+			];
+		}
+
+		return new DataResponse(['pins' => $pins]);
+	}
+
+	/**
+	 * Pins an app to its currently installed version (password-confirmed);
+	 * rejects a `version` other than the installed one; see "Pin an
+	 * installed app to its current version".
+	 *
+	 * @spec openspec/specs/version-pinning/spec.md
+	 */
+	#[PasswordConfirmationRequired(strict: false)]
+	#[ApiRoute(verb: 'PUT', url: '/api/app/{appId}/pin')]
+	public function pinApp(string $appId): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$user = $this->userSession->getUser();
+		if ($user === null) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		try {
+			$installedVersion = $this->appManager->getAppVersion($appId, false);
+		} catch (\Exception) {
+			$installedVersion = '';
+		}
+		if ($installedVersion === '') {
+			return new DataResponse(['message' => 'App is not installed.'], Http::STATUS_BAD_REQUEST);
+		}
+
+		$requestedVersion = $this->stringParam('version', '');
+		if ($requestedVersion !== '' && $requestedVersion !== $installedVersion) {
+			return new DataResponse(
+				['message' => 'Only the installed version can be pinned.'],
+				Http::STATUS_BAD_REQUEST
+			);
+		}
+
+		$reason = $this->stringParam('reason', '');
+
+		try {
+			$pin = new Pin(
+				$installedVersion,
+				$user->getUID(),
+				$this->timeFactory->getDateTime('now', new \DateTimeZone('UTC'))->format(\DateTimeInterface::ATOM),
+				$reason === '' ? null : $reason,
+			);
+		} catch (InvalidArgumentException $error) {
+			return new DataResponse(['message' => $error->getMessage()], Http::STATUS_BAD_REQUEST);
+		}
+
+		$this->pinStore->set($appId, $pin);
+
+		return new DataResponse([
+			'appId' => $appId,
+			'pin' => $pin->toArray(),
+		]);
+	}
+
+	/**
+	 * Removes an app's pin (password-confirmed); the installed version is
+	 * unaffected; see "Unpin".
+	 *
+	 * @spec openspec/specs/version-pinning/spec.md
+	 */
+	#[PasswordConfirmationRequired(strict: false)]
+	#[ApiRoute(verb: 'DELETE', url: '/api/app/{appId}/pin')]
+	public function unpinApp(string $appId): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$user = $this->userSession->getUser();
+		if ($user === null) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$this->pinStore->clear($appId, $user->getUID());
+
+		return new DataResponse(['appId' => $appId, 'unpinned' => true]);
 	}
 
 	/**

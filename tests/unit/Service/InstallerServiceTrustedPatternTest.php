@@ -6,14 +6,19 @@ namespace OCA\AppVersions\Tests\Unit\Service;
 
 use InvalidArgumentException;
 use OCA\AppVersions\Service\ExternalReleaseInstallerService;
+use OCA\AppVersions\Service\Installer\EnvironmentCheck;
+use OCA\AppVersions\Service\Installer\FailureClassifier;
 use OCA\AppVersions\Service\InstallerService;
+use OCA\AppVersions\Service\Pin\PinStore;
 use OCA\AppVersions\Service\SelectedReleaseInstallerService;
 use OCA\AppVersions\Service\Source\SourceBindingStore;
 use OCA\AppVersions\Service\Source\SourceRegistry;
 use OCA\AppVersions\Service\Source\TrustedSourceList;
 use OCP\App\IAppManager;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;
 use OCP\IConfig;
+use OCP\IUserSession;
 use PHPUnit\Framework\TestCase;
 
 final class InstallerServiceTrustedPatternTest extends TestCase {
@@ -38,6 +43,11 @@ final class InstallerServiceTrustedPatternTest extends TestCase {
 			$trusted,
 			$this->createMock(SelectedReleaseInstallerService::class),
 			$this->createMock(ExternalReleaseInstallerService::class),
+			$this->createMock(FailureClassifier::class),
+			$this->createMock(EnvironmentCheck::class),
+			$this->createMock(PinStore::class),
+			$this->createMock(IUserSession::class),
+			$this->createMock(ITimeFactory::class),
 		);
 	}
 
