@@ -15,6 +15,9 @@ use OCA\AppVersions\Service\Pat\PatDeeplinkBuilder;
 use OCA\AppVersions\Service\Pat\PatExpiryEvaluator;
 use OCA\AppVersions\Service\Pat\PatManager;
 use OCA\AppVersions\Service\Pat\PatValidator;
+use OCA\AppVersions\Service\Pin\PinStore;
+use OCP\App\IAppManager;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IGroupManager;
 use OCP\IRequest;
 use OCP\IUser;
@@ -31,7 +34,19 @@ final class ApiTest extends TestCase {
 		return (new ReflectionClass(ServerVersion::class))->newInstanceWithoutConstructor();
 	}
 
-	private function buildController(?IRequest $request = null, ?AuditEntryMapper $auditEntryMapper = null): ApiController {
+	private function fakeTimeFactory(): ITimeFactory {
+		$factory = $this->createMock(ITimeFactory::class);
+		$factory->method('getDateTime')->willReturn(new \DateTime('2026-07-24T00:00:00+00:00'));
+
+		return $factory;
+	}
+
+	private function buildController(
+		?IRequest $request = null,
+		?AuditEntryMapper $auditEntryMapper = null,
+		?PinStore $pinStore = null,
+		?IAppManager $appManager = null,
+	): ApiController {
 		return new ApiController(
 			'app_versions',
 			$request ?? $this->createMock(IRequest::class),
@@ -47,6 +62,9 @@ final class ApiTest extends TestCase {
 			$this->createMock(DiscoveryAggregator::class),
 			$this->createMock(AdvisoryService::class),
 			$auditEntryMapper ?? $this->createMock(AuditEntryMapper::class),
+			$pinStore ?? $this->createMock(PinStore::class),
+			$appManager ?? $this->createMock(IAppManager::class),
+			$this->fakeTimeFactory(),
 		);
 	}
 
@@ -54,13 +72,20 @@ final class ApiTest extends TestCase {
 	 * Builds a controller whose isAdmin() returns true, with the given installer
 	 * service and request wired in.
 	 */
-	private function buildAdminController(InstallerService $installer, IRequest $request, ?AuditEntryMapper $auditEntryMapper = null): ApiController {
+	private function buildAdminController(
+		InstallerService $installer,
+		IRequest $request,
+		?AuditEntryMapper $auditEntryMapper = null,
+		?PinStore $pinStore = null,
+		?IAppManager $appManager = null,
+		string $uid = 'admin',
+	): ApiController {
 		$user = $this->createMock(IUser::class);
-		$user->method('getUID')->willReturn('admin');
+		$user->method('getUID')->willReturn($uid);
 		$session = $this->createMock(IUserSession::class);
 		$session->method('getUser')->willReturn($user);
 		$groupManager = $this->createMock(IGroupManager::class);
-		$groupManager->method('isAdmin')->with('admin')->willReturn(true);
+		$groupManager->method('isAdmin')->with($uid)->willReturn(true);
 
 		return new ApiController(
 			'app_versions',
@@ -77,6 +102,9 @@ final class ApiTest extends TestCase {
 			$this->createMock(DiscoveryAggregator::class),
 			$this->createMock(AdvisoryService::class),
 			$auditEntryMapper ?? $this->createMock(AuditEntryMapper::class),
+			$pinStore ?? $this->createMock(PinStore::class),
+			$appManager ?? $this->createMock(IAppManager::class),
+			$this->fakeTimeFactory(),
 		);
 	}
 
@@ -270,5 +298,128 @@ final class ApiTest extends TestCase {
 			'message' => null,
 			'createdAt' => '2026-07-23 12:00:00',
 		], $entry->jsonSerialize());
+	}
+
+	// --- Pin endpoints (see "Pin an installed app to its current version", "Unpin", "Honest pin presentation") ---
+
+	public function testPinsForbiddenForNonAdmin(): void {
+		$response = $this->buildController()->pins();
+
+		$this->assertSame(403, $response->getStatus());
+	}
+
+	public function testPinAppForbiddenForNonAdmin(): void {
+		$response = $this->buildController()->pinApp('openregister');
+
+		$this->assertSame(403, $response->getStatus());
+	}
+
+	public function testUnpinAppForbiddenForNonAdmin(): void {
+		$response = $this->buildController()->unpinApp('openregister');
+
+		$this->assertSame(403, $response->getStatus());
+	}
+
+	public function testPinAppRejectsWhenAppNotInstalled(): void {
+		$request = $this->createMock(IRequest::class);
+		$request->method('getParam')->willReturnCallback(
+			static fn (string $name, mixed $default = null): mixed => $default
+		);
+
+		$appManager = $this->createMock(IAppManager::class);
+		$appManager->method('getAppVersion')->willReturn('');
+
+		$installer = $this->createMock(InstallerService::class);
+		$response = $this->buildAdminController($installer, $request, null, null, $appManager)->pinApp('openregister');
+
+		$this->assertSame(400, $response->getStatus());
+	}
+
+	public function testPinAppRejectsVersionOtherThanInstalled(): void {
+		$request = $this->createMock(IRequest::class);
+		$request->method('getParam')->willReturnCallback(
+			static fn (string $name, mixed $default = null): mixed => match ($name) {
+				'version' => '2.5.0',
+				default => $default,
+			}
+		);
+
+		$appManager = $this->createMock(IAppManager::class);
+		$appManager->method('getAppVersion')->willReturn('2.3.0');
+
+		$pinStore = $this->createMock(PinStore::class);
+		$pinStore->expects($this->never())->method('set');
+
+		$installer = $this->createMock(InstallerService::class);
+		$response = $this->buildAdminController($installer, $request, null, $pinStore, $appManager)->pinApp('openregister');
+
+		$this->assertSame(400, $response->getStatus());
+	}
+
+	public function testPinAppSuccessWritesPinAtTheInstalledVersion(): void {
+		$request = $this->createMock(IRequest::class);
+		$request->method('getParam')->willReturnCallback(
+			static fn (string $name, mixed $default = null): mixed => match ($name) {
+				'reason' => '2.5.0 breaks LDAP sync',
+				default => $default,
+			}
+		);
+
+		$appManager = $this->createMock(IAppManager::class);
+		$appManager->method('getAppVersion')->willReturn('2.3.0');
+
+		$pinStore = $this->createMock(PinStore::class);
+		$pinStore->expects($this->once())
+			->method('set')
+			->with(
+				'openregister',
+				$this->callback(function ($pin): bool {
+					return $pin->version === '2.3.0'
+						&& $pin->pinnedBy === 'admin'
+						&& $pin->reason === '2.5.0 breaks LDAP sync';
+				})
+			);
+
+		$installer = $this->createMock(InstallerService::class);
+		$response = $this->buildAdminController($installer, $request, null, $pinStore, $appManager)->pinApp('openregister');
+
+		$this->assertSame(200, $response->getStatus());
+		$this->assertSame('openregister', $response->getData()['appId']);
+		$this->assertSame('2.3.0', $response->getData()['pin']['version']);
+	}
+
+	public function testUnpinAppClearsThePinAsTheCurrentActor(): void {
+		$request = $this->createMock(IRequest::class);
+
+		$pinStore = $this->createMock(PinStore::class);
+		$pinStore->expects($this->once())->method('clear')->with('openregister', 'admin');
+
+		$installer = $this->createMock(InstallerService::class);
+		$response = $this->buildAdminController($installer, $request, null, $pinStore)->unpinApp('openregister');
+
+		$this->assertSame(200, $response->getStatus());
+		$this->assertTrue($response->getData()['unpinned']);
+	}
+
+	public function testPinsJoinsPersistedPinsWithTheLiveInstalledVersion(): void {
+		$request = $this->createMock(IRequest::class);
+
+		$pinStore = $this->createMock(PinStore::class);
+		$pinStore->method('all')->willReturn([
+			'openregister' => new \OCA\AppVersions\Service\Pin\Pin('2.3.0', 'alice', '2026-06-11T12:00:00+00:00'),
+		]);
+
+		$appManager = $this->createMock(IAppManager::class);
+		$appManager->method('getAppVersion')->willReturn('2.5.0');
+
+		$installer = $this->createMock(InstallerService::class);
+		$response = $this->buildAdminController($installer, $request, null, $pinStore, $appManager)->pins();
+
+		$this->assertSame(200, $response->getStatus());
+		$pins = $response->getData()['pins'];
+		$this->assertCount(1, $pins);
+		$this->assertSame('openregister', $pins[0]['appId']);
+		$this->assertSame('2.3.0', $pins[0]['version']);
+		$this->assertSame('2.5.0', $pins[0]['installedVersion']);
 	}
 }

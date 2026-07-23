@@ -7,10 +7,14 @@ import { t } from '@nextcloud/l10n'
 import ChangelogRangePanel from './components/ChangelogRangePanel.vue'
 import DiscoverPanel, { type PrefillBindPayload } from './components/DiscoverPanel.vue'
 import HistoryPanel from './components/HistoryPanel.vue'
+import PinDriftBanner from './components/PinDriftBanner.vue'
 import SourcesPanel from './components/SourcesPanel.vue'
 import TokensPanel from './components/TokensPanel.vue'
 import TrustedSourcesPanel from './components/TrustedSourcesPanel.vue'
 import VersionChangelog from './components/VersionChangelog.vue'
+import PinDialog from './dialogs/PinDialog.vue'
+import type { PinRecord } from './dialogs/PinDialog.vue'
+import PinOverrideDialog from './dialogs/PinOverrideDialog.vue'
 import { buildChangelogRange } from './utils/changelog'
 import { compareVersions, parseVersionCore } from './utils/versionCompare'
 
@@ -96,6 +100,19 @@ const lastInstallResult = ref<InstallResult | null>(null)
 const hasInstallResult = ref(false)
 const installRequestFromVersion = ref('')
 const installRequestToVersion = ref('')
+
+// Pinning (see "Pin an installed app to its current version", "Drift
+// detection", "Drift response — notify and offer re-pin"). Pins are fetched
+// once and kept in a per-appId map, mirroring the `advisories` pattern.
+const pins = ref<Record<string, PinRecord>>({})
+const isPinDialogOpen = ref(false)
+const pinDialogAppId = ref('')
+const pinDialogVersion = ref('')
+const isPinOverrideDialogOpen = ref(false)
+const pinOverrideAppId = ref('')
+const pinOverridePinnedVersion = ref('')
+const pinOverrideTargetVersion = ref('')
+let pinOverrideResolve: ((choice: 'repin' | 'unpin' | 'cancel') => void) | null = null
 
 // Admin-settings tabs: the existing apps→versions→install view plus the
 // source / token / trusted-source management panels, and the Discover tab
@@ -419,6 +436,72 @@ const advisoryBadgeLabel = (state: AdvisoryCorrelation['state']): string => {
 		return t('app_versions', 'Advisory')
 	}
 	return ''
+}
+
+// Pins, like advisories, are fetched separately from the app list and never
+// block it; read-only for badges, writes go through PinDialog / the drift
+// banner / the pin-override dialog. See "Honest pin presentation".
+const loadPins = async (): Promise<void> => {
+	try {
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/pins')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
+		const payload = await unwrapOcsResponse<{ pins: PinRecord[] }>(response)
+		const map: Record<string, PinRecord> = {}
+		for (const pin of payload.pins || []) {
+			map[pin.appId] = pin
+		}
+		pins.value = map
+	} catch {
+		pins.value = {}
+	}
+}
+
+const pinFor = (appId: string): PinRecord | null => pins.value[appId] ?? null
+
+const pinTooltip = (pin: PinRecord | null): string => {
+	if (!pin) {
+		return ''
+	}
+	const parts = [t('app_versions', 'Pinned by {user} on {date}', { user: pin.pinnedBy, date: pin.pinnedAt })]
+	if (pin.reason) {
+		parts.push(pin.reason)
+	}
+	return parts.join(' — ')
+}
+
+const openPinDialog = (appId: string, version: string): void => {
+	pinDialogAppId.value = appId
+	pinDialogVersion.value = version
+	isPinDialogOpen.value = true
+}
+
+const onPinned = (pin: PinRecord): void => {
+	pins.value = { ...pins.value, [pin.appId]: pin }
+}
+
+const onPinDriftUpdated = (appId: string, pin: PinRecord | null): void => {
+	const next = { ...pins.value }
+	if (pin) {
+		next[appId] = pin
+	} else {
+		delete next[appId]
+	}
+	pins.value = next
+}
+
+const unpinApp = async (appId: string): Promise<void> => {
+	try {
+		await ensurePasswordConfirmation()
+		const response = await fetch(apiUrl(withOcsJson(`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(appId)}/pin`)), {
+			method: 'DELETE',
+			headers: { ...ocsHeaders, Accept: 'application/json', 'Content-Type': 'application/json' },
+		})
+		await unwrapOcsResponse(response)
+		const next = { ...pins.value }
+		delete next[appId]
+		pins.value = next
+	} catch (e) {
+		errorMessage.value = e instanceof Error ? e.message : t('app_versions', 'Could not unpin this app.')
+	}
 }
 
 const resetSelectedAppState = (): void => {
@@ -838,6 +921,104 @@ const onSelectVersion = (version: string): void => {
 	errorMessage.value = ''
 }
 
+type InstallApiPayload = {
+	appId: string
+	toVersion: string
+	fromVersion?: string
+	installedVersion?: string
+	updateType?: string
+	message?: string
+	dryRun?: boolean
+	installStatus?: string
+	debug?: unknown
+	category?: string
+	pinnedVersion?: string
+}
+
+const requestInstall = async (
+	appId: string,
+	version: string,
+	overridePin?: 'repin' | 'unpin',
+	pinRequested = false,
+): Promise<{ payload: InstallApiPayload, metaMessage?: string }> => {
+	const query: Record<string, string> = {
+		debug: includeDebug.value ? '1' : '0',
+		targetVersion: version,
+	}
+	if (overridePin) {
+		query.overridePin = overridePin
+	}
+	if (pinRequested) {
+		query.pin = '1'
+	}
+	const endpoint = withOcsJson(
+		`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(appId)}/versions/${encodeURIComponent(version)}/install`,
+		query,
+	)
+	const response = await fetch(apiUrl(endpoint), {
+		method: 'POST',
+		headers: {
+			...ocsHeaders,
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+		},
+		body: JSON.stringify({ version }),
+	})
+
+	return unwrapOcsResponseWithMeta<InstallApiPayload>(response)
+}
+
+// Offers Re-pin / Unpin-and-install / Cancel when the install endpoint
+// refuses to overwrite a pin (409); see "Pins are enforced on App Versions'
+// own install path".
+const confirmPinOverride = (appId: string, pinnedVersion: string, targetVersion: string): Promise<'repin' | 'unpin' | 'cancel'> => {
+	if (pinOverrideResolve) {
+		pinOverrideResolve('cancel')
+		pinOverrideResolve = null
+	}
+
+	pinOverrideAppId.value = appId
+	pinOverridePinnedVersion.value = pinnedVersion
+	pinOverrideTargetVersion.value = targetVersion
+
+	return new Promise((resolve) => {
+		pinOverrideResolve = resolve
+		isPinOverrideDialogOpen.value = true
+	})
+}
+
+const onPinOverrideResolve = (choice: 'repin' | 'unpin' | 'cancel'): void => {
+	pinOverrideResolve?.(choice)
+	pinOverrideResolve = null
+}
+
+// Re-pin from the drift banner reinstalls the pinned version through this
+// same install path (source resolution, allowlist, integrity checks all
+// apply) — see "Re-pin reinstalls the pinned version". No override is
+// needed: the target equals the pin's own version.
+const onRepinRequested = async (appId: string, version: string): Promise<void> => {
+	if (isInstallingVersion.value) {
+		return
+	}
+	isInstallingVersion.value = true
+	errorMessage.value = ''
+	try {
+		await ensurePasswordConfirmation()
+		const { metaMessage } = await requestInstall(appId, version)
+		if (metaMessage) {
+			errorMessage.value = metaMessage
+		}
+		await loadPins()
+		if (selectedApp.value === appId) {
+			await checkVersions(true)
+		}
+	} catch (e) {
+		errorMessage.value = e instanceof Error ? e.message : t('app_versions', 'Could not re-pin this app.')
+	} finally {
+		isInstallingVersion.value = false
+	}
+}
+
 const performInstall = async (): Promise<void> => {
 	if (!selectedApp.value || !selectedVersion.value || isInstallingVersion.value) {
 		return
@@ -868,35 +1049,18 @@ const performInstall = async (): Promise<void> => {
 	try {
 		await ensurePasswordConfirmation()
 
-		const endpoint = withOcsJson(
-			`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(selectedAppValue)}/versions/${encodeURIComponent(selectedVersionValue)}/install`,
-			{
-				debug: includeDebug.value ? '1' : '0',
-				targetVersion: selectedVersionValue,
-			},
-		)
-		const response = await fetch(apiUrl(endpoint), {
-			method: 'POST',
-			headers: {
-				...ocsHeaders,
-				Accept: 'application/json',
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({
-				version: selectedVersionValue,
-			}),
-		})
-		const { payload, metaMessage } = await unwrapOcsResponseWithMeta<{
-			appId: string
-			toVersion: string
-			fromVersion?: string
-			installedVersion?: string
-			updateType?: string
-			message?: string
-			dryRun?: boolean
-			installStatus?: string
-			debug?: unknown
-		}>(response)
+		let installResponse = await requestInstall(selectedAppValue, selectedVersionValue)
+
+		if (installResponse.metaMessage && installResponse.payload?.category === 'pinned') {
+			const choice = await confirmPinOverride(selectedAppValue, installResponse.payload.pinnedVersion || '', selectedVersionValue)
+			if (choice === 'cancel') {
+				hasInstallResult.value = false
+				return
+			}
+			installResponse = await requestInstall(selectedAppValue, selectedVersionValue, choice)
+		}
+
+		const { payload, metaMessage } = installResponse
 		const result = normalizeInstallResult(payload)
 		const requestedFrom = installRequestFromVersion.value
 		const requestedTo = installRequestToVersion.value
@@ -936,6 +1100,7 @@ const performInstall = async (): Promise<void> => {
 			availableSource.value = ''
 			selectedVersion.value = ''
 			await checkVersions(true)
+			await loadPins()
 		}
 	} catch (error) {
 		errorMessage.value = error instanceof Error ? error.message : 'Could not install selected version.'
@@ -974,8 +1139,9 @@ onMounted(async () => {
 	} finally {
 		isLoading.value = false
 	}
-	// Kick off advisory correlation after the list renders (non-blocking).
+	// Kick off advisory correlation and pin state after the list renders (non-blocking).
 	void loadAdvisories()
+	void loadPins()
 })
 
 watch([safeModeEnabled, installedVersion, selectedVersion], () => {
@@ -1022,6 +1188,19 @@ watch(debugModeEnabled, () => {
 					Downgrading can break database schema assumptions if migrations were already applied in newer versions. Continue only if you are sure no incompatible schema changes are involved.
 				</p>
 			</NcDialog>
+			<PinDialog
+				:open="isPinDialogOpen"
+				:app-id="pinDialogAppId"
+				:version="pinDialogVersion"
+				@update:open="isPinDialogOpen = $event"
+				@pinned="onPinned" />
+			<PinOverrideDialog
+				:open="isPinOverrideDialogOpen"
+				:app-id="pinOverrideAppId"
+				:pinned-version="pinOverridePinnedVersion"
+				:target-version="pinOverrideTargetVersion"
+				@update:open="isPinOverrideDialogOpen = $event"
+				@resolve="onPinOverrideResolve" />
 			<h2>{{ t('app_versions', 'App Versions') }}</h2>
 			<div :class="$style.well">
 				<div ref="tablistEl"
@@ -1115,6 +1294,13 @@ watch(debugModeEnabled, () => {
 															</p>
 															<span v-if="app.isCore" :class="$style.appCardCoreFlag">CORE</span>
 															<span
+																v-if="pinFor(app.id)"
+																:class="$style.pinBadge"
+																data-testid="pin-badge"
+																:title="pinTooltip(pinFor(app.id))">
+																📌 {{ t('app_versions', 'Pinned {version}', { version: pinFor(app.id)?.version ?? '' }) }}
+															</span>
+															<span
 																v-if="advisoryFor(app.id)?.state && advisoryFor(app.id)?.state !== 'none'"
 																:class="[$style.advisoryBadge, { [$style.advisoryBadgeVulnerable]: advisoryFor(app.id)?.state === 'pinned-to-vulnerable' }]"
 																:title="advisoryFor(app.id)?.advisories?.[0]?.summary ?? ''">
@@ -1203,7 +1389,34 @@ watch(debugModeEnabled, () => {
 										<div v-if="installedVersion" :class="$style.installedCurrent">
 											<span :class="$style.installedLabel">Current installed</span>
 											<span :class="$style.installedValue">{{ installedVersion }}</span>
+											<span
+												v-if="pinFor(selectedApp)"
+												:class="$style.pinBadge"
+												data-testid="pin-badge-detail"
+												:title="pinTooltip(pinFor(selectedApp))">
+												📌 {{ t('app_versions', 'Pinned {version}', { version: pinFor(selectedApp)?.version ?? '' }) }}
+											</span>
+											<button
+												v-if="pinFor(selectedApp)"
+												type="button"
+												:class="$style.changeAppButton"
+												@click="unpinApp(selectedApp)">
+												{{ t('app_versions', 'Unpin') }}
+											</button>
+											<button
+												v-else
+												type="button"
+												:class="$style.changeAppButton"
+												@click="openPinDialog(selectedApp, installedVersion)">
+												{{ t('app_versions', 'Pin this version') }}
+											</button>
 										</div>
+										<PinDriftBanner
+											v-if="pinFor(selectedApp)?.driftedTo"
+											:app-id="selectedApp"
+											:pin="pinFor(selectedApp)!"
+											@update:pin="onPinDriftUpdated"
+											@repin-requested="onRepinRequested" />
 										<div v-if="selectedVersion" :class="$style.selectedVersion">
 											<span :class="$style.installedLabel">Selected version</span>
 											<span :class="$style.versionTransition">
@@ -1664,6 +1877,21 @@ watch(debugModeEnabled, () => {
 	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.04em;
+	flex-shrink: 0;
+}
+
+.pinBadge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 8px;
+	border-radius: 9999px;
+	background: var(--color-primary-element-light, #e0e7ff);
+	color: var(--color-primary-element-text, var(--color-main-text));
+	border: 1px solid var(--color-primary-element);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
 	flex-shrink: 0;
 }
 

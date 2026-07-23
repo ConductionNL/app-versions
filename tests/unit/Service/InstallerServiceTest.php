@@ -10,6 +10,8 @@ use OCA\AppVersions\Service\Installer\EnvironmentCheck;
 use OCA\AppVersions\Service\Installer\FailureClassifier;
 use OCA\AppVersions\Service\Installer\InstallFailure;
 use OCA\AppVersions\Service\InstallerService;
+use OCA\AppVersions\Service\Pin\Pin;
+use OCA\AppVersions\Service\Pin\PinStore;
 use OCA\AppVersions\Service\SelectedReleaseInstallerService;
 use OCA\AppVersions\Service\Source\SourceBindingStore;
 use OCA\AppVersions\Service\Source\SourceInterface;
@@ -17,9 +19,12 @@ use OCA\AppVersions\Service\Source\SourceRegistry;
 use OCA\AppVersions\Service\Source\TrustedSourceList;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IL10N;
+use OCP\IUser;
+use OCP\IUserSession;
 use OCP\L10N\IFactory;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -34,6 +39,9 @@ final class InstallerServiceTest extends TestCase {
 	private SelectedReleaseInstallerService&MockObject $signedInstaller;
 	private ExternalReleaseInstallerService&MockObject $externalInstaller;
 	private EnvironmentCheck&MockObject $environmentCheck;
+	private PinStore&MockObject $pinStore;
+	private IUserSession&MockObject $userSession;
+	private ITimeFactory&MockObject $timeFactory;
 	private FailureClassifier $failureClassifier;
 
 	protected function setUp(): void {
@@ -47,6 +55,14 @@ final class InstallerServiceTest extends TestCase {
 		$this->signedInstaller = $this->createMock(SelectedReleaseInstallerService::class);
 		$this->externalInstaller = $this->createMock(ExternalReleaseInstallerService::class);
 		$this->environmentCheck = $this->createMock(EnvironmentCheck::class);
+		$this->pinStore = $this->createMock(PinStore::class);
+
+		$user = $this->createMock(IUser::class);
+		$user->method('getUID')->willReturn('admin');
+		$this->userSession = $this->createMock(IUserSession::class);
+		$this->userSession->method('getUser')->willReturn($user);
+		$this->timeFactory = $this->createMock(ITimeFactory::class);
+		$this->timeFactory->method('getDateTime')->willReturn(new \DateTime('2026-07-24T00:00:00+00:00'));
 
 		$l = $this->createMock(IL10N::class);
 		$l->method('t')->willReturnCallback(static fn (string $text): string => $text);
@@ -54,10 +70,14 @@ final class InstallerServiceTest extends TestCase {
 		$factory->method('get')->willReturn($l);
 		$this->failureClassifier = new FailureClassifier($factory);
 
-		// Common happy-path stubs: not core, fresh-ish install, trusted binding.
+		// Common happy-path stubs: not core, fresh-ish install, trusted binding, no pin.
 		$this->appManager->method('getAlwaysEnabledApps')->willReturn([]);
 		$this->appManager->method('getAppVersion')->willReturn('1.0.0');
 		$this->bindingStore->method('get')->willReturn(null);
+		// PinStore::get() is intentionally left unstubbed here — its ?Pin return
+		// type makes PHPUnit's mock default to null, and stubbing it here would
+		// take priority over a per-test ->method('get')->willReturn(...) override
+		// (PHPUnit matches stubs in registration order for unconstrained calls).
 		$this->config->method('getSystemValueBool')->willReturn(true); // maintenance already on
 	}
 
@@ -73,6 +93,9 @@ final class InstallerServiceTest extends TestCase {
 			$this->externalInstaller,
 			$this->failureClassifier,
 			$this->environmentCheck,
+			$this->pinStore,
+			$this->userSession,
+			$this->timeFactory,
 		);
 	}
 
@@ -179,5 +202,146 @@ final class InstallerServiceTest extends TestCase {
 
 		self::assertSame(InstallFailure::OUTCOME_REVERTED, $result['payload']['installStatus']);
 		self::assertNotSame('', $result['payload']['hint']);
+	}
+
+	// --- Pin guard matrix (see "Pins are enforced on App Versions' own install path") ---
+
+	private function stubSuccessfulSignedInstall(string $resultingVersion): void {
+		$this->appManager->method('getAppPath')->willReturn('/writable/app');
+		$this->environmentCheck->method('isDestinationWritable')->willReturn(true);
+		$this->stubSignedSourceReturning();
+		$this->signedInstaller->method('installFromSelectedRelease')->willReturn(['status' => 'installed']);
+		$this->appManager->method('getAppInfoByPath')->willReturn(['version' => $resultingVersion]);
+	}
+
+	public function testInstallOverPinnedAppWithoutOverrideReturns409NamingPinnedVersion(): void {
+		$this->pinStore->method('get')->willReturn(new Pin('1.0.0', 'alice', '2026-01-01T00:00:00+00:00'));
+		// No download or filesystem change must happen — the guard fires first.
+		$this->sourceRegistry->expects(self::never())->method('get');
+
+		$result = $this->service()->installAppVersion('someapp', '2.0.0', false);
+
+		self::assertSame(Http::STATUS_CONFLICT, $result['statusCode']);
+		self::assertStringContainsString('1.0.0', $result['payload']['message']);
+		self::assertSame('1.0.0', $result['payload']['pinnedVersion']);
+	}
+
+	public function testInvalidOverridePinValueReturns400(): void {
+		$this->sourceRegistry->expects(self::never())->method('get');
+
+		$result = $this->service()->installAppVersion('someapp', '2.0.0', false, null, 'bogus');
+
+		self::assertSame(Http::STATUS_BAD_REQUEST, $result['statusCode']);
+	}
+
+	public function testOverridePinRepinMovesThePinToTheNewlyInstalledVersion(): void {
+		$oldPin = new Pin('1.0.0', 'previous-admin', '2026-01-01T00:00:00+00:00', 'reason-x');
+		$this->pinStore->method('get')->willReturn($oldPin);
+		$this->pinStore->expects(self::once())
+			->method('set')
+			->with(
+				'someapp',
+				self::callback(static fn (Pin $pin): bool => $pin->version === '2.0.0' && $pin->pinnedBy === 'admin' && $pin->reason === 'reason-x')
+			);
+		$this->pinStore->expects(self::never())->method('clear');
+		$this->stubSuccessfulSignedInstall('2.0.0');
+
+		$result = $this->service()->installAppVersion('someapp', '2.0.0', false, null, InstallerService::OVERRIDE_PIN_REPIN);
+
+		self::assertSame(Http::STATUS_OK, $result['statusCode']);
+	}
+
+	public function testOverridePinUnpinClearsThePinAfterSuccessfulInstall(): void {
+		$this->pinStore->method('get')->willReturn(new Pin('1.0.0', 'alice', '2026-01-01T00:00:00+00:00'));
+		$this->pinStore->expects(self::once())->method('clear')->with('someapp', 'admin');
+		$this->pinStore->expects(self::never())->method('set');
+		$this->stubSuccessfulSignedInstall('2.0.0');
+
+		$result = $this->service()->installAppVersion('someapp', '2.0.0', false, null, InstallerService::OVERRIDE_PIN_UNPIN);
+
+		self::assertSame(Http::STATUS_OK, $result['statusCode']);
+	}
+
+	public function testOverridePinIsIgnoredWhenInstallFails(): void {
+		$this->pinStore->method('get')->willReturn(new Pin('1.0.0', 'alice', '2026-01-01T00:00:00+00:00'));
+		$this->pinStore->expects(self::never())->method('set');
+		$this->pinStore->expects(self::never())->method('clear');
+		$this->appManager->method('getAppPath')->willReturn('/writable/app');
+		$this->environmentCheck->method('isDestinationWritable')->willReturn(true);
+		$this->stubSignedSourceReturning();
+		$this->signedInstaller->method('installFromSelectedRelease')
+			->willThrowException(new Exception('Could not download selected release: timeout.'));
+
+		$result = $this->service()->installAppVersion('someapp', '2.0.0', false, null, InstallerService::OVERRIDE_PIN_REPIN);
+
+		self::assertNotSame(Http::STATUS_OK, $result['statusCode']);
+	}
+
+	public function testReinstallingThePinnedVersionNeedsNoOverride(): void {
+		// Pinned and already installed at the same version: proceeds via the
+		// "already has this version installed" short-circuit, and the pin is
+		// left untouched.
+		$this->pinStore->method('get')->willReturn(new Pin('1.0.0', 'alice', '2026-01-01T00:00:00+00:00'));
+		$this->pinStore->expects(self::never())->method('set');
+		$this->pinStore->expects(self::never())->method('clear');
+
+		$result = $this->service()->installAppVersion('someapp', '1.0.0', false);
+
+		self::assertSame(Http::STATUS_OK, $result['statusCode']);
+		self::assertSame('App already has this version installed.', $result['payload']['message']);
+	}
+
+	public function testInstallThenPinAtomicallyPinsOnSuccessWhenNotAlreadyPinned(): void {
+		$this->pinStore->expects(self::once())
+			->method('set')
+			->with(
+				'someapp',
+				self::callback(static fn (Pin $pin): bool => $pin->version === '2.0.0' && $pin->pinnedBy === 'admin' && $pin->reason === null)
+			);
+		$this->stubSuccessfulSignedInstall('2.0.0');
+
+		$result = $this->service()->installAppVersion('someapp', '2.0.0', false, null, null, true);
+
+		self::assertSame(Http::STATUS_OK, $result['statusCode']);
+	}
+
+	public function testReinstallingThePinnedVersionAfterDriftClearsTheDriftMarkers(): void {
+		$driftedPin = (new Pin('2.0.0', 'alice', '2026-01-01T00:00:00+00:00'))->withDrift('3.0.0', '2026-01-02T00:00:00+00:00');
+		$this->pinStore->method('get')->willReturn($driftedPin);
+		$this->pinStore->expects(self::once())
+			->method('set')
+			->with(
+				'someapp',
+				self::callback(static fn (Pin $pin): bool => $pin->version === '2.0.0' && !$pin->hasDrifted())
+			);
+		$this->stubSuccessfulSignedInstall('2.0.0');
+
+		$result = $this->service()->installAppVersion('someapp', '2.0.0', false);
+
+		self::assertSame(Http::STATUS_OK, $result['statusCode']);
+	}
+
+	public function testReinstallingAnUndriftedPinnedVersionDoesNotTouchTheStore(): void {
+		$this->pinStore->method('get')->willReturn(new Pin('2.0.0', 'alice', '2026-01-01T00:00:00+00:00'));
+		$this->pinStore->expects(self::never())->method('set');
+		$this->pinStore->expects(self::never())->method('clear');
+		$this->stubSuccessfulSignedInstall('2.0.0');
+
+		$result = $this->service()->installAppVersion('someapp', '2.0.0', false);
+
+		self::assertSame(Http::STATUS_OK, $result['statusCode']);
+	}
+
+	public function testPinRequestedDoesNotWriteAPinWhenInstallFails(): void {
+		$this->pinStore->expects(self::never())->method('set');
+		$this->appManager->method('getAppPath')->willReturn('/writable/app');
+		$this->environmentCheck->method('isDestinationWritable')->willReturn(true);
+		$this->stubSignedSourceReturning();
+		$this->signedInstaller->method('installFromSelectedRelease')
+			->willThrowException(new Exception('Could not download selected release: timeout.'));
+
+		$result = $this->service()->installAppVersion('someapp', '2.0.0', false, null, null, true);
+
+		self::assertNotSame(Http::STATUS_OK, $result['statusCode']);
 	}
 }

@@ -32,6 +32,9 @@ class AuditLogger {
 
 	public const OPERATION_INSTALL = 'install';
 	public const OPERATION_BIND_SOURCE = 'bind_source';
+	public const OPERATION_PIN = 'pin';
+	public const OPERATION_UNPIN = 'unpin';
+	public const OPERATION_PIN_DRIFT = 'pin_drift';
 
 	private const OPERATION_PATTERN = '/^[a-z_]{1,32}$/';
 	private const MESSAGE_MAX_LENGTH = 4000;
@@ -44,10 +47,12 @@ class AuditLogger {
 	}
 
 	/**
-	 * Records one audit entry; see "Version operations are recorded" and
-	 * "Source binding changes are recorded".
+	 * Records one audit entry; see "Version operations are recorded",
+	 * "Source binding changes are recorded", and "Pin lifecycle operations
+	 * are audited" (pin / unpin / pin_drift).
 	 *
 	 * @spec openspec/specs/audit-trail/spec.md
+	 * @spec openspec/specs/version-pinning/spec.md
 	 */
 	public function record(
 		string $actorUid,

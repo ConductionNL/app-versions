@@ -68,6 +68,20 @@ final class NotifierTest extends TestCase {
 		$this->assertSame($notification, $result);
 	}
 
+	public function testPinDriftIsParsed(): void {
+		$notifier = new Notifier($this->l10nFactory());
+
+		$notification = $this->notification('pin_drift', [
+			'app' => 'openregister',
+			'pinnedVersion' => '2.3.0',
+			'observedVersion' => '2.5.0',
+		]);
+
+		$result = $notifier->prepare($notification, 'en');
+
+		$this->assertSame($notification, $result);
+	}
+
 	public function testUnknownSubjectThrows(): void {
 		$notifier = new Notifier($this->l10nFactory());
 

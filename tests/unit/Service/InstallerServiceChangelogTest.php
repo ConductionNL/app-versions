@@ -8,6 +8,7 @@ use OCA\AppVersions\Service\ExternalReleaseInstallerService;
 use OCA\AppVersions\Service\Installer\EnvironmentCheck;
 use OCA\AppVersions\Service\Installer\FailureClassifier;
 use OCA\AppVersions\Service\InstallerService;
+use OCA\AppVersions\Service\Pin\PinStore;
 use OCA\AppVersions\Service\SelectedReleaseInstallerService;
 use OCA\AppVersions\Service\Source\SourceBinding;
 use OCA\AppVersions\Service\Source\SourceBindingStore;
@@ -16,9 +17,11 @@ use OCA\AppVersions\Service\Source\SourceRegistry;
 use OCA\AppVersions\Service\Source\TrustedSourceList;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IL10N;
+use OCP\IUserSession;
 use OCP\L10N\IFactory;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -76,6 +79,9 @@ final class InstallerServiceChangelogTest extends TestCase {
 			$this->externalInstaller,
 			$this->failureClassifier,
 			$this->environmentCheck,
+			$this->createMock(PinStore::class),
+			$this->createMock(IUserSession::class),
+			$this->createMock(ITimeFactory::class),
 		);
 	}
 
