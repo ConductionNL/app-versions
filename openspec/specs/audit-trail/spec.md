@@ -148,6 +148,31 @@ The system MUST prune audit entries older than `app_versions.audit_retention_day
 - THEN entries newer than 30 days MUST NOT be deleted
 - AND the clamping MUST be logged
 
+---
+
+### Requirement: Pin lifecycle operations are audited [MVP]
+
+The system MUST write audit entries for pin operations: `pin` (on pin creation, including install-then-pin and `overridePin=repin`), `unpin` (on pin removal, including `overridePin=unpin` and Accept→remove), and `pin_drift` (on newly detected drift, with `actor_uid=system`, `from_version` = pinned version, `to_version` = observed version). All writes follow the audit capability's best-effort rule.
+
+#### Scenario: Pin is audited
+
+- GIVEN admin `alice` pins `openregister` at 2.3.0
+- WHEN the pin is persisted
+- THEN one audit entry MUST exist with `actor_uid=alice`, `app_id=openregister`, `operation=pin`, `to_version=2.3.0`, `status=success`
+
+#### Scenario: Unpin is audited
+
+- GIVEN `openregister` is pinned at 2.3.0
+- WHEN admin `alice` unpins it
+- THEN one audit entry MUST exist with `operation=unpin`, `from_version=2.3.0`, `status=success`
+
+#### Scenario: Drift is audited as system action
+
+- GIVEN `openregister` pinned at 2.3.0 drifts to 2.5.0 via Nextcloud's own updater
+- WHEN the drift handler records the drift
+- THEN one audit entry MUST exist with `actor_uid=system`, `operation=pin_drift`, `from_version=2.3.0`, `to_version=2.5.0`
+- AND repeated reconcile runs for the same drifted version MUST NOT create additional `pin_drift` entries
+
 ## User Stories
 
 1. As a Nextcloud admin, I want to see who rolled an app back, to which version, and when, so that a Friday-evening rollback is visible Monday morning.
@@ -164,10 +189,11 @@ The system MUST prune audit entries older than `app_versions.audit_retention_day
 - [ ] Global History view + per-app History tab render the trail
 - [ ] Daily prune job enforces `audit_retention_days` (default 365, floor 30)
 - [ ] No secrets ever stored in audit rows
+- [ ] `pin`/`unpin`/`pin_drift` operations are recorded through the same write path; `pin_drift` is idempotent per drifted version
 - [ ] `composer check:strict` passes; PHPUnit suite passes
 
 ## Notes
 
-- Operation vocabulary is an open string set (`[a-z_]{1,32}`); this spec defines `install` and `bind_source`. The `add-version-pinning` change extends it with `pin`, `unpin`, `pin_drift` without schema changes.
+- Operation vocabulary is an open string set (`[a-z_]{1,32}`); this spec defines `install` and `bind_source`, extended by the "Pin lifecycle operations are audited" requirement above with `pin`, `unpin`, `pin_drift` (no schema change — same table, same `GET /api/audit` read path).
 - Downgrade vs upgrade is derived from comparing `from_version`/`to_version`; no separate operation value is needed.
 - This app deliberately stores audit state locally (no OpenRegister) — it wraps NC installer internals and keeps its DB surface minimal (`pats` + `audit`).
