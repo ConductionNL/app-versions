@@ -12,6 +12,7 @@ use OCA\AppVersions\Service\Advisory\AdvisoryService;
 use OCA\AppVersions\Service\Discovery\DiscoveryAggregator;
 use OCA\AppVersions\Service\InstallerService;
 use OCA\AppVersions\Service\Pat\PatDeeplinkBuilder;
+use OCA\AppVersions\Service\Pat\PatExpiryEvaluator;
 use OCA\AppVersions\Service\Pat\PatManager;
 use OCA\AppVersions\Service\Pat\PatValidator;
 use OCP\IGroupManager;
@@ -42,6 +43,7 @@ final class ApiTest extends TestCase {
 			$this->createMock(PatManager::class),
 			$this->createMock(PatValidator::class),
 			$this->createMock(PatDeeplinkBuilder::class),
+			$this->createMock(PatExpiryEvaluator::class),
 			$this->createMock(DiscoveryAggregator::class),
 			$this->createMock(AdvisoryService::class),
 			$auditEntryMapper ?? $this->createMock(AuditEntryMapper::class),
@@ -71,6 +73,7 @@ final class ApiTest extends TestCase {
 			$this->createMock(PatManager::class),
 			$this->createMock(PatValidator::class),
 			$this->createMock(PatDeeplinkBuilder::class),
+			$this->createMock(PatExpiryEvaluator::class),
 			$this->createMock(DiscoveryAggregator::class),
 			$this->createMock(AdvisoryService::class),
 			$auditEntryMapper ?? $this->createMock(AuditEntryMapper::class),

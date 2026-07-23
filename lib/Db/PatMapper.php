@@ -42,6 +42,21 @@ class PatMapper extends QBMapper {
 	}
 
 	/**
+	 * Returns every stored PAT regardless of owner; see "PAT expiry warnings"
+	 * (the daily job must sweep all tokens, not just those visible to a uid).
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 * @return list<Pat>
+	 */
+	public function findAll(): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from($this->tableName);
+
+		return $this->findEntities($qb);
+	}
+
+	/**
 	 * @return list<Pat>
 	 */
 	public function findVisibleTo(string $uid): array {

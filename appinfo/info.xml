@@ -19,6 +19,7 @@ App Versions gives Nextcloud administrators the ability to roll back apps to pre
 	</dependencies>
 	<background-jobs>
 		<job>OCA\AppVersions\BackgroundJob\AdvisoryRefreshJob</job>
+		<job>OCA\AppVersions\BackgroundJob\PatExpiryWarningJob</job>
 		<job>OCA\AppVersions\Cron\PruneAuditJob</job>
 	</background-jobs>
 	<settings>

@@ -20,6 +20,7 @@ use OCA\AppVersions\Service\Advisory\AdvisoryService;
 use OCA\AppVersions\Service\Discovery\DiscoveryAggregator;
 use OCA\AppVersions\Service\InstallerService;
 use OCA\AppVersions\Service\Pat\PatDeeplinkBuilder;
+use OCA\AppVersions\Service\Pat\PatExpiryEvaluator;
 use OCA\AppVersions\Service\Pat\PatManager;
 use OCA\AppVersions\Service\Pat\PatValidator;
 use OCA\AppVersions\Service\Source\SourceBinding;
@@ -50,6 +51,7 @@ class ApiController extends OCSController {
 		private PatManager $patManager,
 		private PatValidator $patValidator,
 		private PatDeeplinkBuilder $deeplinkBuilder,
+		private PatExpiryEvaluator $patExpiryEvaluator,
 		private DiscoveryAggregator $discoveryAggregator,
 		private AdvisoryService $advisoryService,
 		private AuditEntryMapper $auditEntryMapper,
@@ -321,7 +323,9 @@ class ApiController extends OCSController {
 	}
 
 	/**
-	 * Lists PATs visible to the current admin, redacted; see "PAT management API".
+	 * Lists PATs visible to the current admin, redacted, with derived
+	 * `expiryState`/`daysRemaining`; see "PAT management API" and
+	 * "Expiry state in the PAT API and UI".
 	 *
 	 * @spec openspec/specs/pat-management/spec.md
 	 */
@@ -338,11 +342,27 @@ class ApiController extends OCSController {
 
 		$pats = $this->patMapper->findVisibleTo($user->getUID());
 		$payload = array_map(
-			static fn (Pat $pat): array => $pat->toRedacted(),
+			fn (Pat $pat): array => $this->serializePat($pat),
 			$pats
 		);
 
 		return new DataResponse(['pats' => $payload]);
+	}
+
+	/**
+	 * Redacts a PAT and merges in its derived `expiryState`/`daysRemaining`;
+	 * see "Expiry state in the PAT API and UI".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 * @return array<string, mixed>
+	 */
+	private function serializePat(Pat $pat): array {
+		$expiry = $this->patExpiryEvaluator->evaluate($pat->getExpiresAt());
+
+		return $pat->toRedacted() + [
+			'expiryState' => $expiry['state'],
+			'daysRemaining' => $expiry['daysRemaining'],
+		];
 	}
 
 	/**
@@ -395,7 +415,7 @@ class ApiController extends OCSController {
 			$forge,
 		);
 
-		return new DataResponse(['pat' => $pat->toRedacted(), 'warnings' => $result->warnings]);
+		return new DataResponse(['pat' => $this->serializePat($pat), 'warnings' => $result->warnings]);
 	}
 
 	/**
@@ -438,7 +458,7 @@ class ApiController extends OCSController {
 			$pat->setSharedWithAdmins($this->readBinaryBool($shared, $pat->getSharedWithAdmins()));
 		}
 
-		return new DataResponse(['pat' => $this->patManager->update($pat)->toRedacted()]);
+		return new DataResponse(['pat' => $this->serializePat($this->patManager->update($pat))]);
 	}
 
 	/**

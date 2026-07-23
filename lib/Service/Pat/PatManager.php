@@ -115,14 +115,21 @@ class PatManager {
 	/**
 	 * Persists mutations to a PAT (label / share flag); see "PAT management API".
 	 *
+	 * Clears the expiry-warning ledger whenever `expiresAt` was changed on the
+	 * entity before this call, so a renewed token gets fresh warnings; see
+	 * "PAT expiry warnings".
+	 *
 	 * @spec openspec/specs/pat-management/spec.md
 	 */
 	public function update(Pat $pat): Pat {
+		$this->resetLedgerIfExpiryChanged($pat);
+
 		return $this->mapper->update($pat);
 	}
 
 	/**
-	 * Re-probes and refreshes a PAT's stored scopes/expiry; see "PAT validation on upload".
+	 * Re-probes and refreshes a PAT's stored scopes/expiry; see "PAT validation on upload"
+	 * and "PAT expiry warnings" (ledger reset on expiry change).
 	 *
 	 * @spec openspec/specs/pat-management/spec.md
 	 */
@@ -135,8 +142,22 @@ class PatManager {
 		if ($result->expiresAt !== null) {
 			$pat->setExpiresAt($result->expiresAt);
 		}
+		$this->resetLedgerIfExpiryChanged($pat);
 
 		return $this->mapper->update($pat);
+	}
+
+	/**
+	 * Resets the expiry-warning ledger when `expiresAt` is among the entity's
+	 * updated fields, i.e. it changed since the entity was loaded; see
+	 * "PAT expiry warnings".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
+	private function resetLedgerIfExpiryChanged(Pat $pat): void {
+		if (array_key_exists('expiresAt', $pat->getUpdatedFields())) {
+			$pat->clearWarnedThresholds();
+		}
 	}
 
 	/**
