@@ -7,6 +7,8 @@ import NcSelect from '@nextcloud/vue/components/NcSelect'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { ocsGet, ocsWrite } from '../ocs'
 
+type ExpiryState = 'ok' | 'expiring' | 'expired' | 'unknown'
+
 type Pat = {
 	id: number
 	label: string
@@ -15,6 +17,8 @@ type Pat = {
 	kind?: string
 	tokenHint?: string
 	sharedWithAdmins?: boolean
+	expiryState?: ExpiryState
+	daysRemaining?: number | null
 }
 type SelectOption = { id: string, label: string }
 
@@ -43,6 +47,26 @@ const loadPats = async (): Promise<void> => {
 	} catch (e) {
 		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not load tokens.')
 	}
+}
+
+/**
+ * Badge label for a token's derived expiry state; see "Expiry state in the
+ * PAT API and UI" ("Badges reflect state").
+ * @param pat
+ * @spec openspec/specs/pat-management/spec.md
+ */
+const expiryBadgeLabel = (pat: Pat): string => {
+	if (pat.expiryState === 'expiring') {
+		const days = pat.daysRemaining ?? 0
+		return t('app_versions', 'Expires in {days} days', { days })
+	}
+	if (pat.expiryState === 'expired') {
+		return t('app_versions', 'Expired')
+	}
+	if (pat.expiryState === 'unknown') {
+		return t('app_versions', 'Expiry unknown')
+	}
+	return ''
 }
 
 const derivedTargetPattern = (): string => {
@@ -157,6 +181,16 @@ onMounted(loadPats)
 				<span>
 					<strong>{{ pat.label }}</strong>
 					<code>{{ pat.forge || 'github' }}:{{ pat.targetPattern }}</code>
+					<span
+						v-if="pat.expiryState && pat.expiryState !== 'ok'"
+						data-testid="expiry-badge"
+						:data-expiry-state="pat.expiryState"
+						:class="[$style.expiryBadge, {
+							[$style.expiryBadgeError]: pat.expiryState === 'expired',
+							[$style.expiryBadgeNeutral]: pat.expiryState === 'unknown',
+						}]">
+						{{ expiryBadgeLabel(pat) }}
+					</span>
 					<span v-if="pat.tokenHint" :class="$style.hint">…{{ pat.tokenHint }}</span>
 				</span>
 				<span :class="$style.actions">
@@ -212,4 +246,24 @@ onMounted(loadPats)
 .actions { display: flex; gap: 4px; }
 .empty { color: var(--color-text-maxcontrast); font-style: italic; }
 .form { display: flex; flex-direction: column; gap: 8px; max-width: 480px; margin-top: 8px; }
+.expiryBadge {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 8px;
+	border-radius: 9999px;
+	background: var(--color-warning, #f0a020);
+	color: var(--color-primary-text, #000);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	margin-left: 4px;
+}
+.expiryBadgeError {
+	background: var(--color-error, #d32f2f);
+	color: var(--color-primary-text, #fff);
+}
+.expiryBadgeNeutral {
+	background: var(--color-background-darker, #ededed);
+	color: var(--color-text-maxcontrast);
+}
 </style>

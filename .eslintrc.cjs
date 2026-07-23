@@ -16,4 +16,13 @@ module.exports = {
 		// would fight every existing call site rather than catch a real bug.
 		'no-void': 'off',
 	},
+	overrides: [
+		{
+			// Test files legitimately import devDependencies (vitest, @vue/test-utils).
+			files: ['**/*.spec.ts'],
+			rules: {
+				'n/no-unpublished-import': 'off',
+			},
+		},
+	],
 }
