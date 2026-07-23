@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace OCA\AppVersions\Tests\Unit\Controller;
 
 use OCA\AppVersions\Controller\ApiController;
+use OCA\AppVersions\Db\AuditEntry;
+use OCA\AppVersions\Db\AuditEntryMapper;
 use OCA\AppVersions\Db\PatMapper;
 use OCA\AppVersions\Service\Advisory\AdvisoryService;
 use OCA\AppVersions\Service\Discovery\DiscoveryAggregator;
@@ -28,7 +30,7 @@ final class ApiTest extends TestCase {
 		return (new ReflectionClass(ServerVersion::class))->newInstanceWithoutConstructor();
 	}
 
-	private function buildController(?IRequest $request = null): ApiController {
+	private function buildController(?IRequest $request = null, ?AuditEntryMapper $auditEntryMapper = null): ApiController {
 		return new ApiController(
 			'app_versions',
 			$request ?? $this->createMock(IRequest::class),
@@ -42,6 +44,7 @@ final class ApiTest extends TestCase {
 			$this->createMock(PatDeeplinkBuilder::class),
 			$this->createMock(DiscoveryAggregator::class),
 			$this->createMock(AdvisoryService::class),
+			$auditEntryMapper ?? $this->createMock(AuditEntryMapper::class),
 		);
 	}
 
@@ -49,7 +52,7 @@ final class ApiTest extends TestCase {
 	 * Builds a controller whose isAdmin() returns true, with the given installer
 	 * service and request wired in.
 	 */
-	private function buildAdminController(InstallerService $installer, IRequest $request): ApiController {
+	private function buildAdminController(InstallerService $installer, IRequest $request, ?AuditEntryMapper $auditEntryMapper = null): ApiController {
 		$user = $this->createMock(IUser::class);
 		$user->method('getUID')->willReturn('admin');
 		$session = $this->createMock(IUserSession::class);
@@ -70,6 +73,7 @@ final class ApiTest extends TestCase {
 			$this->createMock(PatDeeplinkBuilder::class),
 			$this->createMock(DiscoveryAggregator::class),
 			$this->createMock(AdvisoryService::class),
+			$auditEntryMapper ?? $this->createMock(AuditEntryMapper::class),
 		);
 	}
 
@@ -170,5 +174,98 @@ final class ApiTest extends TestCase {
 
 		$this->assertSame(200, $response->getStatus());
 		$this->assertSame(['trustedPatterns' => []], $response->getData());
+	}
+
+	public function testAuditLogForbiddenForNonAdmin(): void {
+		$response = $this->buildController()->auditLog();
+
+		$this->assertSame(403, $response->getStatus());
+	}
+
+	public function testAuditLogAsAdminUsesDefaultPaginationAndNoAppFilter(): void {
+		$request = $this->createMock(IRequest::class);
+		$request->method('getParam')->willReturnCallback(
+			static fn (string $name, mixed $default = null): mixed => $default
+		);
+
+		$mapper = $this->createMock(AuditEntryMapper::class);
+		$mapper->expects($this->once())
+			->method('findPage')
+			->with(null, 50, 0)
+			->willReturn([]);
+
+		$installer = $this->createMock(InstallerService::class);
+		$response = $this->buildAdminController($installer, $request, $mapper)->auditLog();
+
+		$this->assertSame(200, $response->getStatus());
+		$data = $response->getData();
+		$this->assertSame([], $data['entries']);
+		$this->assertSame(50, $data['limit']);
+		$this->assertSame(0, $data['offset']);
+	}
+
+	public function testAuditLogFiltersByAppIdAndClampsLimit(): void {
+		$request = $this->createMock(IRequest::class);
+		$request->method('getParam')->willReturnCallback(
+			static fn (string $name, mixed $default = null): mixed => match ($name) {
+				'appId' => 'openregister',
+				'limit' => '9999',
+				'offset' => '50',
+				default => $default,
+			}
+		);
+
+		$mapper = $this->createMock(AuditEntryMapper::class);
+		$mapper->expects($this->once())
+			->method('findPage')
+			->with('openregister', 200, 50)
+			->willReturn([]);
+
+		$installer = $this->createMock(InstallerService::class);
+		$response = $this->buildAdminController($installer, $request, $mapper)->auditLog();
+
+		$this->assertSame(200, $response->getStatus());
+		$this->assertSame(200, $response->getData()['limit']);
+	}
+
+	public function testAuditLogReturnsSerializedEntries(): void {
+		$request = $this->createMock(IRequest::class);
+		$request->method('getParam')->willReturnCallback(
+			static fn (string $name, mixed $default = null): mixed => $default
+		);
+
+		$entry = new AuditEntry();
+		$entry->setId(1);
+		$entry->setActorUid('alice');
+		$entry->setAppId('openregister');
+		$entry->setOperation('install');
+		$entry->setFromVersion('2.5.0');
+		$entry->setToVersion('2.3.0');
+		$entry->setSourceId('appstore');
+		$entry->setStatus('success');
+		$entry->setMessage(null);
+		$entry->setCreatedAt('2026-07-23 12:00:00');
+
+		$mapper = $this->createMock(AuditEntryMapper::class);
+		$mapper->method('findPage')->willReturn([$entry]);
+
+		$installer = $this->createMock(InstallerService::class);
+		$response = $this->buildAdminController($installer, $request, $mapper)->auditLog();
+
+		$data = $response->getData();
+		$this->assertCount(1, $data['entries']);
+		$this->assertSame($entry, $data['entries'][0]);
+		$this->assertSame([
+			'id' => 1,
+			'actorUid' => 'alice',
+			'appId' => 'openregister',
+			'operation' => 'install',
+			'fromVersion' => '2.5.0',
+			'toVersion' => '2.3.0',
+			'sourceId' => 'appstore',
+			'status' => 'success',
+			'message' => null,
+			'createdAt' => '2026-07-23 12:00:00',
+		], $entry->jsonSerialize());
 	}
 }

@@ -1,0 +1,225 @@
+<?php
+
+declare(strict_types=1);
+
+namespace OCA\AppVersions\Tests\Unit\Service;
+
+use OCA\AppVersions\Service\Audit\AuditLogger;
+use OCA\AppVersions\Service\ExternalReleaseInstallerService;
+use OCA\AppVersions\Service\SelectedReleaseInstallerService;
+use OCA\AppVersions\Service\Source\SourceBinding;
+use OCP\IUser;
+use OCP\IUserSession;
+use PHPUnit\Framework\TestCase;
+use ReflectionClass;
+
+/**
+ * Exercises the private audit-recording helpers on both installer services in
+ * isolation (task 8 "Installer tests extended"). The full install path is
+ * network- and Server::get()-dependent and not unit-reachable — see the
+ * rationale in {@see \OCA\AppVersions\Tests\Unit\Service\InstallerRecoveryTest}
+ * — so, mirroring that file's approach, instances are built without their
+ * constructor via reflection and the private/protected dependencies these
+ * helpers touch are injected directly.
+ */
+final class InstallerAuditHookTest extends TestCase {
+	private function userSession(string $uid = 'alice'): IUserSession {
+		$user = $this->createMock(IUser::class);
+		$user->method('getUID')->willReturn($uid);
+		$session = $this->createMock(IUserSession::class);
+		$session->method('getUser')->willReturn($user);
+
+		return $session;
+	}
+
+	private function anonymousSession(): IUserSession {
+		$session = $this->createMock(IUserSession::class);
+		$session->method('getUser')->willReturn(null);
+
+		return $session;
+	}
+
+	/**
+	 * @template T of object
+	 * @param class-string<T> $class
+	 * @return T
+	 */
+	private function instanceWithInjectedDeps(string $class, AuditLogger $auditLogger, IUserSession $userSession): object {
+		$reflection = new ReflectionClass($class);
+		$instance = $reflection->newInstanceWithoutConstructor();
+
+		$auditLoggerProp = $reflection->getProperty('auditLogger');
+		$auditLoggerProp->setAccessible(true);
+		$auditLoggerProp->setValue($instance, $auditLogger);
+
+		$userSessionProp = $reflection->getProperty('userSession');
+		$userSessionProp->setAccessible(true);
+		$userSessionProp->setValue($instance, $userSession);
+
+		return $instance;
+	}
+
+	public function testSelectedInstallerRecordsSuccessAgainstAppStore(): void {
+		$auditLogger = $this->createMock(AuditLogger::class);
+		$auditLogger->expects($this->once())
+			->method('record')
+			->with(
+				'alice',
+				'openregister',
+				AuditLogger::OPERATION_INSTALL,
+				'2.5.0',
+				'2.3.0',
+				'appstore',
+				AuditLogger::STATUS_SUCCESS,
+				null,
+			);
+
+		$instance = $this->instanceWithInjectedDeps(SelectedReleaseInstallerService::class, $auditLogger, $this->userSession());
+
+		$method = (new ReflectionClass(SelectedReleaseInstallerService::class))->getMethod('recordInstallAudit');
+		$method->setAccessible(true);
+		$method->invoke($instance, 'openregister', '2.5.0', '2.3.0', AuditLogger::STATUS_SUCCESS);
+	}
+
+	public function testSelectedInstallerRecordsFailureWithMessageAndNullFromVersionOnFreshInstall(): void {
+		$auditLogger = $this->createMock(AuditLogger::class);
+		$auditLogger->expects($this->once())
+			->method('record')
+			->with(
+				'alice',
+				'openregister',
+				AuditLogger::OPERATION_INSTALL,
+				null,
+				'2.3.0',
+				'appstore',
+				AuditLogger::STATUS_FAILURE,
+				'Could not download selected release: HTTP 404',
+			);
+
+		$instance = $this->instanceWithInjectedDeps(SelectedReleaseInstallerService::class, $auditLogger, $this->userSession());
+
+		$method = (new ReflectionClass(SelectedReleaseInstallerService::class))->getMethod('recordInstallAudit');
+		$method->setAccessible(true);
+		$method->invoke($instance, 'openregister', '', '2.3.0', AuditLogger::STATUS_FAILURE, 'Could not download selected release: HTTP 404');
+	}
+
+	public function testSelectedInstallerFallsBackToSystemActorWhenNoUserInSession(): void {
+		$auditLogger = $this->createMock(AuditLogger::class);
+		$auditLogger->expects($this->once())
+			->method('record')
+			->with('system', 'openregister', AuditLogger::OPERATION_INSTALL, null, '2.3.0', 'appstore', AuditLogger::STATUS_SUCCESS, null);
+
+		$instance = $this->instanceWithInjectedDeps(SelectedReleaseInstallerService::class, $auditLogger, $this->anonymousSession());
+
+		$method = (new ReflectionClass(SelectedReleaseInstallerService::class))->getMethod('recordInstallAudit');
+		$method->setAccessible(true);
+		$method->invoke($instance, 'openregister', '', '2.3.0', AuditLogger::STATUS_SUCCESS);
+	}
+
+	public function testExternalInstallerRecordsSuccessWithBindingSourceIdAndIntegrityWarning(): void {
+		$auditLogger = $this->createMock(AuditLogger::class);
+		$auditLogger->expects($this->once())
+			->method('record')
+			->with(
+				'alice',
+				'openregister',
+				AuditLogger::OPERATION_INSTALL,
+				'2.5.0',
+				'2.3.0',
+				'github:ConductionNL/openregister',
+				AuditLogger::STATUS_SUCCESS,
+				'No SHA-256 checksum available for this artifact.',
+			);
+
+		$instance = $this->instanceWithInjectedDeps(ExternalReleaseInstallerService::class, $auditLogger, $this->userSession());
+
+		$method = (new ReflectionClass(ExternalReleaseInstallerService::class))->getMethod('recordInstallAudit');
+		$method->setAccessible(true);
+		$method->invoke(
+			$instance,
+			'openregister',
+			SourceBinding::github('ConductionNL', 'openregister'),
+			'2.5.0',
+			'2.3.0',
+			AuditLogger::STATUS_SUCCESS,
+			'No SHA-256 checksum available for this artifact.',
+		);
+	}
+
+	public function testExternalInstallerRecordsFailureAndPrefersFailureMessageOverIntegrityWarning(): void {
+		$auditLogger = $this->createMock(AuditLogger::class);
+		$auditLogger->expects($this->once())
+			->method('record')
+			->with(
+				'alice',
+				'openregister',
+				AuditLogger::OPERATION_INSTALL,
+				'2.5.0',
+				'2.3.0',
+				'github:ConductionNL/openregister',
+				AuditLogger::STATUS_FAILURE,
+				'SHA-256 mismatch — expected aaa, got bbb.',
+			);
+
+		$instance = $this->instanceWithInjectedDeps(ExternalReleaseInstallerService::class, $auditLogger, $this->userSession());
+
+		$method = (new ReflectionClass(ExternalReleaseInstallerService::class))->getMethod('recordInstallAudit');
+		$method->setAccessible(true);
+		$method->invoke(
+			$instance,
+			'openregister',
+			SourceBinding::github('ConductionNL', 'openregister'),
+			'2.5.0',
+			'2.3.0',
+			AuditLogger::STATUS_FAILURE,
+			null,
+			'SHA-256 mismatch — expected aaa, got bbb.',
+		);
+	}
+
+	/**
+	 * No PAT/Authorization material can reach the audit message: the private
+	 * helper only ever forwards the exception message it is handed, and the
+	 * external installer's PAT flows through {@see \OCA\AppVersions\Service\Pat\PatManager::useToken()}
+	 * — a token never becomes a variable in scope at any of the installer's
+	 * throw sites. AuditLogger additionally redacts any Bearer/Authorization
+	 * pattern defensively (see AuditLoggerTest).
+	 */
+	public function testExternalInstallerAuditMessageNeverCarriesAnAuthorizationHeader(): void {
+		$auditLogger = $this->createMock(AuditLogger::class);
+		$capturedMessage = null;
+		$auditLogger->method('record')->willReturnCallback(
+			function (
+				string $actorUid,
+				string $appId,
+				string $operation,
+				?string $fromVersion,
+				?string $toVersion,
+				?string $sourceId,
+				string $status,
+				?string $message = null,
+			) use (&$capturedMessage): void {
+				$capturedMessage = $message;
+			}
+		);
+
+		$instance = $this->instanceWithInjectedDeps(ExternalReleaseInstallerService::class, $auditLogger, $this->userSession());
+
+		$method = (new ReflectionClass(ExternalReleaseInstallerService::class))->getMethod('recordInstallAudit');
+		$method->setAccessible(true);
+		$method->invoke(
+			$instance,
+			'openregister',
+			SourceBinding::github('ConductionNL', 'openregister'),
+			'2.5.0',
+			'2.3.0',
+			AuditLogger::STATUS_FAILURE,
+			null,
+			'Could not download selected release: connection reset',
+		);
+
+		$this->assertIsString($capturedMessage);
+		$this->assertStringNotContainsString('Authorization', $capturedMessage);
+		$this->assertStringNotContainsString('Bearer', $capturedMessage);
+	}
+}

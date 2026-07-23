@@ -145,8 +145,12 @@ onMounted(loadPats)
 			{{ t('app_versions', 'Personal access tokens let App Versions read private repositories. Tokens are encrypted at rest and never shown again after creation.') }}
 		</p>
 
-		<NcNoteCard v-if="error" type="error">{{ error }}</NcNoteCard>
-		<NcNoteCard v-if="notice" type="success">{{ notice }}</NcNoteCard>
+		<NcNoteCard v-if="error" type="error">
+			{{ error }}
+		</NcNoteCard>
+		<NcNoteCard v-if="notice" type="success">
+			{{ notice }}
+		</NcNoteCard>
 
 		<ul :class="$style.list">
 			<li v-for="pat in pats" :key="pat.id" :class="$style.row">
@@ -162,7 +166,9 @@ onMounted(loadPats)
 					<NcButton type="tertiary" :disabled="loading" @click="deleteToken(pat)">{{ t('app_versions', 'Delete') }}</NcButton>
 				</span>
 			</li>
-			<li v-if="pats.length === 0" :class="$style.empty">{{ t('app_versions', 'No tokens configured.') }}</li>
+			<li v-if="pats.length === 0" :class="$style.empty">
+				{{ t('app_versions', 'No tokens configured.') }}
+			</li>
 		</ul>
 
 		<form :class="$style.form" @submit.prevent="addToken">
@@ -179,14 +185,21 @@ onMounted(loadPats)
 			<NcNoteCard v-if="deeplink" type="info">
 				<a :href="deeplink.url" target="_blank" rel="noopener noreferrer">{{ deeplink.url }}</a>
 				<ul>
-					<li v-for="(line, i) in deeplink.instructions" :key="i">{{ line }}</li>
+					<li v-for="(line, i) in deeplink.instructions" :key="i">
+						{{ line }}
+					</li>
 				</ul>
 			</NcNoteCard>
 			<NcTextField v-model="label" :label="t('app_versions', 'Label')" placeholder="Conduction private repos" />
 			<NcTextField v-model="owner" :label="t('app_versions', 'Owner')" placeholder="ConductionNL" />
 			<NcTextField v-model="repo" :label="t('app_versions', 'Repository (optional — blank covers the whole owner)')" placeholder="openregister" />
-			<NcTextField v-model="token" type="password" :label="t('app_versions', 'Token')" autocomplete="off" />
-			<NcButton native-type="submit" type="primary" :disabled="loading">{{ t('app_versions', 'Add token') }}</NcButton>
+			<NcTextField v-model="token"
+				type="password"
+				:label="t('app_versions', 'Token')"
+				autocomplete="off" />
+			<NcButton native-type="submit" type="primary" :disabled="loading">
+				{{ t('app_versions', 'Add token') }}
+			</NcButton>
 		</form>
 	</div>
 </template>

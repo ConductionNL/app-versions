@@ -81,6 +81,8 @@ export const ensurePasswordConfirmation = async (): Promise<void> => {
 
 /**
  * GET an OCS endpoint and return the unwrapped payload (+ optional error).
+ * @param path
+ * @param query
  */
 export const ocsGet = async <T>(path: string, query: Record<string, string | number | boolean> = {}): Promise<OcsResult<T>> => {
 	const response = await fetch(apiUrl(withOcsJson(path, query)), {
@@ -92,6 +94,9 @@ export const ocsGet = async <T>(path: string, query: Record<string, string | num
 /**
  * Send a write (POST/PATCH/DELETE) to an OCS endpoint after password
  * confirmation, with a JSON body. Returns the unwrapped payload (+ error).
+ * @param method
+ * @param path
+ * @param body
  */
 export const ocsWrite = async <T>(
 	method: 'POST' | 'PATCH' | 'DELETE',

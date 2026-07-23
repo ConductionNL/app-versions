@@ -47,6 +47,179 @@
         }
     },
     "paths": {
+        "/ocs/v2.php/apps/app_versions/api/audit": {
+            "get": {
+                "operationId": "api-audit-log",
+                "summary": "Lists audit entries (admin-only, paginated, filterable by appId)",
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    },
+                    {
+                        "name": "appId",
+                        "in": "query",
+                        "description": "Filter entries to a single app id",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "Page size, default 50, hard cap 200",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 50
+                        }
+                    },
+                    {
+                        "name": "offset",
+                        "in": "query",
+                        "description": "Pagination offset",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 0
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Newest-first page of audit entries",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "ocs"
+                                    ],
+                                    "properties": {
+                                        "ocs": {
+                                            "type": "object",
+                                            "required": [
+                                                "meta",
+                                                "data"
+                                            ],
+                                            "properties": {
+                                                "meta": {
+                                                    "$ref": "#/components/schemas/OCSMeta"
+                                                },
+                                                "data": {
+                                                    "type": "object",
+                                                    "required": [
+                                                        "entries",
+                                                        "limit",
+                                                        "offset"
+                                                    ],
+                                                    "properties": {
+                                                        "entries": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                    "id": {
+                                                                        "type": "integer"
+                                                                    },
+                                                                    "actorUid": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "appId": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "operation": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "fromVersion": {
+                                                                        "type": "string",
+                                                                        "nullable": true
+                                                                    },
+                                                                    "toVersion": {
+                                                                        "type": "string",
+                                                                        "nullable": true
+                                                                    },
+                                                                    "sourceId": {
+                                                                        "type": "string",
+                                                                        "nullable": true
+                                                                    },
+                                                                    "status": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "message": {
+                                                                        "type": "string",
+                                                                        "nullable": true
+                                                                    },
+                                                                    "createdAt": {
+                                                                        "type": "string"
+                                                                    }
+                                                                }
+                                                            }
+                                                        },
+                                                        "limit": {
+                                                            "type": "integer"
+                                                        },
+                                                        "offset": {
+                                                            "type": "integer"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Current user is not an admin",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "ocs"
+                                    ],
+                                    "properties": {
+                                        "ocs": {
+                                            "type": "object",
+                                            "required": [
+                                                "meta",
+                                                "data"
+                                            ],
+                                            "properties": {
+                                                "meta": {
+                                                    "$ref": "#/components/schemas/OCSMeta"
+                                                },
+                                                "data": {}
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/ocs/v2.php/apps/app_versions/api": {
             "get": {
                 "operationId": "api-index",
