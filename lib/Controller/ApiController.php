@@ -260,9 +260,11 @@ class ApiController extends OCSController {
 	}
 
 	/**
-	 * Fetches available versions from the bound (or overridden) source; see "Fetch Available Versions".
+	 * Fetches available versions from the bound (or overridden) source; see "Fetch Available Versions"
+	 * and "Version listings carry release notes".
 	 *
 	 * @spec openspec/specs/version-management/spec.md
+	 * @spec openspec/specs/changelog-visibility/spec.md
 	 */
 	#[ApiRoute(verb: 'GET', url: '/api/app/{appId}/versions')]
 	public function appVersions(string $appId): DataResponse {

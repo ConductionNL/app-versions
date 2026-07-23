@@ -16,6 +16,9 @@ use Exception;
 use OCA\AppVersions\Service\Advisory\AdvisorySourceInterface;
 use OCP\Http\Client\IClientService;
 use OCP\IConfig;
+use OCP\L10N\IFactory;
+use Throwable;
+use UnexpectedValueException;
 
 /**
  * Adapter for the Nextcloud App Store as a release source. Wraps the existing
@@ -35,6 +38,7 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 	public function __construct(
 		private IClientService $clientService,
 		private IConfig $config,
+		private IFactory $l10nFactory,
 	) {
 	}
 
@@ -47,9 +51,11 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 	}
 
 	/**
-	 * Lists App Store releases for an app, normalized newest-first; see "Fetch Available Versions".
+	 * Lists App Store releases for an app, normalized newest-first; see "Fetch Available Versions"
+	 * and "Version listings carry release notes".
 	 *
 	 * @spec openspec/specs/version-management/spec.md
+	 * @spec openspec/specs/changelog-visibility/spec.md
 	 */
 	public function listVersions(string $appId, SourceBinding $binding): array {
 		try {
@@ -349,29 +355,93 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 
 	/**
 	 * @param array<mixed> $releases
-	 * @return list<array{version: string}>
+	 * @return list<array{version: string, changelog: ?string}>
 	 */
 	private function normalizeVersions(array $releases): array {
-		$versions = [];
+		/** @var array<string, ?string> $changelogsByVersion */
+		$changelogsByVersion = [];
+		$order = [];
 		/** @var mixed $release */
 		foreach ($releases as $release) {
 			if (is_string($release)) {
-				$versions[] = $release;
+				$version = $release;
+				$changelog = null;
+			} elseif (is_array($release)) {
+				/** @var mixed $version */
+				$version = $release['version'] ?? $release['ver'] ?? $release['name'] ?? $release['tag_name'] ?? null;
+				if (!is_string($version) || $version === '') {
+					continue;
+				}
+				$changelog = $this->extractChangelog($release);
+			} else {
 				continue;
 			}
-			if (!is_array($release)) {
-				continue;
-			}
-			/** @var mixed $version */
-			$version = $release['version'] ?? $release['ver'] ?? $release['name'] ?? $release['tag_name'] ?? null;
-			if (is_string($version) && $version !== '') {
-				$versions[] = $version;
+
+			if (!array_key_exists($version, $changelogsByVersion)) {
+				$order[] = $version;
+				$changelogsByVersion[$version] = $changelog;
+			} elseif ($changelogsByVersion[$version] === null && $changelog !== null) {
+				$changelogsByVersion[$version] = $changelog;
 			}
 		}
 
-		$versions = array_values(array_unique($versions));
-		usort($versions, static fn (string $a, string $b): int => version_compare($b, $a));
+		usort($order, static fn (string $a, string $b): int => version_compare($b, $a));
 
-		return array_map(static fn (string $v): array => ['version' => $v], $versions);
+		return array_map(
+			static fn (string $version): array => ['version' => $version, 'changelog' => $changelogsByVersion[$version]],
+			$order
+		);
+	}
+
+	/**
+	 * Maps a release's changelog from its `translations` block, preferring
+	 * the requested UI language and falling back to `en`. Fail-soft: any
+	 * mapping failure (unexpected payload shape) is caught and yields
+	 * `null` so a single malformed release never fails the whole listing.
+	 *
+	 * @spec openspec/specs/changelog-visibility/spec.md
+	 * @param array<array-key, mixed> $release
+	 */
+	private function extractChangelog(array $release): ?string {
+		try {
+			return $this->rawChangelogFrom($release);
+		} catch (Throwable) {
+			return null;
+		}
+	}
+
+	/**
+	 * @param array<array-key, mixed> $release
+	 */
+	private function rawChangelogFrom(array $release): ?string {
+		/** @var mixed $translations */
+		$translations = $release['translations'] ?? null;
+		if ($translations === null) {
+			return null;
+		}
+		if (!is_array($translations)) {
+			throw new UnexpectedValueException('translations is not an array.');
+		}
+
+		$lang = $this->l10nFactory->findLanguage();
+		/** @var mixed $entry */
+		$entry = $translations[$lang] ?? $translations['en'] ?? null;
+		if ($entry === null) {
+			return null;
+		}
+		if (!is_array($entry)) {
+			throw new UnexpectedValueException('translation entry is not an array.');
+		}
+
+		/** @var mixed $changelog */
+		$changelog = $entry['changelog'] ?? null;
+		if ($changelog === null) {
+			return null;
+		}
+		if (!is_string($changelog)) {
+			throw new UnexpectedValueException('changelog is not a string.');
+		}
+
+		return trim($changelog) === '' ? null : $changelog;
 	}
 }

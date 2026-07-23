@@ -236,4 +236,76 @@ final class ForgeReleaseSourceTest extends TestCase {
 		$this->assertSame([], $result['versions']);
 		$this->assertSame('Codeberg repository not found.', $result['error']);
 	}
+
+	/**
+	 * @spec openspec/specs/changelog-visibility/spec.md
+	 */
+	public function testListVersionsMapsReleaseBodyAsChangelog(): void {
+		$body = json_encode([
+			['tag_name' => 'v2.3.0', 'body' => 'Fixes LDAP sync'],
+		], JSON_THROW_ON_ERROR);
+
+		$client = $this->createMock(IClient::class);
+		$client->method('get')->willReturn($this->mockResponse(200, $body));
+
+		$result = $this->buildSource($client)->listVersions(
+			'openregister',
+			SourceBinding::github('ConductionNL', 'openregister')
+		);
+
+		$this->assertSame('Fixes LDAP sync', $result['versions'][0]['changelog']);
+	}
+
+	public function testListVersionsMissingBodyYieldsNullChangelog(): void {
+		$body = json_encode([
+			['tag_name' => 'v2.3.0'],
+		], JSON_THROW_ON_ERROR);
+
+		$client = $this->createMock(IClient::class);
+		$client->method('get')->willReturn($this->mockResponse(200, $body));
+
+		$result = $this->buildSource($client)->listVersions(
+			'openregister',
+			SourceBinding::github('ConductionNL', 'openregister')
+		);
+
+		$this->assertNull($result['error']);
+		$this->assertNull($result['versions'][0]['changelog']);
+	}
+
+	public function testListVersionsBlankBodyNormalizesToNull(): void {
+		$body = json_encode([
+			['tag_name' => 'v2.3.0', 'body' => "  \n "],
+		], JSON_THROW_ON_ERROR);
+
+		$client = $this->createMock(IClient::class);
+		$client->method('get')->willReturn($this->mockResponse(200, $body));
+
+		$result = $this->buildSource($client)->listVersions(
+			'openregister',
+			SourceBinding::github('ConductionNL', 'openregister')
+		);
+
+		$this->assertNull($result['versions'][0]['changelog']);
+	}
+
+	public function testListVersionsMalformedBodyIsFailSoftNull(): void {
+		$body = json_encode([
+			// Malformed: body should be a string, not a nested object.
+			['tag_name' => 'v2.3.0', 'body' => ['nested' => 'value']],
+		], JSON_THROW_ON_ERROR);
+
+		$client = $this->createMock(IClient::class);
+		$client->method('get')->willReturn($this->mockResponse(200, $body));
+
+		$result = $this->buildSource($client)->listVersions(
+			'openregister',
+			SourceBinding::github('ConductionNL', 'openregister')
+		);
+
+		// The throwing mapper must not fail the whole listing.
+		$this->assertNull($result['error']);
+		$this->assertSame('2.3.0', $result['versions'][0]['version']);
+		$this->assertNull($result['versions'][0]['changelog']);
+	}
 }

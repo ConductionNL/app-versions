@@ -2,7 +2,7 @@
 
 ## Task 1: Source-level changelog extraction
 - **Spec ref**: specs/changelog-visibility/spec.md (Requirement: Version listings carry release notes)
-- **Status**: todo
+- **Status**: done
 - **Acceptance criteria**:
   - `AppStoreSource` maps `translations.{lang}.changelog` with `en` fallback, `null` when absent
   - `ForgeReleaseSource` maps release `body`, `null` when absent
@@ -11,7 +11,7 @@
 
 ## Task 2: API envelope + truncation
 - **Spec ref**: specs/changelog-visibility/spec.md (Requirement: Version listings carry release notes)
-- **Status**: todo
+- **Status**: done
 - **Acceptance criteria**:
   - `GET /api/app/{appId}/versions` entries include nullable `changelog`
   - Shared truncation to 8 KiB + truncation marker in envelope assembly (`InstallerService::getAppVersions`)
@@ -20,7 +20,7 @@
 
 ## Task 3: Version-row changelog UI
 - **Spec ref**: specs/changelog-visibility/spec.md (Requirement: Per-version changelog display)
-- **Status**: todo
+- **Status**: done
 - **Acceptance criteria**:
   - Expandable disclosure per version row in `src/App.vue`, text-node rendering only (no v-html)
   - Localized "No release notes provided" placeholder
@@ -28,7 +28,7 @@
 
 ## Task 4: Aggregate range panel
 - **Spec ref**: specs/changelog-visibility/spec.md (Requirement: Aggregate range changelog on target selection)
-- **Status**: todo
+- **Status**: done
 - **Acceptance criteria**:
   - Computed from already-fetched versions array; zero extra requests
   - Upgrade: (installed, target] ascending towards target; downgrade: releases being rolled back, newest first

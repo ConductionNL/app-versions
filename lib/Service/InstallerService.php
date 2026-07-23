@@ -40,6 +40,10 @@ use OCP\IConfig;
  * @psalm-api
  */
 class InstallerService {
+	/** Server-side changelog size cap; see "Version listings carry release notes". */
+	private const CHANGELOG_MAX_BYTES = 8192;
+	private const CHANGELOG_TRUNCATION_MARKER = ' …[truncated]';
+
 	public function __construct(
 		private IAppManager $appManager,
 		private IConfig $config,
@@ -117,10 +121,12 @@ class InstallerService {
 	}
 
 	/**
-	 * Resolves the active source and lists versions for an app; see "Fetch Available Versions" and "Explicit source override".
+	 * Resolves the active source and lists versions for an app; see "Fetch Available Versions", "Explicit source
+	 * override" and "Version listings carry release notes".
 	 *
 	 * @spec openspec/specs/version-management/spec.md
-	 * @return array{installedVersion: ?string, availableVersions: list<array{version:string}>, versions: list<array{version:string}>, source: string, sourceId: string, statusCode: int, hasError: bool, error?: string}
+	 * @spec openspec/specs/changelog-visibility/spec.md
+	 * @return array{installedVersion: ?string, availableVersions: list<array{version:string, changelog:?string}>, versions: list<array{version:string, changelog:?string}>, source: string, sourceId: string, statusCode: int, hasError: bool, error?: string}
 	 */
 	public function getAppVersions(string $appId, ?string $sourceOverride = null): array {
 		$appId = trim($appId);
@@ -166,10 +172,12 @@ class InstallerService {
 			$installedVersion = null;
 		}
 
+		$versions = $this->applyChangelogTruncation($result['versions']);
+
 		$envelope = [
 			'installedVersion' => $installedVersion,
-			'availableVersions' => $result['versions'],
-			'versions' => $result['versions'],
+			'availableVersions' => $versions,
+			'versions' => $versions,
 			'source' => $binding->kind,
 			'sourceId' => $binding->getId(),
 			'statusCode' => Http::STATUS_OK,
@@ -180,6 +188,37 @@ class InstallerService {
 		}
 
 		return $envelope;
+	}
+
+	/**
+	 * Truncates each version entry's changelog to at most `CHANGELOG_MAX_BYTES`
+	 * bytes (UTF-8-safe), appending a truncation marker when it was cut. This
+	 * is the single shared code path both source kinds' envelopes pass
+	 * through, so truncation behaviour is identical regardless of origin.
+	 *
+	 * @spec openspec/specs/changelog-visibility/spec.md
+	 * @param list<array{version:string, changelog?:?string}> $versions
+	 * @return list<array{version:string, changelog:?string}>
+	 */
+	private function applyChangelogTruncation(array $versions): array {
+		return array_map(
+			function (array $entry): array {
+				/** @var mixed $changelog */
+				$changelog = $entry['changelog'] ?? null;
+				$entry['changelog'] = is_string($changelog) ? $this->truncateChangelog($changelog) : null;
+
+				return $entry;
+			},
+			$versions
+		);
+	}
+
+	private function truncateChangelog(string $changelog): string {
+		if (strlen($changelog) <= self::CHANGELOG_MAX_BYTES) {
+			return $changelog;
+		}
+
+		return mb_strcut($changelog, 0, self::CHANGELOG_MAX_BYTES, 'UTF-8') . self::CHANGELOG_TRUNCATION_MARKER;
 	}
 
 	/**
