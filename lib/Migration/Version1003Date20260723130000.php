@@ -27,7 +27,7 @@ use OCP\Migration\SimpleMigrationStep;
  * @spec openspec/specs/pat-management/spec.md
  * @psalm-suppress UnusedClass
  */
-class Version1002Date20260723120000 extends SimpleMigrationStep {
+class Version1003Date20260723130000 extends SimpleMigrationStep {
 	public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ?ISchemaWrapper {
 		$schema = $schemaClosure();
 
