@@ -19,6 +19,7 @@ use OCA\AppVersions\Service\Installer\EnvironmentCheck;
 use OCA\AppVersions\Service\Installer\FailureClassifier;
 use OCA\AppVersions\Service\Installer\InstallFailure;
 use OCA\AppVersions\Service\Installer\ShaMismatchException;
+use OCA\AppVersions\Service\Lkg\LkgStore;
 use OCA\AppVersions\Service\Pin\Pin;
 use OCA\AppVersions\Service\Pin\PinStore;
 use OCA\AppVersions\Service\Source\SourceBinding;
@@ -66,14 +67,18 @@ class InstallerService {
 		private PinStore $pinStore,
 		private IUserSession $userSession,
 		private ITimeFactory $timeFactory,
+		private LkgStore $lkgStore,
 	) {
 	}
 
 	/**
-	 * Returns installed apps enriched with metadata for frontend cards; see "List Installed Apps".
+	 * Returns installed apps enriched with metadata for frontend cards, including
+	 * the last-known-good version record; see "List Installed Apps" and
+	 * "Last-known-good version record".
 	 *
 	 * @spec openspec/specs/version-management/spec.md
-	 * @return list<array{id:string,label:string,description:string,summary:string,preview:string,isCore:bool,isShipped:bool,boundSourceId:?string,manageable:bool,warning:?string}>
+	 * @spec openspec/specs/migration-safety/spec.md
+	 * @return list<array{id:string,label:string,description:string,summary:string,preview:string,isCore:bool,isShipped:bool,boundSourceId:?string,manageable:bool,warning:?string,installedVersion:?string,lkg:?array{version:string,recordedAt:string,sourceId:?string}}>
 	 */
 	public function getInstalledApps(): array {
 		$installedApps = array_values(array_filter(
@@ -93,9 +98,10 @@ class InstallerService {
 		$bindingStore = $this->bindingStore;
 		$appManager = $this->appManager;
 		$environmentCheck = $this->environmentCheck;
+		$lkgStore = $this->lkgStore;
 
 		return array_map(
-			static function (string $appId) use ($appList, $alwaysEnabledApps, $bindingStore, $appManager, $environmentCheck): array {
+			static function (string $appId) use ($appList, $alwaysEnabledApps, $bindingStore, $appManager, $environmentCheck, $lkgStore): array {
 				$app = $appList[$appId] ?? [];
 				$name = isset($app['name']) && is_string($app['name']) && trim($app['name']) !== ''
 					? trim($app['name'])
@@ -114,6 +120,12 @@ class InstallerService {
 					// Path unknown — leave defaults; install-time guard still applies.
 				}
 
+				try {
+					$installedVersion = $appManager->getAppVersion($appId, false);
+				} catch (Exception) {
+					$installedVersion = '';
+				}
+
 				return [
 					'id' => $appId,
 					'label' => $name,
@@ -125,6 +137,8 @@ class InstallerService {
 					'boundSourceId' => $binding?->getId(),
 					'manageable' => $env['manageable'],
 					'warning' => $env['warning'],
+					'installedVersion' => $installedVersion === '' ? null : $installedVersion,
+					'lkg' => $lkgStore->get($appId)?->toArray(),
 				];
 			},
 			$installedApps
@@ -270,9 +284,16 @@ class InstallerService {
 	 * success — see "Recorded SHA-256 enforced on reinstall". Ignored for
 	 * App Store (signed) installs, which do not record digests.
 	 *
+	 * `$allowDowngrade` acknowledges a downgrade (target version older than
+	 * installed); without it a real (non-dry-run) downgrade is refused with
+	 * a structured 409 before any download — see "Server-side downgrade
+	 * guard". Dry-run requests evaluate the same condition but are never
+	 * blocked by it.
+	 *
 	 * @spec openspec/specs/version-management/spec.md
 	 * @spec openspec/specs/version-pinning/spec.md
 	 * @spec openspec/specs/external-sources/spec.md
+	 * @spec openspec/specs/migration-safety/spec.md
 	 * @return array{statusCode:int, payload:array<string, mixed>}
 	 */
 	public function installAppVersion(
@@ -283,6 +304,7 @@ class InstallerService {
 		?string $overridePin = null,
 		bool $pinRequested = false,
 		bool $acceptNewSha = false,
+		bool $allowDowngrade = false,
 	): array {
 		$appId = trim($appId);
 		$targetVersion = trim($targetVersion);
@@ -329,6 +351,31 @@ class InstallerService {
 			$installedVersion = $this->appManager->getAppVersion($appId, false);
 		} catch (Exception) {
 			$installedVersion = '';
+		}
+
+		// Server-side downgrade guard: refuse a real (non-dry-run) downgrade
+		// before any download unless explicitly acknowledged — see "Server-side
+		// downgrade guard". Dry-run requests evaluate this same condition but
+		// are never blocked by it (they report via updateType/orphanedMigrations
+		// instead) — see "Dry-run requests MUST evaluate and report the guard
+		// without requiring the flag".
+		$isDowngradeRequest = $installedVersion !== '' && version_compare($targetVersion, $installedVersion, '<');
+		if ($isDowngradeRequest && !$includeDebug && !$allowDowngrade) {
+			$category = FailureClassifier::CATEGORY_DOWNGRADE_GUARD;
+
+			return [
+				'statusCode' => $this->failureClassifier->httpStatusFor($category),
+				'payload' => [
+					'appId' => $appId,
+					'fromVersion' => $installedVersion,
+					'toVersion' => $targetVersion,
+					'message' => $this->failureClassifier->messageFor($category),
+					'category' => $category,
+					'hint' => $this->failureClassifier->downgradeGuardHint($installedVersion, $targetVersion),
+					'installStatus' => 'failed',
+					'sourceId' => $binding->getId(),
+				] + ($includeDebug ? ['debug' => []] : []),
+			];
 		}
 
 		// Pin guard: App Versions' own install path refuses to overwrite a
@@ -492,6 +539,13 @@ class InstallerService {
 				// "Matching digest proceeds": the response indicates the
 				// artifact matched the first-install checksum.
 				$payload['recordedShaMatched'] = $recordedShaMatched;
+			}
+			if (array_key_exists('orphanedMigrations', $result)) {
+				// Present only for a downgrade (acknowledged or dry-run); see
+				// "Migration diff on downgrade". `null` means the diff could not
+				// be computed (degrades to a generic warning), `[]` means no
+				// schema steps differ.
+				$payload['orphanedMigrations'] = $result['orphanedMigrations'];
 			}
 			if ($includeDebug) {
 				$payload['debug'] = (array)($result['debug'] ?? []);

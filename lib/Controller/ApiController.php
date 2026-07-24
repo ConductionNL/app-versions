@@ -304,11 +304,14 @@ class ApiController extends OCSController {
 	 * Versions' own install path" (`overridePin=repin|unpin`, `pin=1`). For an
 	 * external source with a recorded SHA-256 mismatch, `acceptNewSha=1`
 	 * bypasses the check once and replaces the recorded digest on success; see
-	 * "Recorded SHA-256 enforced on reinstall".
+	 * "Recorded SHA-256 enforced on reinstall". A downgrade (target version
+	 * older than installed) is refused with a 409 unless `allowDowngrade=1`;
+	 * see "Server-side downgrade guard".
 	 *
 	 * @spec openspec/specs/version-management/spec.md
 	 * @spec openspec/specs/version-pinning/spec.md
 	 * @spec openspec/specs/external-sources/spec.md
+	 * @spec openspec/specs/migration-safety/spec.md
 	 */
 	#[PasswordConfirmationRequired(strict: false)]
 	#[ApiRoute(verb: 'POST', url: '/api/app/{appId}/versions/{version}/install')]
@@ -335,6 +338,7 @@ class ApiController extends OCSController {
 		$overridePin = $overridePinRaw === '' ? null : $overridePinRaw;
 		$pinRequested = $this->readBinaryBool($this->request->getParam('pin', '0'), false);
 		$acceptNewSha = $this->readBinaryBool($this->request->getParam('acceptNewSha', '0'), false);
+		$allowDowngrade = $this->readBinaryBool($this->request->getParam('allowDowngrade', '0'), false);
 
 		$result = $this->installerService->installAppVersion(
 			$appId,
@@ -344,6 +348,7 @@ class ApiController extends OCSController {
 			$overridePin,
 			$pinRequested,
 			$acceptNewSha,
+			$allowDowngrade,
 		);
 		$result['payload']['requestedVersion'] = $requestedVersion;
 		$result['payload']['routeVersion'] = $version;

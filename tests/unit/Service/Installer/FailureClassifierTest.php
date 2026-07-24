@@ -36,6 +36,7 @@ final class FailureClassifierTest extends TestCase {
 	public static function statusProvider(): array {
 		return [
 			'preflight' => [FailureClassifier::CATEGORY_PREFLIGHT_PERMISSION, Http::STATUS_CONFLICT],
+			'downgrade_guard' => [FailureClassifier::CATEGORY_DOWNGRADE_GUARD, Http::STATUS_CONFLICT],
 			'incompatible' => [FailureClassifier::CATEGORY_INCOMPATIBLE, Http::STATUS_UNPROCESSABLE_ENTITY],
 			'version' => [FailureClassifier::CATEGORY_VERSION_MISMATCH, Http::STATUS_UNPROCESSABLE_ENTITY],
 			'appid' => [FailureClassifier::CATEGORY_APPID_MISMATCH, Http::STATUS_UNPROCESSABLE_ENTITY],
@@ -144,6 +145,17 @@ final class FailureClassifierTest extends TestCase {
 
 	public function testRevertedHintIsNonEmpty(): void {
 		self::assertNotSame('', $this->build()->revertedHint());
+	}
+
+	public function testDowngradeGuardHintNamesBothVersions(): void {
+		$hint = $this->build()->downgradeGuardHint('2.5.0', '2.3.0');
+
+		self::assertStringContainsString('2.5.0', $hint);
+		self::assertStringContainsString('2.3.0', $hint);
+	}
+
+	public function testDowngradeGuardMessageIsNonEmpty(): void {
+		self::assertNotSame('', $this->build()->messageFor(FailureClassifier::CATEGORY_DOWNGRADE_GUARD));
 	}
 
 	public function testClassifyWithForcedShaMismatchCategoryIgnoresMessageSniffing(): void {

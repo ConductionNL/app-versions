@@ -16,7 +16,10 @@ use Exception;
 use OC\AppFramework\Bootstrap\Coordinator;
 use OC\DB\Connection;
 use OC\DB\MigrationService;
+use OCA\AppVersions\Service\Lkg\Lkg;
+use OCA\AppVersions\Service\Lkg\LkgStore;
 use OCP\App\IAppManager;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJob;
 use OCP\BackgroundJob\IJobList;
 use OCP\IAppConfig;
@@ -42,18 +45,25 @@ class InstallFinalizer {
 		private IAppManager $appManager,
 		private IJobList $jobList,
 		private LoggerInterface $logger,
+		private LkgStore $lkgStore,
+		private ITimeFactory $timeFactory,
 	) {
 	}
 
 	/**
 	 * Runs migrations, repair steps, job + route registration, and version/enabled writes after extraction;
-	 * see "Install Specific Version" ("any database migrations for the new version MUST be triggered").
+	 * see "Install Specific Version" ("any database migrations for the new version MUST be triggered") and
+	 * "Last-known-good version record" (the last statement here — reached only on success — is the single
+	 * choke point that writes `lkg.{appId}` for both installers).
 	 *
 	 * @spec openspec/specs/version-management/spec.md
+	 * @spec openspec/specs/migration-safety/spec.md
 	 * @param array<string, mixed> $info Parsed `appinfo/info.xml` for the just-extracted version.
+	 * @param string $sourceId The source binding id (e.g. `appstore`, `github:owner/repo`) this version was
+	 *                         installed from, recorded alongside the last-known-good version.
 	 * @throws Exception
 	 */
-	public function finalize(string $appPath, array $info, string $enabled, ?IOutput $output = null): string {
+	public function finalize(string $appPath, array $info, string $enabled, ?IOutput $output = null, string $sourceId = 'appstore'): string {
 		$appId = (string)($info['id'] ?? '');
 
 		// Lazy registration must run before autoload + migrations so app-registered
@@ -123,6 +133,15 @@ class InstallFinalizer {
 
 		\OC_App::setAppTypes($appId);
 		$this->appManager->clearAppsCache();
+
+		// Reached only on success: every earlier step throws on failure and
+		// aborts before this line, so a failed or reverted install never
+		// touches the record — see "Last-known-good version record".
+		$this->lkgStore->set($appId, new Lkg(
+			$installedVersion,
+			$this->timeFactory->getDateTime('now', new \DateTimeZone('UTC'))->format(\DateTimeInterface::ATOM),
+			$sourceId,
+		));
 
 		return $appId;
 	}

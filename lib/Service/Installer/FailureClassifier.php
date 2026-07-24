@@ -47,6 +47,13 @@ class FailureClassifier {
 	public const CATEGORY_INCOMPATIBLE = 'incompatible';
 	public const CATEGORY_FILESYSTEM = 'filesystem';
 	public const CATEGORY_FINALIZE = 'finalize';
+	/**
+	 * A downgrade requested without `allowDowngrade: true` — see "Server-side
+	 * downgrade guard". Distinct from every other category: nothing was
+	 * attempted (no download, no filesystem change), the request is simply
+	 * refused pending acknowledgement.
+	 */
+	public const CATEGORY_DOWNGRADE_GUARD = 'downgrade_guard';
 	public const CATEGORY_UNKNOWN = 'unknown';
 
 	/**
@@ -91,7 +98,8 @@ class FailureClassifier {
 	 */
 	public function httpStatusFor(string $category): int {
 		return match ($category) {
-			self::CATEGORY_PREFLIGHT_PERMISSION => Http::STATUS_CONFLICT,
+			self::CATEGORY_PREFLIGHT_PERMISSION,
+			self::CATEGORY_DOWNGRADE_GUARD => Http::STATUS_CONFLICT,
 			self::CATEGORY_INCOMPATIBLE,
 			self::CATEGORY_VERSION_MISMATCH,
 			self::CATEGORY_APPID_MISMATCH,
@@ -195,6 +203,22 @@ class FailureClassifier {
 	}
 
 	/**
+	 * Hint for the downgrade guard, naming both versions concretely; see
+	 * "Server-side downgrade guard".
+	 *
+	 * @spec openspec/specs/migration-safety/spec.md
+	 */
+	public function downgradeGuardHint(string $installedVersion, string $targetVersion): string {
+		// Translated as a template, then substituted locally: IL10N::t()'s
+		// vsprintf-based substitution requires the translated string itself to
+		// carry the `%1$s`/`%2$s` placeholders, so the versions are formatted
+		// in afterwards rather than passed through `t()`'s parameter array.
+		$template = $this->l10n()->t('%1$s is installed; %2$s is older. Downgrading cannot undo database migrations already applied by %1$s — pass allowDowngrade to proceed anyway.');
+
+		return sprintf($template, $installedVersion, $targetVersion);
+	}
+
+	/**
 	 * A short human description for a category, used when there is no underlying
 	 * exception message to surface (e.g. the pre-flight guard).
 	 */
@@ -203,6 +227,7 @@ class FailureClassifier {
 
 		return match ($category) {
 			self::CATEGORY_PREFLIGHT_PERMISSION => $l->t('The app folder is not writable by the web-server user.'),
+			self::CATEGORY_DOWNGRADE_GUARD => $l->t('The requested version is older than the installed version. Pass allowDowngrade to proceed.'),
 			default => $l->t('Installation failed.'),
 		};
 	}
