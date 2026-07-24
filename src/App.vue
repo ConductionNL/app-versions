@@ -95,6 +95,9 @@ const errorMessage = ref('')
 const selectedVersion = ref('')
 const safeModeEnabled = ref(true)
 const debugModeEnabled = ref(false)
+// Independent of debugModeEnabled — see MODIFIED "Debug Mode": dryRun is now
+// its own explicit request parameter, decoupled from debug/verbosity.
+const dryRunEnabled = ref(false)
 const isDowngradeConfirmOpen = ref(false)
 const downgradeConfirmFromVersion = ref('')
 const downgradeConfirmToVersion = ref('')
@@ -108,6 +111,7 @@ const downgradeOrphanedMigrations = ref<string[] | null>(null)
 const suppressSafeModeAutoClear = ref(false)
 const safeModeStorageKey = 'app_versions_safe_mode'
 const debugModeStorageKey = 'app_versions_debug_mode'
+const dryRunStorageKey = 'app_versions_dry_run_mode'
 const lastInstallDebug = ref<InstallDebugEntry[]>([])
 const lastInstallResult = ref<InstallResult | null>(null)
 const hasInstallResult = ref(false)
@@ -264,6 +268,7 @@ const hasInfoPanel = computed(() => selectedApp.value || installedVersion.value 
 const hasSplitLayout = computed(() => Boolean(selectedApp.value || installedVersion.value || hasInstallResult.value))
 const isSafeMode = computed(() => safeModeEnabled.value)
 const includeDebug = computed(() => debugModeEnabled.value)
+const dryRunRequested = computed(() => dryRunEnabled.value)
 
 const apiUrl = (path: string): string => {
 	const oc = window.OC as unknown as {
@@ -1003,8 +1008,11 @@ const requestInstall = async (
 	allowDowngrade = false,
 	forceDryRun = false,
 ): Promise<{ payload: InstallApiPayload, metaMessage?: string }> => {
+	// dryRun is sent explicitly and independently of debug — see MODIFIED
+	// "Debug Mode". debug now controls diagnostic verbosity only.
 	const query: Record<string, string> = {
-		debug: (forceDryRun || includeDebug.value) ? '1' : '0',
+		debug: includeDebug.value ? '1' : '0',
+		dryRun: (forceDryRun || dryRunRequested.value) ? '1' : '0',
 		targetVersion: version,
 	}
 	if (overridePin) {
@@ -1265,6 +1273,10 @@ onMounted(async () => {
 	if (storedDebugMode !== null) {
 		debugModeEnabled.value = storedDebugMode === 'true'
 	}
+	const storedDryRunMode = window?.localStorage?.getItem(dryRunStorageKey)
+	if (storedDryRunMode !== null) {
+		dryRunEnabled.value = storedDryRunMode === 'true'
+	}
 
 	// Access is enforced server-side: the page is an admin-only ISettings
 	// section and every OCS endpoint guards on isAdmin(). No client-side admin
@@ -1303,6 +1315,14 @@ watch(debugModeEnabled, () => {
 	}
 
 	window.localStorage?.setItem(debugModeStorageKey, debugModeEnabled.value ? 'true' : 'false')
+})
+
+watch(dryRunEnabled, () => {
+	if (typeof window === 'undefined') {
+		return
+	}
+
+	window.localStorage?.setItem(dryRunStorageKey, dryRunEnabled.value ? 'true' : 'false')
 })
 </script>
 
@@ -1401,11 +1421,19 @@ watch(debugModeEnabled, () => {
 								</label>
 								<label :class="$style.safeMode">
 									<input
+										v-model="dryRunEnabled"
+										type="checkbox"
+										:class="$style.safeModeCheckbox"
+										:disabled="isInstallingVersion">
+									<span>Dry run (evaluate the install, apply no changes)</span>
+								</label>
+								<label :class="$style.safeMode">
+									<input
 										v-model="debugModeEnabled"
 										type="checkbox"
 										:class="$style.safeModeCheckbox"
 										:disabled="isInstallingVersion">
-									<span>Enable install dry-run (show debug output)</span>
+									<span>Show install debug output</span>
 								</label>
 							</div>
 						</div>

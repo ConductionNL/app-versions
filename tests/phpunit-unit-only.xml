@@ -24,6 +24,7 @@
 		<directory suffix="Test.php">unit/Cron</directory>
 		<directory suffix="Test.php">unit/Sections</directory>
 		<directory suffix="Test.php">unit/Settings</directory>
+		<directory suffix="Test.php">unit/Command</directory>
 	</testsuite>
 	<source>
 		<include>
@@ -36,6 +37,7 @@
 			<directory suffix=".php">../lib/Cron</directory>
 			<directory suffix=".php">../lib/Sections</directory>
 			<directory suffix=".php">../lib/Settings</directory>
+			<directory suffix=".php">../lib/Command</directory>
 		</include>
 	</source>
 </phpunit>

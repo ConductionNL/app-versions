@@ -422,4 +422,79 @@ final class ApiTest extends TestCase {
 		$this->assertSame('2.3.0', $pins[0]['version']);
 		$this->assertSame('2.5.0', $pins[0]['installedVersion']);
 	}
+
+	// --- dryRun decoupled from debug (see MODIFIED "Debug Mode") ---
+
+	public function testInstallVersionSendsExplicitDryRunFalseWithDebugTrueForARealInstallWithDebugTimeline(): void {
+		$request = $this->createMock(IRequest::class);
+		$request->method('getParam')->willReturnCallback(
+			static fn (string $name, mixed $default = null): mixed => match ($name) {
+				'debug' => '1',
+				'dryRun' => '0',
+				default => $default,
+			}
+		);
+
+		$installer = $this->createMock(InstallerService::class);
+		$installer->expects($this->once())
+			->method('installAppVersion')
+			->with('openregister', '2.3.0', true, null, null, false, false, false, false)
+			->willReturn([
+				'statusCode' => 200,
+				'payload' => ['appId' => 'openregister', 'toVersion' => '2.3.0', 'dryRun' => false],
+			]);
+
+		$response = $this->buildAdminController($installer, $request)->installVersion('openregister', '2.3.0');
+
+		$this->assertSame(200, $response->getStatus());
+		$this->assertArrayNotHasKey('deprecationNotice', $response->getData());
+	}
+
+	public function testInstallVersionSendsExplicitDryRunTrueWithNoDebugForASilentDryRun(): void {
+		$request = $this->createMock(IRequest::class);
+		$request->method('getParam')->willReturnCallback(
+			static fn (string $name, mixed $default = null): mixed => match ($name) {
+				'dryRun' => '1',
+				default => $default,
+			}
+		);
+
+		$installer = $this->createMock(InstallerService::class);
+		$installer->expects($this->once())
+			->method('installAppVersion')
+			->with('openregister', '2.3.0', false, null, null, false, false, false, true)
+			->willReturn([
+				'statusCode' => 200,
+				'payload' => ['appId' => 'openregister', 'toVersion' => '2.3.0', 'dryRun' => true],
+			]);
+
+		$response = $this->buildAdminController($installer, $request)->installVersion('openregister', '2.3.0');
+
+		$this->assertSame(200, $response->getStatus());
+		$this->assertArrayNotHasKey('deprecationNotice', $response->getData());
+	}
+
+	public function testInstallVersionLegacyDebugAloneStillImpliesDryRunAndAddsADeprecationNotice(): void {
+		$request = $this->createMock(IRequest::class);
+		$request->method('getParam')->willReturnCallback(
+			static fn (string $name, mixed $default = null): mixed => match ($name) {
+				'debug' => '1',
+				default => $default,
+			}
+		);
+
+		$installer = $this->createMock(InstallerService::class);
+		$installer->expects($this->once())
+			->method('installAppVersion')
+			->with('openregister', '2.3.0', true, null, null, false, false, false, null)
+			->willReturn([
+				'statusCode' => 200,
+				'payload' => ['appId' => 'openregister', 'toVersion' => '2.3.0', 'dryRun' => true],
+			]);
+
+		$response = $this->buildAdminController($installer, $request)->installVersion('openregister', '2.3.0');
+
+		$this->assertSame(200, $response->getStatus());
+		$this->assertArrayHasKey('deprecationNotice', $response->getData());
+	}
 }
