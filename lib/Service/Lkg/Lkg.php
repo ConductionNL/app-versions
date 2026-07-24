@@ -45,7 +45,7 @@ final class Lkg {
 	 * "Last-known-good version record".
 	 *
 	 * @spec openspec/specs/migration-safety/spec.md
-	 * @return array<string, mixed>
+	 * @return array{version: string, recordedAt: string, sourceId: ?string}
 	 */
 	public function toArray(): array {
 		return [
