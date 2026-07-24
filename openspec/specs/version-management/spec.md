@@ -172,13 +172,29 @@ The system MUST allow an admin to install any available version of an app, repla
 
 ### Requirement: Debug Mode [MVP]
 
-The system MUST provide a debug mode that returns detailed installation logs for troubleshooting.
+The system MUST provide a debug mode that returns detailed installation logs for troubleshooting. Debug mode controls diagnostic verbosity only. The install endpoint MUST accept an independent boolean `dryRun` parameter that triggers the dry-run path regardless of `debug`. For backward compatibility, `debug=1` **without** an explicit `dryRun` parameter MUST keep implying a dry-run (deprecated, documented); `debug=1&dryRun=0` MUST perform a real install with verbose diagnostics.
 
 #### Scenario: Enable debug output
 
 - GIVEN an admin enables the "Debug" toggle before installing
 - WHEN the installation completes (success or failure)
 - THEN the response MUST include detailed logs: download URL, file sizes, extraction steps, any warnings
+
+#### Scenario: Verbose real install
+
+- WHEN the admin installs a version with `debug=1&dryRun=0`
+- THEN a real install MUST be performed
+- AND the response MUST include the detailed debug timeline
+
+#### Scenario: Silent dry run
+
+- WHEN the install endpoint is called with `dryRun=1` and no `debug`
+- THEN the dry-run path MUST execute and report its outcome without the debug timeline
+
+#### Scenario: Legacy behavior preserved
+
+- WHEN the endpoint is called with `debug=1` and no `dryRun` parameter
+- THEN the dry-run path MUST execute (legacy), and the response MAY carry a deprecation notice
 
 ### Requirement: Pre-flight Environment Checks [MVP]
 
