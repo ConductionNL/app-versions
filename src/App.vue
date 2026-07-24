@@ -4,6 +4,7 @@ import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { t } from '@nextcloud/l10n'
+import CachePanel from './components/CachePanel.vue'
 import ChangelogRangePanel from './components/ChangelogRangePanel.vue'
 import DiscoverPanel, { type PrefillBindPayload } from './components/DiscoverPanel.vue'
 import HistoryPanel from './components/HistoryPanel.vue'
@@ -39,6 +40,7 @@ type AppVersion = {
 	version: string
 	changelog?: string | null
 	recordedSha?: string | null
+	cachedOffline?: boolean
 }
 
 type AdvisoryRecord = {
@@ -167,6 +169,7 @@ const tabs = [
 	{ id: 'tokens' },
 	{ id: 'trusted' },
 	{ id: 'discover' },
+	{ id: 'cache' },
 ]
 const currentTab = ref('apps')
 const tablistEl = ref<HTMLElement | null>(null)
@@ -179,6 +182,7 @@ const tabLabel = (id: string): string => ({
 	tokens: t('app_versions', 'Tokens'),
 	trusted: t('app_versions', 'Trusted sources'),
 	discover: t('app_versions', 'Discover'),
+	cache: t('app_versions', 'Artifact cache'),
 }[id] ?? id)
 
 // Prefill applied to the Sources bind form when a Discover hit's install
@@ -1816,6 +1820,13 @@ watch(dryRunEnabled, () => {
 														<div :class="$style.versionItemMain">
 															<span>{{ version.version }}</span>
 															<span
+																v-if="version.cachedOffline"
+																:class="$style.cachedOfflineBadge"
+																data-testid="cached-offline-badge"
+																:title="t('app_versions', 'A verified copy of this version is cached locally and can be used if the source becomes unreachable.')">
+																{{ t('app_versions', 'Available offline') }}
+															</span>
+															<span
 																v-if="version.recordedSha"
 																:class="$style.recordedShaBadge"
 																:title="version.recordedSha">
@@ -1996,6 +2007,10 @@ watch(dryRunEnabled, () => {
 					@open-app="onDiscoverOpenApp"
 					@prefill-bind="onDiscoverPrefillBind"
 					@open-trusted="onDiscoverOpenTrusted" />
+				<CachePanel v-show="currentTab === 'cache'"
+					id="cache-panel"
+					role="tabpanel"
+					aria-labelledby="cache-tab" />
 			</div>
 		</div>
 	</div>
@@ -2501,6 +2516,20 @@ watch(dryRunEnabled, () => {
 	color: var(--color-success-text, var(--color-success));
 	background: var(--color-success-hover, rgba(0, 158, 116, 0.1));
 	border: 1px solid var(--color-success);
+	border-radius: 9999px;
+	padding: 1px 8px;
+	line-height: 1.4;
+	white-space: nowrap;
+}
+
+.cachedOfflineBadge {
+	display: inline-flex;
+	align-items: center;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--color-text-maxcontrast);
+	background: var(--color-background-hover);
+	border: 1px solid var(--color-border);
 	border-radius: 9999px;
 	padding: 1px 8px;
 	line-height: 1.4;

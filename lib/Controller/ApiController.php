@@ -18,6 +18,7 @@ use OCA\AppVersions\Db\Pat;
 use OCA\AppVersions\Db\PatMapper;
 use OCA\AppVersions\Service\Advisory\AdvisoryService;
 use OCA\AppVersions\Service\AutoUpdate\AutoUpdateSettingsStore;
+use OCA\AppVersions\Service\Cache\ArtifactCache;
 use OCA\AppVersions\Service\AutoUpdate\AutoUpdateWindow;
 use OCA\AppVersions\Service\Discovery\DiscoveryAggregator;
 use OCA\AppVersions\Service\InstallerService;
@@ -68,6 +69,7 @@ class ApiController extends OCSController {
 		private ITimeFactory $timeFactory,
 		private PolicyStore $policyStore,
 		private AutoUpdateSettingsStore $autoUpdateSettingsStore,
+		private ArtifactCache $artifactCache,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -873,6 +875,41 @@ class ApiController extends OCSController {
 			'limit' => $limit,
 			'offset' => $offset,
 		]);
+	}
+
+	/**
+	 * Cache summary: per-app cached versions + size, and the total cache size,
+	 * admin-only; see "Cache visibility and management".
+	 *
+	 * @spec openspec/specs/artifact-cache/spec.md
+	 */
+	#[ApiRoute(verb: 'GET', url: '/api/cache')]
+	public function cacheSummary(): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		return new DataResponse($this->artifactCache->summary());
+	}
+
+	/**
+	 * Clears cached release artifacts — all apps, or a single app when
+	 * `appId` is supplied — password-confirmed; see "Cache visibility and
+	 * management" ("Clear cache").
+	 *
+	 * @spec openspec/specs/artifact-cache/spec.md
+	 */
+	#[PasswordConfirmationRequired(strict: false)]
+	#[ApiRoute(verb: 'DELETE', url: '/api/cache')]
+	public function clearCache(): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$appId = $this->stringParam('appId', '');
+		$this->artifactCache->clear($appId !== '' ? $appId : null);
+
+		return new DataResponse($this->artifactCache->summary());
 	}
 
 	private function intParam(string $name, int $default): int {

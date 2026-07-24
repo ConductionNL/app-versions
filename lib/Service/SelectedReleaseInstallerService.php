@@ -16,11 +16,13 @@ use Exception;
 use OC\Archive\TAR;
 use OC\Files\FilenameValidator;
 use OCA\AppVersions\Service\Audit\AuditLogger;
+use OCA\AppVersions\Service\Cache\ArtifactCache;
 use OCA\AppVersions\Service\Installer\FailureClassifier;
 use OCA\AppVersions\Service\Installer\InstallFailure;
 use OCA\AppVersions\Service\Installer\InstallFinalizer;
 use OCA\AppVersions\Service\Installer\MigrationDiffer;
 use OCA\AppVersions\Service\Source\SourceBinding;
+use OCA\AppVersions\Service\Source\SourceInterface;
 use OCP\App\AppPathNotFoundException;
 use OCP\App\IAppManager;
 use OCP\Http\Client\IClientService;
@@ -45,11 +47,21 @@ class SelectedReleaseInstallerService {
 	/** Whether the last {@see replaceWithSelectedRelease()} call was a downgrade. */
 	private bool $isDowngradeInstall = false;
 
+	/** Temp path of the archive verified by the last {@see replaceWithSelectedRelease()} call; see "Persist verified artifacts on successful install". */
+	private ?string $lastArchivePath = null;
+
+	/** @var ?array{sha256: string, sourceId: ?string, installerKind: string, signature: ?string, certificate: ?string} */
+	private ?array $lastArchiveMeta = null;
+
+	/** Whether the last install's archive was served from {@see ArtifactCache} after a download failure; see "Cached fallback with full re-verification". */
+	private bool $servedFromCache = false;
+
 	public function __construct(
 		private InstallFinalizer $finalizer,
 		private AuditLogger $auditLogger,
 		private IUserSession $userSession,
 		private MigrationDiffer $migrationDiffer,
+		private ArtifactCache $artifactCache,
 	) {
 	}
 
@@ -81,6 +93,9 @@ class SelectedReleaseInstallerService {
 		$this->debug = [];
 		$this->orphanedMigrations = null;
 		$this->isDowngradeInstall = false;
+		$this->lastArchivePath = null;
+		$this->lastArchiveMeta = null;
+		$this->servedFromCache = false;
 	}
 
 	/**
@@ -362,6 +377,14 @@ class SelectedReleaseInstallerService {
 					'installedApp' => $installedApp,
 				]);
 				$this->addDebug('installed', ['appId' => $installedApp]);
+
+				// Persist the just-verified archive for future rollback; see
+				// "Persist verified artifacts on successful install". Only
+				// reached after finalize() succeeded, so a failed install
+				// never populates the cache.
+				if ($requestedVersion !== null && $this->lastArchivePath !== null && $this->lastArchiveMeta !== null) {
+					$this->artifactCache->store($appId, $requestedVersion, $this->lastArchivePath, $this->lastArchiveMeta);
+				}
 			}
 
 			if ($dryRun) {
@@ -375,6 +398,7 @@ class SelectedReleaseInstallerService {
 					'installedVersionBefore' => $installedVersion === '' ? null : $installedVersion,
 					'dryRun' => true,
 					'debug' => $this->debug,
+					'servedFromCache' => $this->servedFromCache,
 				] + ($this->isDowngradeInstall ? ['orphanedMigrations' => $this->orphanedMigrations] : []);
 			}
 
@@ -386,6 +410,7 @@ class SelectedReleaseInstallerService {
 				'installedApp' => $installedApp,
 				'dryRun' => false,
 				'debug' => $this->debug,
+				'servedFromCache' => $this->servedFromCache,
 			] + ($this->isDowngradeInstall ? ['orphanedMigrations' => $this->orphanedMigrations] : []);
 		} catch (\Throwable $error) {
 			// Best-effort audit write on the failure path, before the exception
@@ -485,9 +510,36 @@ class SelectedReleaseInstallerService {
 				'timeout' => $this->getDownloadTimeout(),
 			]);
 		} catch (Exception $error) {
-			throw new Exception('Could not download selected release: ' . $error->getMessage());
+			// Download failed (network error, dead URL, deleted release):
+			// fall back to a cached artifact for this exact appId+version, if
+			// one exists — see "Cached fallback with full re-verification".
+			// The cached certificate/signature (stored materials) replace the
+			// request-supplied ones for the rest of this method so the
+			// signature check below re-verifies against what was actually
+			// cached, not merely what this request happened to pass in.
+			$cached = $this->artifactCache->fetch($appId, $expectedVersion);
+			if ($cached === null) {
+				throw new Exception('Could not download selected release: ' . $error->getMessage());
+			}
+			$cachedCertificate = is_string($cached['meta']['certificate'] ?? null) ? $cached['meta']['certificate'] : null;
+			$cachedSignature = is_string($cached['meta']['signature'] ?? null) ? $cached['meta']['signature'] : null;
+			if ($cachedCertificate === null || $cachedSignature === null) {
+				throw new Exception('Could not download selected release: ' . $error->getMessage());
+			}
+			try {
+				$this->verifyCertificate($appId, $cachedCertificate);
+			} catch (Exception) {
+				throw new Exception('Could not download selected release: ' . $error->getMessage());
+			}
+			if (file_put_contents($tempFile, $cached['content']) === false) {
+				throw new Exception('Could not download selected release: ' . $error->getMessage());
+			}
+			$certificate = $cachedCertificate;
+			$signature = $cachedSignature;
+			$this->servedFromCache = true;
+			$this->addDebug('served-from-cache', ['appId' => $appId, 'version' => $expectedVersion]);
 		}
-		$this->addDebug('downloaded', ['tempFile' => $tempFile]);
+		$this->addDebug('downloaded', ['tempFile' => $tempFile, 'servedFromCache' => $this->servedFromCache]);
 
 		$archive = new TAR($tempFile);
 		if (!$archive->extract($tempFolder)) {
@@ -550,6 +602,20 @@ class SelectedReleaseInstallerService {
 			throw new Exception('Release signature verification failed.');
 		}
 		$this->addDebug('signature-verified', ['result' => 'ok']);
+
+		// Captured for the caller to persist via ArtifactCache::store() once
+		// finalize() succeeds — see "Persist verified artifacts on
+		// successful install". $tempFile still holds exactly the bytes that
+		// just passed signature verification (fresh download or, on a cache
+		// fallback above, the re-verified cached copy).
+		$this->lastArchivePath = $tempFile;
+		$this->lastArchiveMeta = [
+			'sha256' => strtolower(hash('sha256', $downloadedContent)),
+			'sourceId' => SourceBinding::appStore()->getId(),
+			'installerKind' => SourceInterface::INSTALLER_SIGNED,
+			'signature' => $signature,
+			'certificate' => $certificate,
+		];
 
 		try {
 			$previousPath = $appManager->getAppPath($appId);

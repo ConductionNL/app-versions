@@ -17,6 +17,7 @@ use OC\Archive\TAR;
 use OC\Archive\ZIP;
 use OC\Files\FilenameValidator;
 use OCA\AppVersions\Service\Audit\AuditLogger;
+use OCA\AppVersions\Service\Cache\ArtifactCache;
 use OCA\AppVersions\Service\Installer\FailureClassifier;
 use OCA\AppVersions\Service\Installer\InstallFailure;
 use OCA\AppVersions\Service\Installer\InstallFinalizer;
@@ -25,6 +26,7 @@ use OCA\AppVersions\Service\Installer\ShaMismatchException;
 use OCA\AppVersions\Service\Pat\PatManager;
 use OCA\AppVersions\Service\Pat\PatResolver;
 use OCA\AppVersions\Service\Source\SourceBinding;
+use OCA\AppVersions\Service\Source\SourceInterface;
 use OCA\AppVersions\Service\Source\TrustedSourceList;
 use OCP\App\AppPathNotFoundException;
 use OCP\App\IAppManager;
@@ -63,6 +65,15 @@ class ExternalReleaseInstallerService {
 	/** @var list<array{stage: string, data: mixed}> */
 	private array $debug = [];
 
+	/** Temp path of the archive verified by the current install; see "Persist verified artifacts on successful install". */
+	private ?string $lastArchivePath = null;
+
+	/** @var ?array{sha256: string, sourceId: ?string, installerKind: string} */
+	private ?array $lastArchiveMeta = null;
+
+	/** Whether the current install's archive was served from {@see ArtifactCache} after a download failure; see "Cached fallback with full re-verification". */
+	private bool $servedFromCache = false;
+
 	public function __construct(
 		private IClientService $clientService,
 		private ITempManager $tempManager,
@@ -77,6 +88,7 @@ class ExternalReleaseInstallerService {
 		private IUserSession $userSession,
 		private AuditLogger $auditLogger,
 		private MigrationDiffer $migrationDiffer,
+		private ArtifactCache $artifactCache,
 	) {
 	}
 
@@ -99,7 +111,7 @@ class ExternalReleaseInstallerService {
 	 * @param bool $acceptNewSha Single-request bypass of the recorded-SHA-256
 	 *                           check; on success the recorded digest is replaced (password-confirmed
 	 *                           at the API layer, warning-logged and audited here).
-	 * @return array{status: string, installedVersionBefore: ?string, installedApp?: string, integrityWarning?: ?string, dryRun: bool, debug: list<array{stage: string, data: mixed}>, binding: SourceBinding, recordedShaMatched: bool, orphanedMigrations?: list<string>|null}
+	 * @return array{status: string, installedVersionBefore: ?string, installedApp?: string, integrityWarning?: ?string, dryRun: bool, debug: list<array{stage: string, data: mixed}>, binding: SourceBinding, recordedShaMatched: bool, servedFromCache: bool, orphanedMigrations?: list<string>|null}
 	 * @throws Exception
 	 * @throws ShaMismatchException
 	 */
@@ -154,9 +166,22 @@ class ExternalReleaseInstallerService {
 			try {
 				$this->authenticatedDownload($downloadUrl, $tempFile, $authResolution);
 			} catch (Exception $error) {
-				throw new Exception('Could not download selected release: ' . $error->getMessage());
+				// Download failed (network error, dead URL, deleted release
+				// asset): fall back to a cached artifact for this exact
+				// appId+version, if one exists — see "Cached fallback with
+				// full re-verification". The allowlist gate already ran
+				// above (line ~133), so a cache hit for an untrusted source
+				// is unreachable here. The recorded-SHA (TOFU) and sibling
+				// `.sha256` checks below run against the cache-served bytes
+				// exactly as they would a fresh download.
+				$cached = $this->artifactCache->fetch($appId, $version);
+				if ($cached === null || file_put_contents($tempFile, $cached['content']) === false) {
+					throw new Exception('Could not download selected release: ' . $error->getMessage());
+				}
+				$this->servedFromCache = true;
+				$this->addDebug('served-from-cache', ['appId' => $appId, 'version' => $version]);
 			}
-			$this->addDebug('downloaded', ['tempFile' => $tempFile, 'sourceUrl' => $downloadUrl]);
+			$this->addDebug('downloaded', ['tempFile' => $tempFile, 'sourceUrl' => $downloadUrl, 'servedFromCache' => $this->servedFromCache]);
 
 			// Hash the downloaded archive exactly once; both the recorded-digest
 			// (TOFU) check below and the sibling `.sha256` verification reuse
@@ -187,6 +212,16 @@ class ExternalReleaseInstallerService {
 
 			$integrityWarning = $this->verifyChecksum($actualSha, $shaUrl, $authResolution);
 			$this->addDebug('checksum', ['shaUrl' => $shaUrl, 'integrityWarning' => $integrityWarning]);
+
+			// Captured for the caller to persist via ArtifactCache::store()
+			// once finalize() succeeds — see "Persist verified artifacts on
+			// successful install".
+			$this->lastArchivePath = $tempFile;
+			$this->lastArchiveMeta = [
+				'sha256' => $actualSha,
+				'sourceId' => $binding->getId(),
+				'installerKind' => SourceInterface::INSTALLER_EXTERNAL,
+			];
 
 			$archivePath = $this->extractArchive($tempFile, $tempFolder);
 			$this->addDebug('archive-extracted', ['extractedRoot' => $archivePath]);
@@ -233,6 +268,7 @@ class ExternalReleaseInstallerService {
 					'debug' => $this->debug,
 					'binding' => $binding,
 					'recordedShaMatched' => $recordedShaMatched,
+					'servedFromCache' => $this->servedFromCache,
 				] + ($isDowngrade ? ['orphanedMigrations' => $orphanedMigrations] : []);
 			}
 
@@ -292,6 +328,14 @@ class ExternalReleaseInstallerService {
 			}
 			$this->addDebug('finalized', ['appId' => $installedApp, 'enabled' => $enabled]);
 
+			// Persist the just-verified archive for future rollback; see
+			// "Persist verified artifacts on successful install". Only
+			// reached after finalize() succeeded, so a failed install never
+			// populates the cache.
+			if ($this->lastArchivePath !== null && $this->lastArchiveMeta !== null) {
+				$this->artifactCache->store($appId, $version, $this->lastArchivePath, $this->lastArchiveMeta);
+			}
+
 			// Record the observed digest only now that the install fully
 			// succeeded (never on a failure path) — see "SHA-256 recorded on
 			// first successful external install". Sibling-verified or locally
@@ -328,6 +372,7 @@ class ExternalReleaseInstallerService {
 				'debug' => $this->debug,
 				'binding' => $updatedBinding,
 				'recordedShaMatched' => $recordedShaMatched,
+				'servedFromCache' => $this->servedFromCache,
 			] + ($isDowngrade ? ['orphanedMigrations' => $orphanedMigrations] : []);
 		} catch (\Throwable $error) {
 			// Best-effort audit write on the failure path, before the exception
@@ -661,6 +706,9 @@ class ExternalReleaseInstallerService {
 
 	private function resetDebug(): void {
 		$this->debug = [];
+		$this->lastArchivePath = null;
+		$this->lastArchiveMeta = null;
+		$this->servedFromCache = false;
 	}
 
 	private function addDebug(string $stage, mixed $data = null): void {
