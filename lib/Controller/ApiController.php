@@ -308,10 +308,16 @@ class ApiController extends OCSController {
 	 * older than installed) is refused with a 409 unless `allowDowngrade=1`;
 	 * see "Server-side downgrade guard".
 	 *
+	 * `dryRun` is an independent boolean, decoupled from `debug`; see
+	 * MODIFIED "Debug Mode". When `dryRun` is not supplied at all, `debug=1`
+	 * still implies a dry run (deprecated back-compat) and the response
+	 * carries a `deprecationNotice`.
+	 *
 	 * @spec openspec/specs/version-management/spec.md
 	 * @spec openspec/specs/version-pinning/spec.md
 	 * @spec openspec/specs/external-sources/spec.md
 	 * @spec openspec/specs/migration-safety/spec.md
+	 * @spec openspec/specs/cli-commands/spec.md
 	 */
 	#[PasswordConfirmationRequired(strict: false)]
 	#[ApiRoute(verb: 'POST', url: '/api/app/{appId}/versions/{version}/install')]
@@ -334,6 +340,16 @@ class ApiController extends OCSController {
 
 		$includeDebug = $this->readBinaryBool($this->request->getParam('debug', '0'), false);
 
+		// `dryRun` is independent of `debug` — see MODIFIED "Debug Mode".
+		// `getParam()` without a default returns null when the caller omitted
+		// the parameter entirely, which is how we distinguish "not supplied"
+		// (legacy `debug`-implies-dry-run fallback still applies) from an
+		// explicit `dryRun=0` (a real install regardless of `debug`).
+		/** @var mixed $dryRunParam */
+		$dryRunParam = $this->request->getParam('dryRun');
+		$dryRunSupplied = $dryRunParam !== null;
+		$dryRun = $dryRunSupplied ? $this->readBinaryBool($dryRunParam, false) : null;
+
 		$overridePinRaw = $this->stringParam('overridePin', '');
 		$overridePin = $overridePinRaw === '' ? null : $overridePinRaw;
 		$pinRequested = $this->readBinaryBool($this->request->getParam('pin', '0'), false);
@@ -349,9 +365,15 @@ class ApiController extends OCSController {
 			$pinRequested,
 			$acceptNewSha,
 			$allowDowngrade,
+			$dryRun,
 		);
 		$result['payload']['requestedVersion'] = $requestedVersion;
 		$result['payload']['routeVersion'] = $version;
+		if (!$dryRunSupplied && $includeDebug) {
+			// Legacy back-compat path only — see MODIFIED "Debug Mode",
+			// Scenario "Legacy behavior preserved".
+			$result['payload']['deprecationNotice'] = 'debug=1 implying a dry run is deprecated; pass dryRun=1 explicitly instead.';
+		}
 
 		return new DataResponse(
 			$result['payload'] ?? [],

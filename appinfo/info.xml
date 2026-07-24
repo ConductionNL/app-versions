@@ -23,6 +23,10 @@ App Versions gives Nextcloud administrators the ability to roll back apps to pre
 		<job>OCA\AppVersions\Cron\PruneAuditJob</job>
 		<job>OCA\AppVersions\Cron\PinReconcileJob</job>
 	</background-jobs>
+	<commands>
+		<command>OCA\AppVersions\Command\ListVersions</command>
+		<command>OCA\AppVersions\Command\InstallVersion</command>
+	</commands>
 	<settings>
 		<admin>OCA\AppVersions\Settings\Admin</admin>
 		<admin-section>OCA\AppVersions\Sections\AdminSection</admin-section>

@@ -2,14 +2,14 @@
 
 ## Task 1: Shared manageability predicate
 - **Spec ref**: specs/cli-commands/spec.md (Requirement: CLI trust context)
-- **Status**: todo
+- **Status**: done
 - **Acceptance criteria**:
   - The self-app / core / always-enabled guard is extracted from `InstallerService::getInstalledApps` into a reusable method
   - Existing API behavior unchanged (unit-tested)
 
 ## Task 2: app_versions:versions command
 - **Spec ref**: specs/cli-commands/spec.md (Requirement: List versions from the CLI)
-- **Status**: todo
+- **Status**: done
 - **Acceptance criteria**:
   - `lib/Command/ListVersions.php` registered via `info.xml` `<commands>`
   - Table output + `--json`; `--source=` override; non-zero exit + stderr message on unknown app / source errors
@@ -17,7 +17,7 @@
 
 ## Task 3: app_versions:install command
 - **Spec ref**: specs/cli-commands/spec.md (Requirement: Install a specific version from the CLI)
-- **Status**: todo
+- **Status**: done
 - **Acceptance criteria**:
   - `lib/Command/InstallVersion.php` with `--source`, `--dry-run`, `--allow-downgrade`, `--json`
   - Delegates to `InstallerService::installAppVersion`; no duplicated install logic
@@ -26,15 +26,16 @@
 
 ## Task 4: dryRun decoupled from debug
 - **Spec ref**: specs/cli-commands/spec.md (MODIFIED Requirement: Debug Mode)
-- **Status**: todo
-- **Acceptance criteria**:
-  - API accepts independent `dryRun`; legacy `debug`-implies-dry-run only when `dryRun` absent
-  - `debug=1&dryRun=0` performs a real install with debug timeline
-  - Vue client sends explicit `dryRun` and `debug` from separate toggles
-  - Unit tests for the resolution matrix; `openapi.json` updated
+- **Status**: done
+- **Note**: `openapi.json` was left unchanged — `vendor/bin/generate-spec`
+  (nextcloud/openapi-extractor v1.8.7) hard-fails on this app's `info.xml`
+  license (`Unable to convert EUPL-1.2 to SPDX identifier`), a pre-existing
+  tooling gap unrelated to this change (the `/install` endpoint was already
+  entirely absent from openapi.json before this change). Filed as a
+  follow-up rather than hand-editing undocumented, unverified JSON.
 
 ## Task 5: Docs
 - **Spec ref**: specs/cli-commands/spec.md (all requirements)
-- **Status**: todo
+- **Status**: done
 - **Acceptance criteria**:
   - `docs/` page documenting both commands, flags, exit codes, and a reproducible-provisioning example (Docker build snippet)

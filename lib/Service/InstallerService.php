@@ -159,7 +159,7 @@ class InstallerService {
 		if ($appId === '') {
 			return $this->errorEnvelope('Missing app id.', Http::STATUS_BAD_REQUEST);
 		}
-		if ($this->isSelfManagedApp($appId) || $this->isCoreProtectedApp($appId)) {
+		if (!$this->isManageableApp($appId)) {
 			return $this->errorEnvelope(
 				$this->isCoreProtectedApp($appId)
 					? 'This core app cannot be managed from App Versions.'
@@ -290,10 +290,17 @@ class InstallerService {
 	 * guard". Dry-run requests evaluate the same condition but are never
 	 * blocked by it.
 	 *
+	 * `$dryRun` is the explicit dry-run trigger, independent of
+	 * `$includeDebug` (which now controls diagnostic verbosity only); see
+	 * MODIFIED "Debug Mode". `null` (the default) preserves the legacy
+	 * behavior of every caller that predates this parameter: falls back to
+	 * `$includeDebug`, so `debug=1` alone still implies a dry-run.
+	 *
 	 * @spec openspec/specs/version-management/spec.md
 	 * @spec openspec/specs/version-pinning/spec.md
 	 * @spec openspec/specs/external-sources/spec.md
 	 * @spec openspec/specs/migration-safety/spec.md
+	 * @spec openspec/specs/cli-commands/spec.md
 	 * @return array{statusCode:int, payload:array<string, mixed>}
 	 */
 	public function installAppVersion(
@@ -305,7 +312,12 @@ class InstallerService {
 		bool $pinRequested = false,
 		bool $acceptNewSha = false,
 		bool $allowDowngrade = false,
+		?bool $dryRun = null,
 	): array {
+		// Independent of $includeDebug (deprecation-preserving fallback only
+		// when the caller does not pass $dryRun at all); see MODIFIED "Debug
+		// Mode" — "Legacy behavior preserved".
+		$dryRun = $dryRun ?? $includeDebug;
 		$appId = trim($appId);
 		$targetVersion = trim($targetVersion);
 		if ($appId === '' || $targetVersion === '') {
@@ -314,7 +326,7 @@ class InstallerService {
 				'payload' => ['message' => 'Missing app id or version.'],
 			];
 		}
-		if ($this->isSelfManagedApp($appId) || $this->isCoreProtectedApp($appId)) {
+		if (!$this->isManageableApp($appId)) {
 			return [
 				'statusCode' => Http::STATUS_FORBIDDEN,
 				'payload' => [
@@ -360,12 +372,13 @@ class InstallerService {
 		// instead) — see "Dry-run requests MUST evaluate and report the guard
 		// without requiring the flag".
 		$isDowngradeRequest = $installedVersion !== '' && version_compare($targetVersion, $installedVersion, '<');
-		if ($isDowngradeRequest && !$includeDebug && !$allowDowngrade) {
+		if ($isDowngradeRequest && !$dryRun && !$allowDowngrade) {
 			$category = FailureClassifier::CATEGORY_DOWNGRADE_GUARD;
 
-			// $includeDebug is false here (the guard above only fires when
-			// !$includeDebug), so — unlike the other early-return payloads in
-			// this method — there is no debug branch to attach.
+			// $dryRun is false here (the guard above only fires when
+			// !$dryRun), so this is a real install refusal; $includeDebug is
+			// independent and may still be true, but there is no debug
+			// branch to attach — nothing was attempted.
 			return [
 				'statusCode' => $this->failureClassifier->httpStatusFor($category),
 				'payload' => [
@@ -477,7 +490,8 @@ class InstallerService {
 		}
 
 		$maintenanceWasSet = false;
-		$dryRun = $includeDebug;
+		// $dryRun was already resolved (independent of $includeDebug) at the
+		// top of this method — see MODIFIED "Debug Mode".
 		try {
 			if (!$this->config->getSystemValueBool('maintenance', false)) {
 				$maintenanceWasSet = true;
@@ -869,6 +883,20 @@ class InstallerService {
 			'hasError' => true,
 			'error' => $message,
 		];
+	}
+
+	/**
+	 * Whether `$appId` may be installed/updated/listed through App Versions —
+	 * `false` for App Versions itself (self-management) and any core /
+	 * always-enabled app. Single shared predicate for the guard duplicated
+	 * across {@see getAppVersions()}, {@see installAppVersion()}, and the
+	 * `occ` commands; see "CLI trust context".
+	 *
+	 * @spec openspec/specs/cli-commands/spec.md
+	 * @spec openspec/specs/version-management/spec.md
+	 */
+	public function isManageableApp(string $appId): bool {
+		return !$this->isSelfManagedApp($appId) && !$this->isCoreProtectedApp($appId);
 	}
 
 	private function isSelfManagedApp(string $appId): bool {

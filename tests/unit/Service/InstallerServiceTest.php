@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\AppVersions\Tests\Unit\Service;
 
 use Exception;
+use OCA\AppVersions\AppInfo\Application;
 use OCA\AppVersions\Service\ExternalReleaseInstallerService;
 use OCA\AppVersions\Service\Installer\EnvironmentCheck;
 use OCA\AppVersions\Service\Installer\FailureClassifier;
@@ -429,5 +430,113 @@ final class InstallerServiceTest extends TestCase {
 
 		self::assertSame(Http::STATUS_OK, $result['statusCode']);
 		self::assertArrayNotHasKey('orphanedMigrations', $result['payload']);
+	}
+
+	// --- Shared manageability predicate (see "CLI trust context") ---
+
+	public function testIsManageableAppIsFalseForAppVersionsItself(): void {
+		self::assertFalse($this->service()->isManageableApp(Application::APP_ID));
+	}
+
+	public function testIsManageableAppIsFalseForAnAlwaysEnabledApp(): void {
+		$this->appManager = $this->createMock(IAppManager::class);
+		$this->appManager->method('getAlwaysEnabledApps')->willReturn(['dav']);
+		$this->appManager->method('getAppVersion')->willReturn('1.0.0');
+
+		self::assertFalse($this->service()->isManageableApp('dav'));
+	}
+
+	public function testIsManageableAppIsTrueForAnOrdinaryInstalledApp(): void {
+		self::assertTrue($this->service()->isManageableApp('someapp'));
+	}
+
+	public function testGetAppVersionsRefusesSelfManagementWithoutTouchingTheSource(): void {
+		$this->sourceRegistry->expects(self::never())->method('get');
+
+		$result = $this->service()->getAppVersions(Application::APP_ID);
+
+		self::assertSame(Http::STATUS_FORBIDDEN, $result['statusCode']);
+		self::assertTrue($result['hasError']);
+		self::assertStringContainsString('cannot be managed', $result['error']);
+	}
+
+	public function testGetAppVersionsRefusesACoreProtectedAppWithADistinctMessage(): void {
+		$this->appManager = $this->createMock(IAppManager::class);
+		$this->appManager->method('getAlwaysEnabledApps')->willReturn(['dav']);
+		$this->sourceRegistry->expects(self::never())->method('get');
+
+		$result = $this->service()->getAppVersions('dav');
+
+		self::assertSame(Http::STATUS_FORBIDDEN, $result['statusCode']);
+		self::assertStringContainsString('core app', $result['error']);
+	}
+
+	public function testInstallAppVersionRefusesSelfManagementWithoutTouchingTheSource(): void {
+		$this->sourceRegistry->expects(self::never())->method('get');
+
+		$result = $this->service()->installAppVersion(Application::APP_ID, '1.0.0', false);
+
+		self::assertSame(Http::STATUS_FORBIDDEN, $result['statusCode']);
+		self::assertStringContainsString('cannot be installed or updated', $result['payload']['message']);
+	}
+
+	public function testInstallAppVersionRefusesACoreProtectedAppWithADistinctMessage(): void {
+		$this->appManager = $this->createMock(IAppManager::class);
+		$this->appManager->method('getAlwaysEnabledApps')->willReturn(['dav']);
+		$this->sourceRegistry->expects(self::never())->method('get');
+
+		$result = $this->service()->installAppVersion('dav', '1.0.0', false);
+
+		self::assertSame(Http::STATUS_FORBIDDEN, $result['statusCode']);
+		self::assertStringContainsString('core app', $result['payload']['message']);
+	}
+
+	// --- dryRun decoupled from debug/verbosity (see MODIFIED "Debug Mode") ---
+
+	public function testExplicitDryRunFalseWithDebugTruePerformsARealInstallWithDebugTimeline(): void {
+		$this->stubSuccessfulSignedInstall('2.0.0');
+		$this->signedInstaller->method('getDebugLog')->willReturn([['stage' => 'finalize', 'data' => []]]);
+
+		// debug=1 (includeDebug=true) but dryRun explicitly false: a real
+		// install must happen, and the debug timeline is still attached.
+		$result = $this->service()->installAppVersion('someapp', '2.0.0', true, null, null, false, false, false, false);
+
+		self::assertSame(Http::STATUS_OK, $result['statusCode']);
+		self::assertFalse($result['payload']['dryRun']);
+		self::assertArrayHasKey('debug', $result['payload']);
+	}
+
+	public function testExplicitDryRunTrueWithDebugFalseEvaluatesWithoutADebugTimeline(): void {
+		$this->stubSuccessfulSignedInstall('2.0.0');
+
+		// dryRun=1 explicitly, no debug: dry-run path, no debug timeline attached.
+		$result = $this->service()->installAppVersion('someapp', '2.0.0', false, null, null, false, false, false, true);
+
+		self::assertSame(Http::STATUS_OK, $result['statusCode']);
+		self::assertTrue($result['payload']['dryRun']);
+		self::assertArrayNotHasKey('debug', $result['payload']);
+	}
+
+	public function testOmittingDryRunFallsBackToLegacyDebugImpliesDryRunBehavior(): void {
+		$this->stubSuccessfulSignedInstall('2.0.0');
+
+		// $dryRun omitted (defaults to null) — legacy behavior: debug=1 alone
+		// still implies a dry run.
+		$result = $this->service()->installAppVersion('someapp', '2.0.0', true);
+
+		self::assertSame(Http::STATUS_OK, $result['statusCode']);
+		self::assertTrue($result['payload']['dryRun']);
+	}
+
+	public function testExplicitDryRunFalseWithDebugTrueDoesNotBypassTheDowngradeGuard(): void {
+		// Regression guard: before the decoupling, the downgrade guard checked
+		// !$includeDebug, so debug=1 alone would have silently bypassed it for
+		// a REAL downgrade. It must now check !$dryRun instead.
+		$this->sourceRegistry->expects(self::never())->method('get');
+
+		$result = $this->service()->installAppVersion('someapp', '0.9.0', true, null, null, false, false, false, false);
+
+		self::assertSame(Http::STATUS_CONFLICT, $result['statusCode']);
+		self::assertSame(FailureClassifier::CATEGORY_DOWNGRADE_GUARD, $result['payload']['category']);
 	}
 }
