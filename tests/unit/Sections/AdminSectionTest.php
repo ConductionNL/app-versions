@@ -12,7 +12,10 @@ use PHPUnit\Framework\TestCase;
 final class AdminSectionTest extends TestCase {
 	private function build(): AdminSection {
 		$l = $this->createMock(IL10N::class);
-		$l->method('t')->willReturnCallback(static fn (string $text): string => $text);
+		// Faithful to OC\L10N\L10NString: vsprintf against the parameter array.
+		$l->method('t')->willReturnCallback(
+			static fn (string $text, array $parameters = []): string => vsprintf($text, $parameters),
+		);
 		$urlGenerator = $this->createMock(IURLGenerator::class);
 		$urlGenerator->method('imagePath')->willReturn('/apps/app_versions/img/app.svg');
 

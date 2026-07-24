@@ -209,13 +209,15 @@ class FailureClassifier {
 	 * @spec openspec/specs/migration-safety/spec.md
 	 */
 	public function downgradeGuardHint(string $installedVersion, string $targetVersion): string {
-		// Translated as a template, then substituted locally: IL10N::t()'s
-		// vsprintf-based substitution requires the translated string itself to
-		// carry the `%1$s`/`%2$s` placeholders, so the versions are formatted
-		// in afterwards rather than passed through `t()`'s parameter array.
-		$template = $this->l10n()->t('%1$s is installed; %2$s is older. Downgrading cannot undo database migrations already applied by %1$s — pass allowDowngrade to proceed anyway.');
-
-		return sprintf($template, $installedVersion, $targetVersion);
+		// The versions MUST go through `t()`'s parameter array: L10NString
+		// vsprintf()s the translated text against exactly these parameters, so
+		// a placeholder-bearing string passed without them throws a ValueError
+		// ("The arguments array must contain 2 items, 0 given") the moment the
+		// string is cast — i.e. on every downgrade refusal.
+		return (string)$this->l10n()->t(
+			'%1$s is installed; %2$s is older. Downgrading cannot undo database migrations already applied by %1$s — pass allowDowngrade to proceed anyway.',
+			[$installedVersion, $targetVersion],
+		);
 	}
 
 	/**
