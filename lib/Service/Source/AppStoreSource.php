@@ -35,6 +35,28 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 	private const PLATFORM_ENDPOINT = 'https://garm3.nextcloud.com/api/v1/platform/%s/apps.json';
 	private const MAX_PAGES = 20;
 
+	/**
+	 * How long a resolved app payload stays usable before it is refetched.
+	 *
+	 * The App Store `apps.json` endpoint ignores its `filter` parameter and
+	 * answers with the entire catalogue — ~30 MB / ~60 s per call, measured
+	 * against garm3 on 2026-07-24. Without a cache every version listing,
+	 * advisory correlation and install pre-check paid that cost again, which is
+	 * the app's core flow. An hour — matching the discovery catalogue cache —
+	 * keeps a newly published release visible reasonably quickly while making
+	 * that expensive round trip rare.
+	 */
+	private const PAYLOAD_CACHE_TTL_SECONDS = 3600;
+
+	/**
+	 * Ceiling for a catalogue round trip. The payload is large enough that the
+	 * default client timeout can abort it midway, which would surface as "no
+	 * versions available" rather than a clear failure.
+	 */
+	private const FETCH_TIMEOUT_SECONDS = 180;
+	private const PAYLOAD_CACHE_PREFIX = 'appstore.payload.';
+	private const PAYLOAD_CACHE_TS_PREFIX = 'appstore.payload_ts.';
+
 	public function __construct(
 		private IClientService $clientService,
 		private IConfig $config,
@@ -191,12 +213,83 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 	 * @return array<array-key, mixed>|null
 	 */
 	private function fetchAppPayload(string $appId): ?array {
+		$cached = $this->readCachedPayload($appId);
+		if ($cached !== null) {
+			return $cached;
+		}
+
+		$payload = $this->fetchAppPayloadUncached($appId);
+		if ($payload !== null) {
+			$this->writeCachedPayload($appId, $payload);
+		}
+
+		return $payload;
+	}
+
+	/**
+	 * Returns a still-valid cached payload for the app, or null when there is
+	 * none or it has expired. A malformed cache entry is treated as a miss.
+	 *
+	 * @return array<array-key, mixed>|null
+	 */
+	private function readCachedPayload(string $appId): ?array {
+		$cachedAt = (int)$this->config->getAppValue(
+			'app_versions',
+			self::PAYLOAD_CACHE_TS_PREFIX . $appId,
+			'0',
+		);
+		if ($cachedAt <= 0 || (time() - $cachedAt) >= self::PAYLOAD_CACHE_TTL_SECONDS) {
+			return null;
+		}
+
+		$raw = $this->config->getAppValue('app_versions', self::PAYLOAD_CACHE_PREFIX . $appId, '');
+		if ($raw === '') {
+			return null;
+		}
+
+		try {
+			/** @var mixed $decoded */
+			$decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+		} catch (Throwable) {
+			return null;
+		}
+
+		return is_array($decoded) ? $decoded : null;
+	}
+
+	/**
+	 * Stores a resolved payload for reuse. Caching is best-effort: a failure to
+	 * write must never break a listing that already succeeded.
+	 *
+	 * @param array<array-key, mixed> $payload
+	 */
+	private function writeCachedPayload(string $appId, array $payload): void {
+		try {
+			$this->config->setAppValue(
+				'app_versions',
+				self::PAYLOAD_CACHE_PREFIX . $appId,
+				json_encode($payload, JSON_THROW_ON_ERROR),
+			);
+			$this->config->setAppValue(
+				'app_versions',
+				self::PAYLOAD_CACHE_TS_PREFIX . $appId,
+				(string)time(),
+			);
+		} catch (Throwable) {
+			// Cache write problems are non-fatal by design.
+		}
+	}
+
+	/**
+	 * @return array<array-key, mixed>|null
+	 */
+	private function fetchAppPayloadUncached(string $appId): ?array {
 		$client = $this->clientService->newClient();
 
 		for ($page = 1; $page <= self::MAX_PAGES; $page++) {
 			$endpoint = self::PRIMARY_ENDPOINT . '?filter=' . rawurlencode($appId) . '&page=' . $page;
 			try {
-				$response = $client->get($endpoint);
+				$response = $client->get($endpoint, ['timeout' => self::FETCH_TIMEOUT_SECONDS]);
 				if ($response->getStatusCode() !== 200) {
 					continue;
 				}
@@ -227,7 +320,7 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 		for ($page = 1; $page <= self::MAX_PAGES; $page++) {
 			$endpoint = $platformEndpoint . '?page=' . $page;
 			try {
-				$response = $client->get($endpoint);
+				$response = $client->get($endpoint, ['timeout' => self::FETCH_TIMEOUT_SECONDS]);
 				if ($response->getStatusCode() !== 200) {
 					continue;
 				}

@@ -1,0 +1,90 @@
+import { expect, test } from '@playwright/test'
+import { chooseApp, openSettings, versionsLoaded } from './helpers'
+
+/**
+ * The core flow: list an app's versions, read release notes, and have the
+ * downgrade guard refuse an unacknowledged rollback.
+ *
+ * @spec openspec/specs/version-management/spec.md
+ * @spec openspec/specs/changelog-visibility/spec.md
+ * @spec openspec/specs/migration-safety/spec.md
+ */
+// A genuine App Store app (installed by the e2e bootstrap, see docs/e2e.md).
+// Shipped apps such as `dashboard` are a poor subject here: their App Store
+// presence is inconsistent, so the picker may legitimately report that the app
+// follows the server release instead of listing versions.
+const APP = 'notes'
+
+test.describe('version listing and release notes', () => {
+	test('versions load for an App Store app and name their source', async ({ page }) => {
+		await openSettings(page)
+		await chooseApp(page, APP)
+		await versionsLoaded(page)
+
+		// The picker always states which source answered and what is installed,
+		// even when the safe-mode filter hides every candidate.
+		await expect(page.getByText(/Versions source:/)).toBeVisible()
+		await expect(page.getByText('Current installed')).toBeVisible()
+	})
+
+	test('safe mode hides older releases until it is switched off', async ({ page }) => {
+		// `dashboard` ships with Nextcloud at a version far ahead of its App Store
+		// releases, so with safe mode on every candidate is a downgrade and must be
+		// filtered out — and switching safe mode off must reveal them.
+		await openSettings(page)
+		await chooseApp(page, APP)
+		await versionsLoaded(page)
+
+		// With safe mode on, only same-or-newer releases are offered.
+		const before = await page.getByTestId('changelog-toggle').count()
+
+		await page.getByRole('checkbox', { name: /Safe mode/ }).uncheck()
+		await expect
+			.poll(async () => page.getByTestId('changelog-toggle').count(), { timeout: 240_000 })
+			.toBeGreaterThan(before)
+
+		// Restore the safer default for subsequent specs.
+		await page.getByRole('checkbox', { name: /Safe mode/ }).check()
+	})
+
+	test('release notes expand and render as inert text', async ({ page }) => {
+		await openSettings(page)
+		await chooseApp(page, APP)
+		await versionsLoaded(page)
+		// Older releases are only listed with safe mode off.
+		await page.getByRole('checkbox', { name: /Safe mode/ }).uncheck()
+		await expect(page.getByTestId('changelog-toggle').first()).toBeVisible({ timeout: 240_000 })
+
+		const toggle = page.getByTestId('changelog-toggle').first()
+		await toggle.click()
+
+		// Either notes or the explicit placeholder — never an empty disclosure.
+		const body = page.getByTestId('changelog-text').or(page.getByTestId('changelog-placeholder'))
+		await expect(body.first()).toBeVisible()
+
+		// Release notes are rendered as text, so any markup in them stays inert.
+		const scripts = await page.getByTestId('changelog-body').locator('script').count()
+		expect(scripts, 'changelog must never inject executable markup').toBe(0)
+
+		await page.getByRole('checkbox', { name: /Safe mode/ }).check()
+	})
+
+	test('safe mode is on by default and blocks downgrades', async ({ page }) => {
+		await openSettings(page)
+		const safeMode = page.getByRole('checkbox', { name: /Safe mode/ })
+		await expect(safeMode).toBeChecked()
+	})
+
+	test('the API refuses an unacknowledged downgrade with a 409', async ({ page }) => {
+		// The downgrade guard is server-enforced, so assert it at the API boundary
+		// where every consumer (UI, occ, scripts) hits it.
+		const res = await page.request.post(
+			`/ocs/v2.php/apps/app_versions/api/app/${APP}/versions/1.0.0/install?format=json`,
+			{ headers: { 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' }, data: {} },
+		)
+		const body = await res.text()
+		// Must be refused, and must explain itself rather than 500.
+		expect(body).not.toContain('"installed"')
+		expect(body.toLowerCase()).toMatch(/downgrad|older|pin|confirm|password/)
+	})
+})

@@ -136,4 +136,94 @@ final class AppStoreSourceTest extends TestCase {
 
 		$this->assertNull($result['versions'][0]['changelog']);
 	}
+
+	/**
+	 * The App Store catalogue endpoint ignores its `filter` parameter and returns
+	 * ~30 MB for every call, so a resolved payload must be reused rather than
+	 * refetched on the next listing.
+	 *
+	 * @spec openspec/specs/version-management/spec.md
+	 */
+	public function testResolvedPayloadIsCachedAndNotRefetched(): void {
+		$body = json_encode([
+			'data' => [[
+				'id' => 'openregister',
+				'releases' => [['version' => '2.3.0']],
+			]],
+		], JSON_THROW_ON_ERROR);
+
+		$response = $this->createMock(IResponse::class);
+		$response->method('getStatusCode')->willReturn(200);
+		$response->method('getBody')->willReturn($body);
+
+		$client = $this->createMock(IClient::class);
+		// The catalogue must be fetched exactly once across two listings.
+		$client->expects($this->once())->method('get')->willReturn($response);
+		$clientService = $this->createMock(IClientService::class);
+		$clientService->method('newClient')->willReturn($client);
+
+		// An in-memory app-config double so the second call sees the first write.
+		$store = [];
+		$config = $this->createMock(IConfig::class);
+		$config->method('getSystemValueString')->willReturn('28.0.0');
+		$config->method('setAppValue')->willReturnCallback(
+			function (string $app, string $key, string $value) use (&$store): void {
+				$store[$key] = $value;
+			},
+		);
+		$config->method('getAppValue')->willReturnCallback(
+			function (string $app, string $key, string $default = '') use (&$store): string {
+				return $store[$key] ?? $default;
+			},
+		);
+
+		$l10nFactory = $this->createMock(IFactory::class);
+		$l10nFactory->method('findLanguage')->willReturn('en');
+
+		$source = new AppStoreSource($clientService, $config, $l10nFactory);
+
+		$first = $source->listVersions('openregister', $this->binding());
+		$second = $source->listVersions('openregister', $this->binding());
+
+		$this->assertSame('2.3.0', $first['versions'][0]['version']);
+		$this->assertSame($first['versions'], $second['versions'], 'cached listing must match the fetched one');
+	}
+
+	public function testExpiredCacheIsRefetched(): void {
+		$body = json_encode([
+			'data' => [['id' => 'openregister', 'releases' => [['version' => '2.3.0']]]],
+		], JSON_THROW_ON_ERROR);
+
+		$response = $this->createMock(IResponse::class);
+		$response->method('getStatusCode')->willReturn(200);
+		$response->method('getBody')->willReturn($body);
+
+		$client = $this->createMock(IClient::class);
+		// Stale timestamp ⇒ both listings must hit the network.
+		$client->expects($this->exactly(2))->method('get')->willReturn($response);
+		$clientService = $this->createMock(IClientService::class);
+		$clientService->method('newClient')->willReturn($client);
+
+		$config = $this->createMock(IConfig::class);
+		$config->method('getSystemValueString')->willReturn('28.0.0');
+		$config->method('getAppValue')->willReturnCallback(
+			function (string $app, string $key, string $default = '') use ($body): string {
+				// Payload present but cached long ago.
+				if (str_starts_with($key, 'appstore.payload_ts.')) {
+					return '1';
+				}
+				if (str_starts_with($key, 'appstore.payload.')) {
+					return $body;
+				}
+				return $default;
+			},
+		);
+
+		$l10nFactory = $this->createMock(IFactory::class);
+		$l10nFactory->method('findLanguage')->willReturn('en');
+
+		$source = new AppStoreSource($clientService, $config, $l10nFactory);
+		$source->listVersions('openregister', $this->binding());
+		$source->listVersions('openregister', $this->binding());
+	}
 }

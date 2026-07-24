@@ -1,0 +1,60 @@
+import { defineConfig, devices } from '@playwright/test'
+
+/**
+ * Playwright end-to-end configuration for App Versions.
+ *
+ * The suite drives the real admin UI against a running Nextcloud instance with
+ * this app enabled. Point it at a disposable instance (see docs/e2e.md) — the
+ * specs create and clean up their own state (pins, policies), but they operate
+ * on a live instance and must never be aimed at production.
+ *
+ * Base URL and credentials come from the environment so the same suite runs
+ * against a throwaway container locally and against CI's instance later:
+ *   NC_BASE_URL   (default http://localhost:8099)
+ *   NC_ADMIN_USER (default admin)
+ *   NC_ADMIN_PASS (default adminadmin123)
+ */
+export const NC_BASE_URL = process.env.NC_BASE_URL ?? 'http://localhost:8099'
+export const NC_ADMIN_USER = process.env.NC_ADMIN_USER ?? 'admin'
+export const NC_ADMIN_PASS = process.env.NC_ADMIN_PASS ?? 'adminadmin123'
+
+/** Where the logged-in admin session is persisted by `auth.setup.ts`. */
+export const AUTH_FILE = 'tests/e2e/.auth/admin.json'
+
+export default defineConfig({
+	testDir: './tests/e2e',
+	// The admin settings page is a single shared surface and several specs mutate
+	// server-side state (pins, policies, cache). Serial execution keeps them from
+	// racing each other on the same instance.
+	fullyParallel: false,
+	workers: 1,
+	forbidOnly: !!process.env.CI,
+	retries: process.env.CI ? 1 : 0,
+	reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
+	timeout: 60_000,
+	expect: { timeout: 15_000 },
+	use: {
+		baseURL: NC_BASE_URL,
+		// A cold Nextcloud (empty opcache) can take ~30s to serve the first page,
+		// which is exactly the default navigation timeout — be generous so a cold
+		// instance is slow rather than flaky.
+		navigationTimeout: 90_000,
+		actionTimeout: 20_000,
+		trace: 'retain-on-failure',
+		screenshot: 'only-on-failure',
+		video: 'off',
+		ignoreHTTPSErrors: true,
+	},
+	projects: [
+		// Logs in once and persists the session for every other project. It must
+		// run without a stored session, so `storageState` is set on the consuming
+		// project rather than globally (an inherited `undefined` still resolves to
+		// the parent value and would make setup fail on a missing state file).
+		{ name: 'setup', testMatch: /auth\.setup\.ts/ },
+		{
+			name: 'chromium',
+			use: { ...devices['Desktop Chrome'], storageState: AUTH_FILE },
+			dependencies: ['setup'],
+		},
+	],
+})
