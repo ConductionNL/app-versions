@@ -20,6 +20,8 @@ The system MUST let an admin pin an app to its **currently installed** version v
 
 #### Scenario: Pin the running version
 
+@e2e tests/e2e/pinning.spec.ts
+
 - GIVEN `openregister` is installed at 2.3.0
 - WHEN admin `alice` calls `PUT /api/app/openregister/pin` with `{reason: "2.5.0 breaks LDAP sync"}` and confirms her password
 - THEN `app_versions.pin.openregister` MUST be set to `{version: "2.3.0", pinnedBy: "alice", pinnedAt: ISO-8601, reason: "2.5.0 breaks LDAP sync"}`
@@ -53,6 +55,8 @@ The system MUST let an admin pin an app to its **currently installed** version v
 The system MUST let an admin remove a pin via `DELETE /api/app/{appId}/pin`, with password confirmation. Unpinning MUST NOT change the installed version.
 
 #### Scenario: Unpin clears the record
+
+@e2e tests/e2e/pinning.spec.ts
 
 - GIVEN `pin.openregister` exists for version 2.3.0
 - WHEN the admin calls `DELETE /api/app/openregister/pin` and confirms their password
@@ -164,12 +168,16 @@ Pinned apps MUST be visibly badged in the app list and version picker (pinned ve
 
 #### Scenario: Pinned badge
 
+@e2e tests/e2e/pinning.spec.ts
+
 - GIVEN `openregister` is pinned at 2.3.0
 - WHEN the admin views the app list
 - THEN the `openregister` card MUST show a pin badge with version 2.3.0
 - AND the badge detail MUST show pinnedBy, pinnedAt, and reason
 
 #### Scenario: Trust model is stated at pin time
+
+@e2e tests/e2e/pinning.spec.ts
 
 - GIVEN an admin opens the pin dialog
 - WHEN the dialog renders

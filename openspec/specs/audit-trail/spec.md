@@ -114,6 +114,8 @@ The system MUST present the audit trail in the admin UI: a global history view a
 
 #### Scenario: Global history view
 
+@e2e tests/e2e/panels.spec.ts
+
 - GIVEN audit entries exist for multiple apps
 - WHEN the admin opens the History section
 - THEN entries MUST be listed newest-first across all apps
@@ -156,11 +158,15 @@ The system MUST write audit entries for pin operations: `pin` (on pin creation, 
 
 #### Scenario: Pin is audited
 
+@e2e tests/e2e/pinning.spec.ts
+
 - GIVEN admin `alice` pins `openregister` at 2.3.0
 - WHEN the pin is persisted
 - THEN one audit entry MUST exist with `actor_uid=alice`, `app_id=openregister`, `operation=pin`, `to_version=2.3.0`, `status=success`
 
 #### Scenario: Unpin is audited
+
+@e2e tests/e2e/pinning.spec.ts
 
 - GIVEN `openregister` is pinned at 2.3.0
 - WHEN admin `alice` unpins it

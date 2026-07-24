@@ -119,12 +119,12 @@ const isEmpty = computed(() => hasLoadedOnce.value && !isLoading.value && entrie
 			<span>{{ t('app_versions', 'Loading history…') }}</span>
 		</p>
 
-		<p v-else-if="isEmpty" :class="$style.empty">
+		<p v-else-if="isEmpty" data-testid="history-empty" :class="$style.empty">
 			{{ t('app_versions', 'No audit entries yet.') }}
 		</p>
 
 		<div v-else-if="entries.length > 0" :class="$style.tableWrapper">
-			<table :class="$style.table">
+			<table data-testid="history-table" :class="$style.table">
 				<thead>
 					<tr>
 						<th>{{ t('app_versions', 'When') }}</th>
@@ -142,6 +142,9 @@ const isEmpty = computed(() => hasLoadedOnce.value && !isLoading.value && entrie
 					<tr
 						v-for="entry in entries"
 						:key="entry.id"
+						data-testid="history-row"
+						:data-operation="entry.operation"
+						:data-app-id="entry.appId"
 						:class="[$style.row, { [$style.rowFailure]: isFailure(entry) }]">
 						<td>{{ formatWhen(entry.createdAt) }}</td>
 						<td>{{ entry.actorUid }}</td>

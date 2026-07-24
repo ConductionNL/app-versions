@@ -45,12 +45,16 @@ The version picker MUST let the admin expand any version row to read its release
 
 #### Scenario: Expand a version row
 
+@e2e tests/e2e/versions.spec.ts
+
 - GIVEN the version list for `openregister` is displayed
 - WHEN the admin expands the 2.3.0 row
 - THEN its release notes MUST be shown, sanitized
 - AND a row without notes MUST show "No release notes provided"
 
 #### Scenario: Markdown is not an XSS vector
+
+@e2e tests/e2e/versions.spec.ts
 
 - GIVEN a release body containing `<script>alert(1)</script>`
 - WHEN the row is expanded

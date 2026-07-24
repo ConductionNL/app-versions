@@ -20,6 +20,8 @@ When the requested version is lower than the installed version (`version_compare
 
 #### Scenario: API downgrade without acknowledgement
 
+@e2e tests/e2e/versions.spec.ts
+
 - GIVEN `openregister` installed at 2.5.0
 - WHEN `POST .../versions/2.3.0/install` is called without `allowDowngrade`
 - THEN the response MUST be 409 with category `downgrade_guard` naming 2.5.0 → 2.3.0

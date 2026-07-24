@@ -20,6 +20,8 @@ Admins MUST be able to set, read, and clear a per-app policy `level` ∈ `none|p
 
 #### Scenario: Set a patch policy
 
+@e2e tests/e2e/auto-update.spec.ts
+
 - WHEN admin `alice` calls `PUT /api/app/openregister/policy` with `{level: "patch"}` and confirms her password
 - THEN `policy.openregister` MUST record level patch, setBy alice, setAt ISO-8601
 - AND `GET /api/policies` MUST list it
@@ -83,6 +85,8 @@ Each attempted install MUST produce an admin notification: success (app, old →
 `auto_update_enabled` (default `false`) and `auto_update_window` (default `01:00-05:00`, format `HH:MM-HH:MM`, windows crossing midnight supported) MUST be admin-configurable via the settings UI and readable via the API. With the switch off, per-app policies remain stored but inert, and the UI MUST say so.
 
 #### Scenario: Kill switch inert-but-stored
+
+@e2e tests/e2e/auto-update.spec.ts
 
 - GIVEN policies exist and `auto_update_enabled` is false
 - WHEN the admin views the app list

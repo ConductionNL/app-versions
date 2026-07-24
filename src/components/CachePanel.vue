@@ -84,12 +84,16 @@ onMounted(loadSummary)
 		<NcLoadingIcon v-if="loading" :size="20" />
 
 		<template v-else>
-			<p :class="$style.total">
+			<p data-testid="cache-total-size" :class="$style.total">
 				{{ t('app_versions', 'Total cache size: {size}', { size: formatSize(summary.totalSizeBytes) }) }}
 			</p>
 
 			<ul :class="$style.list">
-				<li v-for="app in summary.apps" :key="app.appId" :class="$style.row">
+				<li v-for="app in summary.apps"
+					:key="app.appId"
+					data-testid="cache-app-row"
+					:data-app-id="app.appId"
+					:class="$style.row">
 					<div :class="$style.rowInfo">
 						<code>{{ app.appId }}</code>
 						<span :class="$style.rowMeta">
@@ -100,12 +104,15 @@ onMounted(loadSummary)
 						{{ clearing === app.appId ? t('app_versions', 'Clearing…') : t('app_versions', 'Clear') }}
 					</NcButton>
 				</li>
-				<li v-if="!hasEntries" :class="$style.empty">
+				<li v-if="!hasEntries" data-testid="cache-empty" :class="$style.empty">
 					{{ t('app_versions', 'Nothing cached yet.') }}
 				</li>
 			</ul>
 
-			<NcButton type="secondary" :disabled="!hasEntries || clearing !== null" @click="clearCache()">
+			<NcButton data-testid="cache-clear-all"
+				type="secondary"
+				:disabled="!hasEntries || clearing !== null"
+				@click="clearCache()">
 				{{ clearing === '*' ? t('app_versions', 'Clearing…') : t('app_versions', 'Clear entire cache') }}
 			</NcButton>
 		</template>
