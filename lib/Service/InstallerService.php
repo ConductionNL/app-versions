@@ -363,6 +363,9 @@ class InstallerService {
 		if ($isDowngradeRequest && !$includeDebug && !$allowDowngrade) {
 			$category = FailureClassifier::CATEGORY_DOWNGRADE_GUARD;
 
+			// $includeDebug is false here (the guard above only fires when
+			// !$includeDebug), so — unlike the other early-return payloads in
+			// this method — there is no debug branch to attach.
 			return [
 				'statusCode' => $this->failureClassifier->httpStatusFor($category),
 				'payload' => [
@@ -374,7 +377,7 @@ class InstallerService {
 					'hint' => $this->failureClassifier->downgradeGuardHint($installedVersion, $targetVersion),
 					'installStatus' => 'failed',
 					'sourceId' => $binding->getId(),
-				] + ($includeDebug ? ['debug' => []] : []),
+				],
 			];
 		}
 
@@ -544,8 +547,12 @@ class InstallerService {
 				// Present only for a downgrade (acknowledged or dry-run); see
 				// "Migration diff on downgrade". `null` means the diff could not
 				// be computed (degrades to a generic warning), `[]` means no
-				// schema steps differ.
-				$payload['orphanedMigrations'] = $result['orphanedMigrations'];
+				// schema steps differ. The signed installer's return type is
+				// loosely typed (array<string, mixed>), so the value is
+				// explicitly annotated here rather than inferred.
+				/** @var list<string>|null $orphanedMigrations */
+				$orphanedMigrations = $result['orphanedMigrations'];
+				$payload['orphanedMigrations'] = $orphanedMigrations;
 			}
 			if ($includeDebug) {
 				$payload['debug'] = (array)($result['debug'] ?? []);
