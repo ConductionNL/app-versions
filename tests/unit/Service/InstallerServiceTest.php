@@ -72,7 +72,10 @@ final class InstallerServiceTest extends TestCase {
 		$this->timeFactory->method('getDateTime')->willReturn(new \DateTime('2026-07-24T00:00:00+00:00'));
 
 		$l = $this->createMock(IL10N::class);
-		$l->method('t')->willReturnCallback(static fn (string $text): string => $text);
+		// Faithful to OC\L10N\L10NString: vsprintf against the parameter array.
+		$l->method('t')->willReturnCallback(
+			static fn (string $text, array $parameters = []): string => vsprintf($text, $parameters),
+		);
 		$factory = $this->createMock(IFactory::class);
 		$factory->method('get')->willReturn($l);
 		$this->failureClassifier = new FailureClassifier($factory);

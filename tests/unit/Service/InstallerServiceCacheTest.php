@@ -63,7 +63,10 @@ final class InstallerServiceCacheTest extends TestCase {
 		$this->artifactCache = $this->createMock(ArtifactCache::class);
 
 		$l = $this->createMock(IL10N::class);
-		$l->method('t')->willReturnCallback(static fn (string $text): string => $text);
+		// Faithful to OC\L10N\L10NString: vsprintf against the parameter array.
+		$l->method('t')->willReturnCallback(
+			static fn (string $text, array $parameters = []): string => vsprintf($text, $parameters),
+		);
 		$factory = $this->createMock(IFactory::class);
 		$factory->method('get')->willReturn($l);
 		$this->failureClassifier = new FailureClassifier($factory);

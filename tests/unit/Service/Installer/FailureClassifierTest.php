@@ -14,8 +14,14 @@ use PHPUnit\Framework\TestCase;
 final class FailureClassifierTest extends TestCase {
 	private function build(): FailureClassifier {
 		$l = $this->createMock(IL10N::class);
-		// Echo the source string so hint/message assertions stay readable.
-		$l->method('t')->willReturnCallback(static fn (string $text): string => $text);
+		// Mirror OC\L10N\L10NString: the translated text is vsprintf()'d against
+		// the parameter array. An earlier fake echoed the raw string and ignored
+		// the parameters, which hid a placeholder-bearing t() call that had no
+		// parameters — that crashed with a ValueError in production while the
+		// suite stayed green. Keep this faithful.
+		$l->method('t')->willReturnCallback(
+			static fn (string $text, array $parameters = []): string => vsprintf($text, $parameters),
+		);
 
 		$factory = $this->createMock(IFactory::class);
 		$factory->method('get')->willReturn($l);
@@ -152,6 +158,15 @@ final class FailureClassifierTest extends TestCase {
 
 		self::assertStringContainsString('2.5.0', $hint);
 		self::assertStringContainsString('2.3.0', $hint);
+	}
+
+	public function testDowngradeGuardHintLeavesNoUnsubstitutedPlaceholder(): void {
+		// Regression: the hint used to be translated without its parameter array
+		// and substituted afterwards, which threw a ValueError inside L10NString
+		// on every downgrade refusal (CLI crash / HTTP 500 instead of 409).
+		$hint = $this->build()->downgradeGuardHint('2.5.0', '2.3.0');
+
+		self::assertDoesNotMatchRegularExpression('/%\d+\$s/', $hint);
 	}
 
 	public function testDowngradeGuardMessageIsNonEmpty(): void {
