@@ -15,7 +15,9 @@ use OCA\AppVersions\Service\Pat\PatDeeplinkBuilder;
 use OCA\AppVersions\Service\Pat\PatExpiryEvaluator;
 use OCA\AppVersions\Service\Pat\PatManager;
 use OCA\AppVersions\Service\Pat\PatValidator;
+use OCA\AppVersions\Service\AutoUpdate\AutoUpdateSettingsStore;
 use OCA\AppVersions\Service\Pin\PinStore;
+use OCA\AppVersions\Service\Policy\PolicyStore;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IGroupManager;
@@ -46,6 +48,8 @@ final class ApiTest extends TestCase {
 		?AuditEntryMapper $auditEntryMapper = null,
 		?PinStore $pinStore = null,
 		?IAppManager $appManager = null,
+		?PolicyStore $policyStore = null,
+		?AutoUpdateSettingsStore $autoUpdateSettingsStore = null,
 	): ApiController {
 		return new ApiController(
 			'app_versions',
@@ -65,6 +69,8 @@ final class ApiTest extends TestCase {
 			$pinStore ?? $this->createMock(PinStore::class),
 			$appManager ?? $this->createMock(IAppManager::class),
 			$this->fakeTimeFactory(),
+			$policyStore ?? $this->createMock(PolicyStore::class),
+			$autoUpdateSettingsStore ?? $this->createMock(AutoUpdateSettingsStore::class),
 		);
 	}
 
@@ -79,6 +85,8 @@ final class ApiTest extends TestCase {
 		?PinStore $pinStore = null,
 		?IAppManager $appManager = null,
 		string $uid = 'admin',
+		?PolicyStore $policyStore = null,
+		?AutoUpdateSettingsStore $autoUpdateSettingsStore = null,
 	): ApiController {
 		$user = $this->createMock(IUser::class);
 		$user->method('getUID')->willReturn($uid);
@@ -105,6 +113,8 @@ final class ApiTest extends TestCase {
 			$pinStore ?? $this->createMock(PinStore::class),
 			$appManager ?? $this->createMock(IAppManager::class),
 			$this->fakeTimeFactory(),
+			$policyStore ?? $this->createMock(PolicyStore::class),
+			$autoUpdateSettingsStore ?? $this->createMock(AutoUpdateSettingsStore::class),
 		);
 	}
 
@@ -421,6 +431,156 @@ final class ApiTest extends TestCase {
 		$this->assertSame('openregister', $pins[0]['appId']);
 		$this->assertSame('2.3.0', $pins[0]['version']);
 		$this->assertSame('2.5.0', $pins[0]['installedVersion']);
+	}
+
+	// --- Auto-update policy endpoints (see "Per-app update policy", "Global kill switch and window") ---
+
+	public function testPoliciesForbiddenForNonAdmin(): void {
+		$response = $this->buildController()->policies();
+
+		$this->assertSame(403, $response->getStatus());
+	}
+
+	public function testSetPolicyForbiddenForNonAdmin(): void {
+		$response = $this->buildController()->setPolicy('openregister');
+
+		$this->assertSame(403, $response->getStatus());
+	}
+
+	public function testClearPolicyForbiddenForNonAdmin(): void {
+		$response = $this->buildController()->clearPolicy('openregister');
+
+		$this->assertSame(403, $response->getStatus());
+	}
+
+	public function testUpdateAutoUpdateSettingsForbiddenForNonAdmin(): void {
+		$response = $this->buildController()->updateAutoUpdateSettings();
+
+		$this->assertSame(403, $response->getStatus());
+	}
+
+	public function testPoliciesListsEveryPersistedPolicyPlusGlobalSettings(): void {
+		$request = $this->createMock(IRequest::class);
+
+		$policyStore = $this->createMock(PolicyStore::class);
+		$policyStore->method('all')->willReturn([
+			'openregister' => new \OCA\AppVersions\Service\Policy\Policy('patch', 'alice', '2026-07-23T00:00:00+00:00'),
+		]);
+
+		$settingsStore = $this->createMock(AutoUpdateSettingsStore::class);
+		$settingsStore->method('isEnabled')->willReturn(true);
+		$settingsStore->method('getWindow')->willReturn('01:00-05:00');
+
+		$installer = $this->createMock(InstallerService::class);
+		$response = $this->buildAdminController($installer, $request, null, null, null, 'admin', $policyStore, $settingsStore)->policies();
+
+		$this->assertSame(200, $response->getStatus());
+		$data = $response->getData();
+		$this->assertCount(1, $data['policies']);
+		$this->assertSame('openregister', $data['policies'][0]['appId']);
+		$this->assertSame('patch', $data['policies'][0]['level']);
+		$this->assertTrue($data['autoUpdateEnabled']);
+		$this->assertSame('01:00-05:00', $data['autoUpdateWindow']);
+	}
+
+	public function testSetPolicyRejectsAnInvalidLevel(): void {
+		$request = $this->createMock(IRequest::class);
+		$request->method('getParam')->willReturnCallback(
+			static fn (string $name, mixed $default = null): mixed => match ($name) {
+				'level' => 'yolo',
+				default => $default,
+			}
+		);
+
+		$policyStore = $this->createMock(PolicyStore::class);
+		$policyStore->expects($this->never())->method('set');
+
+		$installer = $this->createMock(InstallerService::class);
+		$response = $this->buildAdminController($installer, $request, null, null, null, 'admin', $policyStore)->setPolicy('openregister');
+
+		$this->assertSame(400, $response->getStatus());
+	}
+
+	public function testSetPolicyRecordsLevelSetByAndSetAt(): void {
+		$request = $this->createMock(IRequest::class);
+		$request->method('getParam')->willReturnCallback(
+			static fn (string $name, mixed $default = null): mixed => match ($name) {
+				'level' => 'patch',
+				default => $default,
+			}
+		);
+
+		$policyStore = $this->createMock(PolicyStore::class);
+		$policyStore->expects($this->once())
+			->method('set')
+			->with(
+				'openregister',
+				$this->callback(function ($policy): bool {
+					return $policy->level === 'patch' && $policy->setBy === 'alice';
+				})
+			);
+
+		$installer = $this->createMock(InstallerService::class);
+		$response = $this->buildAdminController($installer, $request, null, null, null, 'alice', $policyStore)->setPolicy('openregister');
+
+		$this->assertSame(200, $response->getStatus());
+		$this->assertSame('patch', $response->getData()['policy']['level']);
+		$this->assertSame('alice', $response->getData()['policy']['setBy']);
+	}
+
+	public function testClearPolicyClearsTheStore(): void {
+		$request = $this->createMock(IRequest::class);
+
+		$policyStore = $this->createMock(PolicyStore::class);
+		$policyStore->expects($this->once())->method('clear')->with('openregister');
+
+		$installer = $this->createMock(InstallerService::class);
+		$response = $this->buildAdminController($installer, $request, null, null, null, 'admin', $policyStore)->clearPolicy('openregister');
+
+		$this->assertSame(200, $response->getStatus());
+		$this->assertTrue($response->getData()['cleared']);
+	}
+
+	public function testUpdateAutoUpdateSettingsRejectsAMalformedWindow(): void {
+		$request = $this->createMock(IRequest::class);
+		$request->method('getParam')->willReturnCallback(
+			static fn (string $name, mixed $default = null): mixed => match ($name) {
+				'window' => 'garbage',
+				default => $default,
+			}
+		);
+
+		$settingsStore = $this->createMock(AutoUpdateSettingsStore::class);
+		$settingsStore->expects($this->never())->method('setWindow');
+
+		$installer = $this->createMock(InstallerService::class);
+		$response = $this->buildAdminController($installer, $request, null, null, null, 'admin', null, $settingsStore)->updateAutoUpdateSettings();
+
+		$this->assertSame(400, $response->getStatus());
+	}
+
+	public function testUpdateAutoUpdateSettingsWritesEnabledAndWindow(): void {
+		$request = $this->createMock(IRequest::class);
+		$request->method('getParam')->willReturnCallback(
+			static fn (string $name, mixed $default = null): mixed => match ($name) {
+				'enabled' => '1',
+				'window' => '22:00-04:00',
+				default => $default,
+			}
+		);
+
+		$settingsStore = $this->createMock(AutoUpdateSettingsStore::class);
+		$settingsStore->expects($this->once())->method('setEnabled')->with(true);
+		$settingsStore->expects($this->once())->method('setWindow')->with('22:00-04:00');
+		$settingsStore->method('isEnabled')->willReturn(true);
+		$settingsStore->method('getWindow')->willReturn('22:00-04:00');
+
+		$installer = $this->createMock(InstallerService::class);
+		$response = $this->buildAdminController($installer, $request, null, null, null, 'admin', null, $settingsStore)->updateAutoUpdateSettings();
+
+		$this->assertSame(200, $response->getStatus());
+		$this->assertTrue($response->getData()['autoUpdateEnabled']);
+		$this->assertSame('22:00-04:00', $response->getData()['autoUpdateWindow']);
 	}
 
 	// --- dryRun decoupled from debug (see MODIFIED "Debug Mode") ---

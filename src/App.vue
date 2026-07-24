@@ -8,6 +8,7 @@ import ChangelogRangePanel from './components/ChangelogRangePanel.vue'
 import DiscoverPanel, { type PrefillBindPayload } from './components/DiscoverPanel.vue'
 import HistoryPanel from './components/HistoryPanel.vue'
 import PinDriftBanner from './components/PinDriftBanner.vue'
+import PolicySelector, { type PolicyLevel } from './components/PolicySelector.vue'
 import SourcesPanel from './components/SourcesPanel.vue'
 import TokensPanel from './components/TokensPanel.vue'
 import TrustedSourcesPanel from './components/TrustedSourcesPanel.vue'
@@ -16,6 +17,7 @@ import PinDialog from './dialogs/PinDialog.vue'
 import type { PinRecord } from './dialogs/PinDialog.vue'
 import PinOverrideDialog from './dialogs/PinOverrideDialog.vue'
 import ShaMismatchDialog from './dialogs/ShaMismatchDialog.vue'
+import { AUTO_UPDATE_WINDOW_DEFAULT, isValidAutoUpdateWindow } from './utils/autoUpdateWindow'
 import { buildChangelogRange } from './utils/changelog'
 import { orphanedMigrationsSummary, shouldOfferLkgRollback, type LkgRecord } from './utils/migrationSafety'
 import { compareVersions, parseVersionCore } from './utils/versionCompare'
@@ -139,6 +141,21 @@ const shaMismatchVersion = ref('')
 const shaMismatchExpectedSha = ref('')
 const shaMismatchActualSha = ref('')
 let shaMismatchResolve: ((accept: boolean) => void) | null = null
+
+// Auto-update policies (see "Per-app update policy", "Nightly policy
+// execution through the standard installer", "Global kill switch and
+// window"). Policies and the two global settings are fetched together from
+// GET /api/policies, mirroring the `pins`/`advisories` per-appId map pattern.
+type PolicyRecord = { appId: string, level: PolicyLevel, setBy: string, setAt: string }
+const policies = ref<Record<string, PolicyRecord>>({})
+const isSavingPolicy = ref(false)
+const autoUpdateEnabled = ref(false)
+const savedAutoUpdateEnabled = ref(false)
+const autoUpdateWindowInput = ref(AUTO_UPDATE_WINDOW_DEFAULT)
+const savedAutoUpdateWindow = ref(AUTO_UPDATE_WINDOW_DEFAULT)
+const isSavingAutoUpdateSettings = ref(false)
+const autoUpdateSettingsError = ref('')
+const autoUpdateSettingsNotice = ref('')
 
 // Admin-settings tabs: the existing apps→versions→install view plus the
 // source / token / trusted-source management panels, and the Discover tab
@@ -507,6 +524,102 @@ const pinTooltip = (pin: PinRecord | null): string => {
 		parts.push(pin.reason)
 	}
 	return parts.join(' — ')
+}
+
+// Auto-update policies + global settings, fetched once and kept in a
+// per-appId map, same pattern as pins/advisories; read-only badges here,
+// writes go through onPolicyChange()/saveAutoUpdateSettings().
+const loadPolicies = async (): Promise<void> => {
+	try {
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/policies')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
+		const payload = await unwrapOcsResponse<{ policies?: PolicyRecord[], autoUpdateEnabled?: boolean, autoUpdateWindow?: string }>(response)
+		const map: Record<string, PolicyRecord> = {}
+		for (const policy of payload.policies || []) {
+			map[policy.appId] = policy
+		}
+		policies.value = map
+		autoUpdateEnabled.value = Boolean(payload.autoUpdateEnabled)
+		savedAutoUpdateEnabled.value = autoUpdateEnabled.value
+		autoUpdateWindowInput.value = payload.autoUpdateWindow || AUTO_UPDATE_WINDOW_DEFAULT
+		savedAutoUpdateWindow.value = autoUpdateWindowInput.value
+	} catch {
+		// Non-fatal: the app list stays usable without policy badges.
+		policies.value = {}
+	}
+}
+
+const policyLevelFor = (appId: string): PolicyLevel => policies.value[appId]?.level ?? 'none'
+
+const onPolicyChange = async (appId: string, level: PolicyLevel): Promise<void> => {
+	if (isSavingPolicy.value) {
+		return
+	}
+	isSavingPolicy.value = true
+	errorMessage.value = ''
+	try {
+		await ensurePasswordConfirmation()
+		if (level === 'none') {
+			const response = await fetch(apiUrl(withOcsJson(`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(appId)}/policy`)), {
+				method: 'DELETE',
+				headers: { ...ocsHeaders, Accept: 'application/json', 'Content-Type': 'application/json' },
+			})
+			await unwrapOcsResponse(response)
+			const next = { ...policies.value }
+			delete next[appId]
+			policies.value = next
+		} else {
+			const response = await fetch(apiUrl(withOcsJson(`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(appId)}/policy`, { level })), {
+				method: 'PUT',
+				headers: { ...ocsHeaders, Accept: 'application/json', 'Content-Type': 'application/json' },
+				body: JSON.stringify({ level }),
+			})
+			const payload = await unwrapOcsResponse<{ appId: string, policy: PolicyRecord }>(response)
+			policies.value = { ...policies.value, [appId]: { ...payload.policy, appId } }
+		}
+	} catch (e) {
+		errorMessage.value = e instanceof Error ? e.message : t('app_versions', 'Could not update the auto-update policy.')
+	} finally {
+		isSavingPolicy.value = false
+	}
+}
+
+const isAutoUpdateWindowValid = computed(() => isValidAutoUpdateWindow(autoUpdateWindowInput.value))
+const isAutoUpdateSettingsDirty = computed(() => (
+	autoUpdateEnabled.value !== savedAutoUpdateEnabled.value
+	|| autoUpdateWindowInput.value.trim() !== savedAutoUpdateWindow.value
+))
+
+const saveAutoUpdateSettings = async (): Promise<void> => {
+	autoUpdateSettingsError.value = ''
+	autoUpdateSettingsNotice.value = ''
+	if (!isAutoUpdateWindowValid.value) {
+		autoUpdateSettingsError.value = t('app_versions', 'Window must be in HH:MM-HH:MM format.')
+		return
+	}
+
+	isSavingAutoUpdateSettings.value = true
+	try {
+		await ensurePasswordConfirmation()
+		const window = autoUpdateWindowInput.value.trim()
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/auto-update/settings', {
+			enabled: autoUpdateEnabled.value ? '1' : '0',
+			window,
+		})), {
+			method: 'PUT',
+			headers: { ...ocsHeaders, Accept: 'application/json', 'Content-Type': 'application/json' },
+			body: JSON.stringify({ enabled: autoUpdateEnabled.value, window }),
+		})
+		const payload = await unwrapOcsResponse<{ autoUpdateEnabled?: boolean, autoUpdateWindow?: string }>(response)
+		autoUpdateEnabled.value = Boolean(payload.autoUpdateEnabled)
+		autoUpdateWindowInput.value = payload.autoUpdateWindow || window
+		savedAutoUpdateEnabled.value = autoUpdateEnabled.value
+		savedAutoUpdateWindow.value = autoUpdateWindowInput.value
+		autoUpdateSettingsNotice.value = t('app_versions', 'Automatic update settings saved.')
+	} catch (e) {
+		autoUpdateSettingsError.value = e instanceof Error ? e.message : t('app_versions', 'Could not save automatic update settings.')
+	} finally {
+		isSavingAutoUpdateSettings.value = false
+	}
 }
 
 const openPinDialog = (appId: string, version: string): void => {
@@ -1288,9 +1401,11 @@ onMounted(async () => {
 	} finally {
 		isLoading.value = false
 	}
-	// Kick off advisory correlation and pin state after the list renders (non-blocking).
+	// Kick off advisory correlation, pin state, and auto-update policies after
+	// the list renders (non-blocking).
 	void loadAdvisories()
 	void loadPins()
+	void loadPolicies()
 })
 
 watch([safeModeEnabled, installedVersion, selectedVersion], () => {
@@ -1436,6 +1551,48 @@ watch(dryRunEnabled, () => {
 									<span>Show install debug output</span>
 								</label>
 							</div>
+							<div :class="$style.autoUpdateSettings" data-testid="auto-update-settings">
+								<h3>{{ t('app_versions', 'Automatic updates') }}</h3>
+								<p :class="$style.hint">
+									{{ t('app_versions', 'When enabled, App Versions installs qualifying newer versions per app policy during the nightly window, honoring pins and reporting every outcome.') }}
+								</p>
+								<label :class="$style.safeMode">
+									<input
+										v-model="autoUpdateEnabled"
+										type="checkbox"
+										:class="$style.safeModeCheckbox"
+										data-testid="auto-update-kill-switch"
+										:disabled="isSavingAutoUpdateSettings">
+									<span>{{ t('app_versions', 'Enable automatic updates') }}</span>
+								</label>
+								<label :class="$style.filterField" for="auto-update-window">
+									<span :class="$style.filterFieldLabel">{{ t('app_versions', 'Update window (HH:MM-HH:MM, server time)') }}</span>
+									<input
+										id="auto-update-window"
+										v-model="autoUpdateWindowInput"
+										type="text"
+										data-testid="auto-update-window"
+										placeholder="01:00-05:00"
+										:class="$style.appFilterInput"
+										:disabled="isSavingAutoUpdateSettings">
+								</label>
+								<p v-if="autoUpdateWindowInput.trim() !== '' && !isAutoUpdateWindowValid" :class="$style.autoUpdateWindowError" data-testid="auto-update-window-error">
+									{{ t('app_versions', 'Use the HH:MM-HH:MM format, e.g. 01:00-05:00.') }}
+								</p>
+								<p v-if="autoUpdateSettingsError" :class="$style.autoUpdateWindowError">
+									{{ autoUpdateSettingsError }}
+								</p>
+								<p v-if="autoUpdateSettingsNotice" :class="$style.autoUpdateSettingsNotice">
+									{{ autoUpdateSettingsNotice }}
+								</p>
+								<NcButton
+									type="primary"
+									data-testid="auto-update-settings-save"
+									:disabled="isSavingAutoUpdateSettings || !isAutoUpdateSettingsDirty || !isAutoUpdateWindowValid"
+									@click="saveAutoUpdateSettings">
+									{{ t('app_versions', 'Save') }}
+								</NcButton>
+							</div>
 						</div>
 						<div :class="[$style.contentRow, { [$style.contentRowSplit]: hasSplitLayout }]">
 							<div :class="[$style.leftColumn, { [$style.leftColumnFull]: !hasSplitLayout }]">
@@ -1526,6 +1683,13 @@ watch(dryRunEnabled, () => {
 													:class="[$style.appCardWarning, { [$style.appCardWarningBlocking]: app.manageable === false }]">
 													⚠ {{ app.warning }}
 												</p>
+												<PolicySelector
+													v-if="!app.isCore"
+													:app-id="app.id"
+													:level="policyLevelFor(app.id)"
+													:auto-update-enabled="autoUpdateEnabled"
+													:disabled="isSavingPolicy"
+													@change="onPolicyChange" />
 											</div>
 											<button
 												v-if="!app.isCore"
@@ -1891,6 +2055,36 @@ watch(dryRunEnabled, () => {
 	flex-direction: column;
 	align-items: flex-start;
 	gap: 12px;
+}
+
+.autoUpdateSettings {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 10px;
+	max-width: 420px;
+}
+
+.autoUpdateSettings h3 {
+	margin: 0;
+}
+
+.autoUpdateSettings .hint {
+	color: var(--color-text-maxcontrast);
+	font-size: 13px;
+	margin: 0;
+}
+
+.autoUpdateWindowError {
+	color: var(--color-error-text, #c9291b);
+	font-size: 13px;
+	margin: 0;
+}
+
+.autoUpdateSettingsNotice {
+	color: var(--color-success-text, #2d7d46);
+	font-size: 13px;
+	margin: 0;
 }
 
 .selectSection {
