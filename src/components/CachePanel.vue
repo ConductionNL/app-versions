@@ -1,0 +1,124 @@
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { t } from '@nextcloud/l10n'
+import NcButton from '@nextcloud/vue/components/NcButton'
+import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
+import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
+import { ocsGet, ocsWrite } from '../ocs'
+
+type CacheApp = { appId: string, versions: string[], sizeBytes: number }
+type CacheSummary = { apps: CacheApp[], totalSizeBytes: number, keep: number }
+
+const CACHE = '/ocs/v2.php/apps/app_versions/api/cache'
+
+const summary = ref<CacheSummary>({ apps: [], totalSizeBytes: 0, keep: 3 })
+const loading = ref(false)
+const clearing = ref<string | null>(null)
+const error = ref('')
+
+const hasEntries = computed(() => summary.value.apps.length > 0)
+
+const formatSize = (bytes: number): string => {
+	if (bytes <= 0) {
+		return '0 B'
+	}
+	const units = ['B', 'KB', 'MB', 'GB']
+	let value = bytes
+	let unitIndex = 0
+	while (value >= 1024 && unitIndex < units.length - 1) {
+		value /= 1024
+		unitIndex += 1
+	}
+	return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
+}
+
+const loadSummary = async (): Promise<void> => {
+	loading.value = true
+	error.value = ''
+	try {
+		const { payload, error: apiError } = await ocsGet<CacheSummary>(CACHE)
+		if (apiError) {
+			error.value = apiError
+			return
+		}
+		summary.value = payload
+	} catch (e) {
+		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not load the artifact cache summary.')
+	} finally {
+		loading.value = false
+	}
+}
+
+const clearCache = async (appId?: string): Promise<void> => {
+	error.value = ''
+	clearing.value = appId ?? '*'
+	try {
+		const path = appId ? `${CACHE}?appId=${encodeURIComponent(appId)}` : CACHE
+		const { payload, error: apiError } = await ocsWrite<CacheSummary>('DELETE', path)
+		if (apiError) {
+			error.value = apiError
+			return
+		}
+		summary.value = payload
+	} catch (e) {
+		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not clear the artifact cache.')
+	} finally {
+		clearing.value = null
+	}
+}
+
+onMounted(loadSummary)
+</script>
+
+<template>
+	<div :class="$style.panel">
+		<h3>{{ t('app_versions', 'Release artifact cache') }}</h3>
+		<p :class="$style.hint">
+			{{ t('app_versions', 'Verified archives are kept locally after a successful install so rollback still works if the source deletes or moves the release. At most {keep} versions per app are retained; installs re-verify the cached artifact before use.', { keep: summary.keep }) }}
+		</p>
+
+		<NcNoteCard v-if="error" type="error">
+			{{ error }}
+		</NcNoteCard>
+
+		<NcLoadingIcon v-if="loading" :size="20" />
+
+		<template v-else>
+			<p :class="$style.total">
+				{{ t('app_versions', 'Total cache size: {size}', { size: formatSize(summary.totalSizeBytes) }) }}
+			</p>
+
+			<ul :class="$style.list">
+				<li v-for="app in summary.apps" :key="app.appId" :class="$style.row">
+					<div :class="$style.rowInfo">
+						<code>{{ app.appId }}</code>
+						<span :class="$style.rowMeta">
+							{{ t('app_versions', '{count} cached — {size}', { count: app.versions.length, size: formatSize(app.sizeBytes) }) }}
+						</span>
+					</div>
+					<NcButton type="tertiary" :disabled="clearing !== null" @click="clearCache(app.appId)">
+						{{ clearing === app.appId ? t('app_versions', 'Clearing…') : t('app_versions', 'Clear') }}
+					</NcButton>
+				</li>
+				<li v-if="!hasEntries" :class="$style.empty">
+					{{ t('app_versions', 'Nothing cached yet.') }}
+				</li>
+			</ul>
+
+			<NcButton type="secondary" :disabled="!hasEntries || clearing !== null" @click="clearCache()">
+				{{ clearing === '*' ? t('app_versions', 'Clearing…') : t('app_versions', 'Clear entire cache') }}
+			</NcButton>
+		</template>
+	</div>
+</template>
+
+<style module>
+.panel { display: flex; flex-direction: column; gap: 12px; }
+.hint { color: var(--color-text-maxcontrast); font-size: 13px; margin: 0; }
+.total { font-weight: 600; margin: 0; }
+.list { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--color-border); }
+.rowInfo { display: flex; flex-direction: column; gap: 2px; }
+.rowMeta { color: var(--color-text-maxcontrast); font-size: 12px; }
+.empty { color: var(--color-text-maxcontrast); font-style: italic; }
+</style>

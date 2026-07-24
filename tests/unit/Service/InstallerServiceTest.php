@@ -6,6 +6,7 @@ namespace OCA\AppVersions\Tests\Unit\Service;
 
 use Exception;
 use OCA\AppVersions\AppInfo\Application;
+use OCA\AppVersions\Service\Cache\ArtifactCache;
 use OCA\AppVersions\Service\ExternalReleaseInstallerService;
 use OCA\AppVersions\Service\Installer\EnvironmentCheck;
 use OCA\AppVersions\Service\Installer\FailureClassifier;
@@ -45,6 +46,7 @@ final class InstallerServiceTest extends TestCase {
 	private IUserSession&MockObject $userSession;
 	private ITimeFactory&MockObject $timeFactory;
 	private LkgStore&MockObject $lkgStore;
+	private ArtifactCache&MockObject $artifactCache;
 	private FailureClassifier $failureClassifier;
 
 	protected function setUp(): void {
@@ -60,6 +62,7 @@ final class InstallerServiceTest extends TestCase {
 		$this->environmentCheck = $this->createMock(EnvironmentCheck::class);
 		$this->pinStore = $this->createMock(PinStore::class);
 		$this->lkgStore = $this->createMock(LkgStore::class);
+		$this->artifactCache = $this->createMock(ArtifactCache::class);
 
 		$user = $this->createMock(IUser::class);
 		$user->method('getUID')->willReturn('admin');
@@ -101,6 +104,7 @@ final class InstallerServiceTest extends TestCase {
 			$this->userSession,
 			$this->timeFactory,
 			$this->lkgStore,
+			$this->artifactCache,
 		);
 	}
 

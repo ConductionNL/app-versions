@@ -9,6 +9,7 @@ use OCA\AppVersions\Db\AuditEntry;
 use OCA\AppVersions\Db\AuditEntryMapper;
 use OCA\AppVersions\Db\PatMapper;
 use OCA\AppVersions\Service\Advisory\AdvisoryService;
+use OCA\AppVersions\Service\Cache\ArtifactCache;
 use OCA\AppVersions\Service\Discovery\DiscoveryAggregator;
 use OCA\AppVersions\Service\InstallerService;
 use OCA\AppVersions\Service\Pat\PatDeeplinkBuilder;
@@ -50,6 +51,7 @@ final class ApiTest extends TestCase {
 		?IAppManager $appManager = null,
 		?PolicyStore $policyStore = null,
 		?AutoUpdateSettingsStore $autoUpdateSettingsStore = null,
+		?ArtifactCache $artifactCache = null,
 	): ApiController {
 		return new ApiController(
 			'app_versions',
@@ -71,6 +73,7 @@ final class ApiTest extends TestCase {
 			$this->fakeTimeFactory(),
 			$policyStore ?? $this->createMock(PolicyStore::class),
 			$autoUpdateSettingsStore ?? $this->createMock(AutoUpdateSettingsStore::class),
+			$artifactCache ?? $this->createMock(ArtifactCache::class),
 		);
 	}
 
@@ -87,6 +90,7 @@ final class ApiTest extends TestCase {
 		string $uid = 'admin',
 		?PolicyStore $policyStore = null,
 		?AutoUpdateSettingsStore $autoUpdateSettingsStore = null,
+		?ArtifactCache $artifactCache = null,
 	): ApiController {
 		$user = $this->createMock(IUser::class);
 		$user->method('getUID')->willReturn($uid);
@@ -115,6 +119,7 @@ final class ApiTest extends TestCase {
 			$this->fakeTimeFactory(),
 			$policyStore ?? $this->createMock(PolicyStore::class),
 			$autoUpdateSettingsStore ?? $this->createMock(AutoUpdateSettingsStore::class),
+			$artifactCache ?? $this->createMock(ArtifactCache::class),
 		);
 	}
 

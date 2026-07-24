@@ -15,6 +15,7 @@ namespace OCA\AppVersions\Service;
 use Exception;
 use InvalidArgumentException;
 use OCA\AppVersions\AppInfo\Application;
+use OCA\AppVersions\Service\Cache\ArtifactCache;
 use OCA\AppVersions\Service\Installer\EnvironmentCheck;
 use OCA\AppVersions\Service\Installer\FailureClassifier;
 use OCA\AppVersions\Service\Installer\InstallFailure;
@@ -68,6 +69,7 @@ class InstallerService {
 		private IUserSession $userSession,
 		private ITimeFactory $timeFactory,
 		private LkgStore $lkgStore,
+		private ArtifactCache $artifactCache,
 	) {
 	}
 
@@ -152,7 +154,8 @@ class InstallerService {
 	 * @spec openspec/specs/version-management/spec.md
 	 * @spec openspec/specs/changelog-visibility/spec.md
 	 * @spec openspec/specs/external-sources/spec.md
-	 * @return array{installedVersion: ?string, availableVersions: list<array{version:string, changelog:?string, recordedSha:?string}>, versions: list<array{version:string, changelog:?string, recordedSha:?string}>, source: string, sourceId: string, statusCode: int, hasError: bool, error?: string}
+	 * @spec openspec/specs/artifact-cache/spec.md
+	 * @return array{installedVersion: ?string, availableVersions: list<array{version:string, changelog:?string, recordedSha:?string, cachedOffline:bool}>, versions: list<array{version:string, changelog:?string, recordedSha:?string, cachedOffline:bool}>, source: string, sourceId: string, statusCode: int, hasError: bool, error?: string}
 	 */
 	public function getAppVersions(string $appId, ?string $sourceOverride = null): array {
 		$appId = trim($appId);
@@ -200,6 +203,7 @@ class InstallerService {
 
 		$versions = $this->applyChangelogTruncation($result['versions']);
 		$versions = $this->applyRecordedSha($versions, $binding);
+		$versions = $this->applyCachedOffline($versions, $appId);
 
 		$envelope = [
 			'installedVersion' => $installedVersion,
@@ -269,6 +273,28 @@ class InstallerService {
 	}
 
 	/**
+	 * Stamps `cachedOffline` on each version entry from a single cached-version
+	 * query for `$appId` (no per-version IO); see "Cache visibility and
+	 * management".
+	 *
+	 * @spec openspec/specs/artifact-cache/spec.md
+	 * @param list<array<string, mixed>> $versions
+	 * @return list<array<string, mixed>>
+	 */
+	private function applyCachedOffline(array $versions, string $appId): array {
+		$cachedVersions = array_flip($this->artifactCache->cachedVersionsFor($appId));
+
+		return array_map(
+			static function (array $entry) use ($cachedVersions): array {
+				$entry['cachedOffline'] = isset($cachedVersions[$entry['version']]);
+
+				return $entry;
+			},
+			$versions
+		);
+	}
+
+	/**
 	 * Installs a target version via the matching installer and persists the
 	 * binding on success; see "Install Specific Version", "Source binding",
 	 * and "Pins are enforced on App Versions' own install path".
@@ -301,6 +327,7 @@ class InstallerService {
 	 * @spec openspec/specs/external-sources/spec.md
 	 * @spec openspec/specs/migration-safety/spec.md
 	 * @spec openspec/specs/cli-commands/spec.md
+	 * @spec openspec/specs/artifact-cache/spec.md
 	 * @return array{statusCode:int, payload:array<string, mixed>}
 	 */
 	public function installAppVersion(
@@ -547,6 +574,10 @@ class InstallerService {
 				'dryRun' => $dryRun,
 				'installStatus' => $result['status'] ?? 'unknown',
 				'sourceId' => $binding->getId(),
+				// See "Cached fallback with full re-verification" — the outcome
+				// states when the download step fell back to a locally cached
+				// artifact instead of the source.
+				'servedFromCache' => (bool)($result['servedFromCache'] ?? false),
 			];
 			if ($integrityWarning !== null) {
 				$payload['integrityWarning'] = $integrityWarning;
