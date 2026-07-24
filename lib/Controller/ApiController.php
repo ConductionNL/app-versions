@@ -17,6 +17,8 @@ use OCA\AppVersions\Db\AuditEntryMapper;
 use OCA\AppVersions\Db\Pat;
 use OCA\AppVersions\Db\PatMapper;
 use OCA\AppVersions\Service\Advisory\AdvisoryService;
+use OCA\AppVersions\Service\AutoUpdate\AutoUpdateSettingsStore;
+use OCA\AppVersions\Service\AutoUpdate\AutoUpdateWindow;
 use OCA\AppVersions\Service\Discovery\DiscoveryAggregator;
 use OCA\AppVersions\Service\InstallerService;
 use OCA\AppVersions\Service\Pat\PatDeeplinkBuilder;
@@ -25,6 +27,8 @@ use OCA\AppVersions\Service\Pat\PatManager;
 use OCA\AppVersions\Service\Pat\PatValidator;
 use OCA\AppVersions\Service\Pin\Pin;
 use OCA\AppVersions\Service\Pin\PinStore;
+use OCA\AppVersions\Service\Policy\Policy;
+use OCA\AppVersions\Service\Policy\PolicyStore;
 use OCA\AppVersions\Service\Source\SourceBinding;
 use OCA\AppVersions\Service\Source\UntrustedSourceException;
 use OCP\App\IAppManager;
@@ -62,6 +66,8 @@ class ApiController extends OCSController {
 		private PinStore $pinStore,
 		private IAppManager $appManager,
 		private ITimeFactory $timeFactory,
+		private PolicyStore $policyStore,
+		private AutoUpdateSettingsStore $autoUpdateSettingsStore,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -489,6 +495,123 @@ class ApiController extends OCSController {
 		$this->pinStore->clear($appId, $user->getUID());
 
 		return new DataResponse(['appId' => $appId, 'unpinned' => true]);
+	}
+
+	/**
+	 * Lists every persisted per-app auto-update policy plus the global
+	 * kill switch / window; see "Per-app update policy" and "Global kill
+	 * switch and window".
+	 *
+	 * @spec openspec/specs/auto-update-policies/spec.md
+	 */
+	#[ApiRoute(verb: 'GET', url: '/api/policies')]
+	public function policies(): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$policies = [];
+		foreach ($this->policyStore->all() as $appId => $policy) {
+			$policies[] = $policy->toArray() + ['appId' => $appId];
+		}
+
+		return new DataResponse([
+			'policies' => $policies,
+			'autoUpdateEnabled' => $this->autoUpdateSettingsStore->isEnabled(),
+			'autoUpdateWindow' => $this->autoUpdateSettingsStore->getWindow(),
+		]);
+	}
+
+	/**
+	 * Sets an app's auto-update policy level (password-confirmed); rejects an
+	 * unknown level with 400; see "Per-app update policy".
+	 *
+	 * @spec openspec/specs/auto-update-policies/spec.md
+	 */
+	#[PasswordConfirmationRequired(strict: false)]
+	#[ApiRoute(verb: 'PUT', url: '/api/app/{appId}/policy')]
+	public function setPolicy(string $appId): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$user = $this->userSession->getUser();
+		if ($user === null) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$level = $this->stringParam('level', '');
+		if (!Policy::isValidLevel($level)) {
+			return new DataResponse(
+				['message' => 'level must be one of: ' . implode(', ', Policy::VALID_LEVELS) . '.'],
+				Http::STATUS_BAD_REQUEST
+			);
+		}
+
+		$policy = new Policy(
+			$level,
+			$user->getUID(),
+			$this->timeFactory->getDateTime('now', new \DateTimeZone('UTC'))->format(\DateTimeInterface::ATOM),
+		);
+		$this->policyStore->set($appId, $policy);
+
+		return new DataResponse(['appId' => $appId, 'policy' => $policy->toArray()]);
+	}
+
+	/**
+	 * Clears an app's auto-update policy (password-confirmed); a no-op when
+	 * none exists; see "Per-app update policy".
+	 *
+	 * @spec openspec/specs/auto-update-policies/spec.md
+	 */
+	#[PasswordConfirmationRequired(strict: false)]
+	#[ApiRoute(verb: 'DELETE', url: '/api/app/{appId}/policy')]
+	public function clearPolicy(string $appId): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		$this->policyStore->clear($appId);
+
+		return new DataResponse(['appId' => $appId, 'cleared' => true]);
+	}
+
+	/**
+	 * Updates the global auto-update kill switch and/or maintenance window
+	 * (password-confirmed); rejects a malformed window with 400; see "Global
+	 * kill switch and window".
+	 *
+	 * @spec openspec/specs/auto-update-policies/spec.md
+	 */
+	#[PasswordConfirmationRequired(strict: false)]
+	#[ApiRoute(verb: 'PUT', url: '/api/auto-update/settings')]
+	public function updateAutoUpdateSettings(): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		/** @var mixed $enabledParam */
+		$enabledParam = $this->request->getParam('enabled');
+		$windowParam = $this->stringParam('window', '');
+
+		if ($windowParam !== '' && !AutoUpdateWindow::isValid($windowParam)) {
+			return new DataResponse(
+				['message' => 'window must be in HH:MM-HH:MM format.'],
+				Http::STATUS_BAD_REQUEST
+			);
+		}
+
+		if ($enabledParam !== null) {
+			$this->autoUpdateSettingsStore->setEnabled($this->readBinaryBool($enabledParam, $this->autoUpdateSettingsStore->isEnabled()));
+		}
+		if ($windowParam !== '') {
+			$this->autoUpdateSettingsStore->setWindow($windowParam);
+		}
+
+		return new DataResponse([
+			'autoUpdateEnabled' => $this->autoUpdateSettingsStore->isEnabled(),
+			'autoUpdateWindow' => $this->autoUpdateSettingsStore->getWindow(),
+		]);
 	}
 
 	/**

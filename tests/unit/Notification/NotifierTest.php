@@ -82,6 +82,35 @@ final class NotifierTest extends TestCase {
 		$this->assertSame($notification, $result);
 	}
 
+	public function testAutoUpdateSuccessIsParsed(): void {
+		$notifier = new Notifier($this->l10nFactory());
+
+		$notification = $this->notification('auto_update_success', [
+			'app' => 'openregister',
+			'fromVersion' => '2.3.0',
+			'toVersion' => '2.3.4',
+		]);
+
+		$result = $notifier->prepare($notification, 'en');
+
+		$this->assertSame($notification, $result);
+	}
+
+	public function testAutoUpdateFailureIsParsed(): void {
+		$notifier = new Notifier($this->l10nFactory());
+
+		$notification = $this->notification('auto_update_failure', [
+			'app' => 'openregister',
+			'targetVersion' => '2.3.4',
+			'category' => 'checksum_mismatch',
+			'hint' => 'The downloaded archive failed its integrity check.',
+		]);
+
+		$result = $notifier->prepare($notification, 'en');
+
+		$this->assertSame($notification, $result);
+	}
+
 	public function testUnknownSubjectThrows(): void {
 		$notifier = new Notifier($this->l10nFactory());
 

@@ -20,10 +20,11 @@ use OCP\Notification\UnknownNotificationException;
 
 /**
  * Renders App Versions notifications (the `pinned_to_vulnerable` advisory
- * notice, the `pat_expiring` / `pat_expired` token-expiry notices, and the
- * `pin_drift` version-pinning notice) into localized subject/message text
- * for the notifications app. Read-only presentation — it never changes a
- * version, a token, or a pin.
+ * notice, the `pat_expiring` / `pat_expired` token-expiry notices, the
+ * `pin_drift` version-pinning notice, and the `auto_update_success` /
+ * `auto_update_failure` auto-update outcome notices) into localized
+ * subject/message text for the notifications app. Read-only presentation —
+ * it never changes a version, a token, or a pin.
  *
  * @psalm-api
  */
@@ -43,11 +44,14 @@ class Notifier implements INotifier {
 
 	/**
 	 * Renders the localized subject/message for a notification; see
-	 * "PAT expiry warnings" for the `pat_expiring` / `pat_expired` subjects
-	 * and "Drift response — notify and offer re-pin" for `pin_drift`.
+	 * "PAT expiry warnings" for the `pat_expiring` / `pat_expired` subjects,
+	 * "Drift response — notify and offer re-pin" for `pin_drift`, and
+	 * "Every auto-update outcome is reported" for `auto_update_success` /
+	 * `auto_update_failure`.
 	 *
 	 * @spec openspec/specs/pat-management/spec.md
 	 * @spec openspec/specs/version-pinning/spec.md
+	 * @spec openspec/specs/auto-update-policies/spec.md
 	 */
 	public function prepare(INotification $notification, string $languageCode): INotification {
 		if ($notification->getApp() !== Application::APP_ID) {
@@ -123,6 +127,42 @@ class Notifier implements INotifier {
 				)
 				->setParsedMessage(
 					$l->t('"%1$s" (%2$s) has expired. Create a new token to keep private installs and discovery working.', [$label, $forge])
+				);
+
+			return $notification;
+		}
+
+		if ($notification->getSubject() === 'auto_update_success') {
+			$parameters = $notification->getSubjectParameters();
+			$app = is_string($parameters['app'] ?? null) ? $parameters['app'] : '';
+			$fromVersion = is_string($parameters['fromVersion'] ?? null) ? $parameters['fromVersion'] : '';
+			$toVersion = is_string($parameters['toVersion'] ?? null) ? $parameters['toVersion'] : '';
+
+			$notification
+				->setParsedSubject(
+					$l->t('App automatically updated')
+				)
+				->setParsedMessage(
+					$fromVersion !== ''
+						? $l->t('%1$s was automatically updated from %2$s to %3$s.', [$app, $fromVersion, $toVersion])
+						: $l->t('%1$s was automatically installed at %2$s.', [$app, $toVersion])
+				);
+
+			return $notification;
+		}
+
+		if ($notification->getSubject() === 'auto_update_failure') {
+			$parameters = $notification->getSubjectParameters();
+			$app = is_string($parameters['app'] ?? null) ? $parameters['app'] : '';
+			$targetVersion = is_string($parameters['targetVersion'] ?? null) ? $parameters['targetVersion'] : '';
+			$hint = is_string($parameters['hint'] ?? null) ? $parameters['hint'] : '';
+
+			$notification
+				->setParsedSubject(
+					$l->t('Automatic update failed')
+				)
+				->setParsedMessage(
+					$l->t('%1$s could not be automatically updated to %2$s. %3$s', [$app, $targetVersion, $hint])
 				);
 
 			return $notification;
