@@ -109,6 +109,7 @@ final class InstallerServiceShaPinningTest extends TestCase {
 			$this->createMock(PinStore::class),
 			$this->userSession,
 			$this->createMock(ITimeFactory::class),
+			$this->createMock(\OCA\AppVersions\Service\Lkg\LkgStore::class),
 		);
 	}
 

@@ -70,6 +70,163 @@
         }
     },
     "paths": {
+        "/ocs/v2.php/apps/app_versions/api/apps": {
+            "get": {
+                "operationId": "api-apps",
+                "summary": "Lists installed apps for the admin cards, including each app's last-known-good version record (admin-only)",
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Installed apps enriched with card metadata, installed version, and last-known-good record",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "ocs"
+                                    ],
+                                    "properties": {
+                                        "ocs": {
+                                            "type": "object",
+                                            "required": [
+                                                "meta",
+                                                "data"
+                                            ],
+                                            "properties": {
+                                                "meta": {
+                                                    "$ref": "#/components/schemas/OCSMeta"
+                                                },
+                                                "data": {
+                                                    "type": "object",
+                                                    "required": [
+                                                        "apps"
+                                                    ],
+                                                    "properties": {
+                                                        "apps": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                    "id": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "label": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "description": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "summary": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "preview": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "isCore": {
+                                                                        "type": "boolean"
+                                                                    },
+                                                                    "isShipped": {
+                                                                        "type": "boolean"
+                                                                    },
+                                                                    "boundSourceId": {
+                                                                        "type": "string",
+                                                                        "nullable": true
+                                                                    },
+                                                                    "manageable": {
+                                                                        "type": "boolean"
+                                                                    },
+                                                                    "warning": {
+                                                                        "type": "string",
+                                                                        "nullable": true
+                                                                    },
+                                                                    "installedVersion": {
+                                                                        "type": "string",
+                                                                        "nullable": true,
+                                                                        "description": "Live installed version of the app (null when unknown)"
+                                                                    },
+                                                                    "lkg": {
+                                                                        "type": "object",
+                                                                        "nullable": true,
+                                                                        "description": "Last-known-good version record — the last version that finalized cleanly through App Versions; null when none is recorded yet. See \"Last-known-good version record\".",
+                                                                        "properties": {
+                                                                            "version": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "recordedAt": {
+                                                                                "type": "string",
+                                                                                "description": "ISO-8601 UTC timestamp"
+                                                                            },
+                                                                            "sourceId": {
+                                                                                "type": "string",
+                                                                                "nullable": true
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Current user is not an admin",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "ocs"
+                                    ],
+                                    "properties": {
+                                        "ocs": {
+                                            "type": "object",
+                                            "required": [
+                                                "meta",
+                                                "data"
+                                            ],
+                                            "properties": {
+                                                "meta": {
+                                                    "$ref": "#/components/schemas/OCSMeta"
+                                                },
+                                                "data": {}
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/ocs/v2.php/apps/app_versions/api/app/{appId}/versions": {
             "get": {
                 "operationId": "api-app-versions",

@@ -20,6 +20,7 @@ use OCA\AppVersions\Service\Audit\AuditLogger;
 use OCA\AppVersions\Service\Installer\FailureClassifier;
 use OCA\AppVersions\Service\Installer\InstallFailure;
 use OCA\AppVersions\Service\Installer\InstallFinalizer;
+use OCA\AppVersions\Service\Installer\MigrationDiffer;
 use OCA\AppVersions\Service\Installer\ShaMismatchException;
 use OCA\AppVersions\Service\Pat\PatManager;
 use OCA\AppVersions\Service\Pat\PatResolver;
@@ -75,6 +76,7 @@ class ExternalReleaseInstallerService {
 		private PatManager $patManager,
 		private IUserSession $userSession,
 		private AuditLogger $auditLogger,
+		private MigrationDiffer $migrationDiffer,
 	) {
 	}
 
@@ -92,11 +94,12 @@ class ExternalReleaseInstallerService {
 	 * install", and "Recorded SHA-256 enforced on reinstall".
 	 *
 	 * @spec openspec/specs/external-sources/spec.md
+	 * @spec openspec/specs/migration-safety/spec.md
 	 * @param array<string, mixed> $release
 	 * @param bool $acceptNewSha Single-request bypass of the recorded-SHA-256
 	 *                           check; on success the recorded digest is replaced (password-confirmed
 	 *                           at the API layer, warning-logged and audited here).
-	 * @return array{status: string, installedVersionBefore: ?string, installedApp?: string, integrityWarning?: ?string, dryRun: bool, debug: list<array{stage: string, data: mixed}>, binding: SourceBinding, recordedShaMatched: bool}
+	 * @return array{status: string, installedVersionBefore: ?string, installedApp?: string, integrityWarning?: ?string, dryRun: bool, debug: list<array{stage: string, data: mixed}>, binding: SourceBinding, recordedShaMatched: bool, orphanedMigrations?: list<string>|null}
 	 * @throws Exception
 	 * @throws ShaMismatchException
 	 */
@@ -206,6 +209,19 @@ class ExternalReleaseInstallerService {
 				throw new Exception('Could not resolve app install folder.');
 			}
 
+			// Migration diff (downgrade only, acknowledged or dry-run): compare
+			// the installed copy's migration steps against the just-extracted
+			// target archive before any file swap — see "Migration diff on
+			// downgrade". A diff failure degrades to `null` (generic warning);
+			// it never blocks the downgrade itself.
+			$isDowngrade = $installedVersion !== '' && version_compare($version, $installedVersion, '<');
+			$orphanedMigrations = $isDowngrade
+				? $this->migrationDiffer->diff($previousPath, $archivePath)
+				: null;
+			if ($isDowngrade) {
+				$this->addDebug('migration-diff', ['orphanedMigrations' => $orphanedMigrations]);
+			}
+
 			if ($dryRun) {
 				$this->addDebug('dry-run-skip-filesystem', ['destination' => $destination]);
 
@@ -217,7 +233,7 @@ class ExternalReleaseInstallerService {
 					'debug' => $this->debug,
 					'binding' => $binding,
 					'recordedShaMatched' => $recordedShaMatched,
-				];
+				] + ($isDowngrade ? ['orphanedMigrations' => $orphanedMigrations] : []);
 			}
 
 			$backupDestination = null;
@@ -262,7 +278,7 @@ class ExternalReleaseInstallerService {
 			// Keep the backup until it succeeds; on failure restore the previous
 			// files and report installed-but-broken.
 			try {
-				$installedApp = $this->finalizer->finalize($destination, $info, $enabled);
+				$installedApp = $this->finalizer->finalize($destination, $info, $enabled, null, $binding->getId());
 			} catch (Exception $finalizeError) {
 				$restoreState = $backupDestination === null
 					? FailureClassifier::RESTORE_NONE
@@ -312,7 +328,7 @@ class ExternalReleaseInstallerService {
 				'debug' => $this->debug,
 				'binding' => $updatedBinding,
 				'recordedShaMatched' => $recordedShaMatched,
-			];
+			] + ($isDowngrade ? ['orphanedMigrations' => $orphanedMigrations] : []);
 		} catch (\Throwable $error) {
 			// Best-effort audit write on the failure path, before the exception
 			// propagates up to the caller's error mapping; see "Failed install

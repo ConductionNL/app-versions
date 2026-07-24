@@ -10,6 +10,7 @@ use OCA\AppVersions\Service\Installer\EnvironmentCheck;
 use OCA\AppVersions\Service\Installer\FailureClassifier;
 use OCA\AppVersions\Service\Installer\InstallFailure;
 use OCA\AppVersions\Service\InstallerService;
+use OCA\AppVersions\Service\Lkg\LkgStore;
 use OCA\AppVersions\Service\Pin\Pin;
 use OCA\AppVersions\Service\Pin\PinStore;
 use OCA\AppVersions\Service\SelectedReleaseInstallerService;
@@ -42,6 +43,7 @@ final class InstallerServiceTest extends TestCase {
 	private PinStore&MockObject $pinStore;
 	private IUserSession&MockObject $userSession;
 	private ITimeFactory&MockObject $timeFactory;
+	private LkgStore&MockObject $lkgStore;
 	private FailureClassifier $failureClassifier;
 
 	protected function setUp(): void {
@@ -56,6 +58,7 @@ final class InstallerServiceTest extends TestCase {
 		$this->externalInstaller = $this->createMock(ExternalReleaseInstallerService::class);
 		$this->environmentCheck = $this->createMock(EnvironmentCheck::class);
 		$this->pinStore = $this->createMock(PinStore::class);
+		$this->lkgStore = $this->createMock(LkgStore::class);
 
 		$user = $this->createMock(IUser::class);
 		$user->method('getUID')->willReturn('admin');
@@ -96,6 +99,7 @@ final class InstallerServiceTest extends TestCase {
 			$this->pinStore,
 			$this->userSession,
 			$this->timeFactory,
+			$this->lkgStore,
 		);
 	}
 
@@ -343,5 +347,87 @@ final class InstallerServiceTest extends TestCase {
 		$result = $this->service()->installAppVersion('someapp', '2.0.0', false, null, null, true);
 
 		self::assertNotSame(Http::STATUS_OK, $result['statusCode']);
+	}
+
+	// --- Server-side downgrade guard matrix (see "Server-side downgrade guard") ---
+	// Fixture default: installed version is '1.0.0' (see setUp()).
+
+	public function testDowngradeWithoutAcknowledgementIsRefusedBeforeAnyDownload(): void {
+		// No download or filesystem change must happen — the guard fires first.
+		$this->sourceRegistry->expects(self::never())->method('get');
+
+		$result = $this->service()->installAppVersion('someapp', '0.9.0', false);
+
+		self::assertSame(Http::STATUS_CONFLICT, $result['statusCode']);
+		self::assertSame(FailureClassifier::CATEGORY_DOWNGRADE_GUARD, $result['payload']['category']);
+		self::assertStringContainsString('1.0.0', $result['payload']['hint']);
+		self::assertStringContainsString('0.9.0', $result['payload']['hint']);
+		self::assertSame('1.0.0', $result['payload']['fromVersion']);
+		self::assertSame('0.9.0', $result['payload']['toVersion']);
+	}
+
+	public function testAcknowledgedDowngradeProceedsThroughTheNormalFlow(): void {
+		$this->stubSuccessfulSignedInstall('0.9.0');
+
+		$result = $this->service()->installAppVersion('someapp', '0.9.0', false, null, null, false, false, true);
+
+		self::assertSame(Http::STATUS_OK, $result['statusCode']);
+	}
+
+	public function testUpgradesAreUnaffectedByTheDowngradeGuard(): void {
+		$this->stubSuccessfulSignedInstall('2.0.0');
+
+		$result = $this->service()->installAppVersion('someapp', '2.0.0', false);
+
+		self::assertSame(Http::STATUS_OK, $result['statusCode']);
+	}
+
+	public function testEqualVersionReinstallIsUnaffectedByTheDowngradeGuard(): void {
+		// version_compare('1.0.0', '1.0.0', '<') is false — the "already
+		// installed" short-circuit handles this, not the downgrade guard.
+		$this->sourceRegistry->expects(self::never())->method('get');
+
+		$result = $this->service()->installAppVersion('someapp', '1.0.0', false);
+
+		self::assertSame(Http::STATUS_OK, $result['statusCode']);
+		self::assertSame('App already has this version installed.', $result['payload']['message']);
+	}
+
+	public function testDryRunDowngradeEvaluatesAndReportsTheGuardWithoutRequiringTheFlag(): void {
+		$this->stubSuccessfulSignedInstall('0.9.0');
+
+		// includeDebug=true is this app's dry-run signal; allowDowngrade is
+		// intentionally omitted — the guard must not block a dry run.
+		$result = $this->service()->installAppVersion('someapp', '0.9.0', true);
+
+		self::assertSame(Http::STATUS_OK, $result['statusCode']);
+		self::assertTrue($result['payload']['dryRun']);
+		self::assertSame('1.0.0', $result['payload']['fromVersion']);
+		self::assertSame('0.9.0', $result['payload']['toVersion']);
+	}
+
+	public function testOrphanedMigrationsIsPropagatedFromTheInstallerResultOnDowngrade(): void {
+		$this->appManager->method('getAppPath')->willReturn('/writable/app');
+		$this->environmentCheck->method('isDestinationWritable')->willReturn(true);
+		$this->stubSignedSourceReturning();
+		$this->signedInstaller->method('installFromSelectedRelease')->willReturn([
+			'status' => 'installed',
+			'orphanedMigrations' => ['Version2040Date20260101000000'],
+		]);
+		$this->appManager->method('getAppInfoByPath')->willReturn(['version' => '0.9.0']);
+
+		$result = $this->service()->installAppVersion('someapp', '0.9.0', false, null, null, false, false, true);
+
+		self::assertSame(Http::STATUS_OK, $result['statusCode']);
+		self::assertSame(['Version2040Date20260101000000'], $result['payload']['orphanedMigrations']);
+	}
+
+	public function testOrphanedMigrationsIsAbsentOnAnUpgrade(): void {
+		$this->stubSuccessfulSignedInstall('2.0.0');
+
+		$result = $this->service()->installAppVersion('someapp', '2.0.0', false);
+
+		self::assertSame(Http::STATUS_OK, $result['statusCode']);
+		self::assertArrayNotHasKey('orphanedMigrations', $result['payload']);
 	}
 }

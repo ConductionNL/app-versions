@@ -19,6 +19,7 @@ use OCA\AppVersions\Service\Audit\AuditLogger;
 use OCA\AppVersions\Service\Installer\FailureClassifier;
 use OCA\AppVersions\Service\Installer\InstallFailure;
 use OCA\AppVersions\Service\Installer\InstallFinalizer;
+use OCA\AppVersions\Service\Installer\MigrationDiffer;
 use OCA\AppVersions\Service\Source\SourceBinding;
 use OCP\App\AppPathNotFoundException;
 use OCP\App\IAppManager;
@@ -38,10 +39,17 @@ class SelectedReleaseInstallerService {
 	/** @var array<int, mixed> */
 	private array $debug = [];
 
+	/** @var list<string>|null Set only when the current install is a downgrade; see "Migration diff on downgrade". */
+	private ?array $orphanedMigrations = null;
+
+	/** Whether the last {@see replaceWithSelectedRelease()} call was a downgrade. */
+	private bool $isDowngradeInstall = false;
+
 	public function __construct(
 		private InstallFinalizer $finalizer,
 		private AuditLogger $auditLogger,
 		private IUserSession $userSession,
+		private MigrationDiffer $migrationDiffer,
 	) {
 	}
 
@@ -55,10 +63,24 @@ class SelectedReleaseInstallerService {
 	}
 
 	/**
+	 * Returns the migration diff computed for the last downgrade install (null
+	 * when the last install was not a downgrade, or when the diff could not be
+	 * computed); see "Migration diff on downgrade".
+	 *
+	 * @spec openspec/specs/migration-safety/spec.md
+	 * @return list<string>|null
+	 */
+	public function getOrphanedMigrations(): ?array {
+		return $this->orphanedMigrations;
+	}
+
+	/**
 	 * Clears operation debug log.
 	 */
 	private function resetDebug(): void {
 		$this->debug = [];
+		$this->orphanedMigrations = null;
+		$this->isDowngradeInstall = false;
 	}
 
 	/**
@@ -322,7 +344,7 @@ class SelectedReleaseInstallerService {
 				// phase. Keep the backup until it succeeds; on failure restore the
 				// previous files and report installed-but-broken.
 				try {
-					$installedApp = $this->finalizer->finalize($appPath, $info, $enabled);
+					$installedApp = $this->finalizer->finalize($appPath, $info, $enabled, null, SourceBinding::appStore()->getId());
 				} catch (Exception $finalizeError) {
 					$restoreState = $backupDestination === null
 						? FailureClassifier::RESTORE_NONE
@@ -353,7 +375,7 @@ class SelectedReleaseInstallerService {
 					'installedVersionBefore' => $installedVersion === '' ? null : $installedVersion,
 					'dryRun' => true,
 					'debug' => $this->debug,
-				];
+				] + ($this->isDowngradeInstall ? ['orphanedMigrations' => $this->orphanedMigrations] : []);
 			}
 
 			$this->recordInstallAudit($appId, $installedVersion, $requestedVersion, AuditLogger::STATUS_SUCCESS);
@@ -364,7 +386,7 @@ class SelectedReleaseInstallerService {
 				'installedApp' => $installedApp,
 				'dryRun' => false,
 				'debug' => $this->debug,
-			];
+			] + ($this->isDowngradeInstall ? ['orphanedMigrations' => $this->orphanedMigrations] : []);
 		} catch (\Throwable $error) {
 			// Best-effort audit write on the failure path, before the exception
 			// propagates up to the caller's error mapping; see "Failed install
@@ -543,6 +565,22 @@ class SelectedReleaseInstallerService {
 			throw new Exception('Could not resolve app install folder.');
 		}
 		$this->addDebug('destination', ['destination' => $destination]);
+
+		// Migration diff (downgrade only, acknowledged or dry-run): compare the
+		// still-in-place installed copy's migration steps against the
+		// just-extracted target archive before any file swap — see "Migration
+		// diff on downgrade". A diff failure degrades to `null` (generic
+		// warning); it never blocks the downgrade itself.
+		try {
+			$installedVersionForDiff = $appManager->getAppVersion($appId);
+		} catch (Exception) {
+			$installedVersionForDiff = '';
+		}
+		if ($installedVersionForDiff !== '' && version_compare($expectedVersion, $installedVersionForDiff, '<')) {
+			$this->isDowngradeInstall = true;
+			$this->orphanedMigrations = $this->migrationDiffer->diff($previousPath, $extractedRoot);
+			$this->addDebug('migration-diff', ['orphanedMigrations' => $this->orphanedMigrations]);
+		}
 
 		$backupDestination = null;
 		if (is_dir($destination)) {

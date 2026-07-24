@@ -17,6 +17,7 @@ import type { PinRecord } from './dialogs/PinDialog.vue'
 import PinOverrideDialog from './dialogs/PinOverrideDialog.vue'
 import ShaMismatchDialog from './dialogs/ShaMismatchDialog.vue'
 import { buildChangelogRange } from './utils/changelog'
+import { orphanedMigrationsSummary, shouldOfferLkgRollback, type LkgRecord } from './utils/migrationSafety'
 import { compareVersions, parseVersionCore } from './utils/versionCompare'
 
 type AppOption = {
@@ -28,6 +29,8 @@ type AppOption = {
 	isCore: boolean
 	manageable?: boolean
 	warning?: string | null
+	installedVersion?: string | null
+	lkg?: LkgRecord | null
 }
 
 type AppVersion = {
@@ -70,6 +73,7 @@ type InstallResult = {
 	hint?: string | null
 	debug?: InstallDebugEntry[]
 	recordedShaMatched?: boolean | null
+	orphanedMigrations?: string[] | null
 }
 
 const isLoading = ref(true)
@@ -96,6 +100,12 @@ const downgradeConfirmFromVersion = ref('')
 const downgradeConfirmToVersion = ref('')
 const downgradeConfirmApp = ref('')
 let downgradeResolve: ((value: boolean) => void) | null = null
+// Migration diff for the downgrade dialog — fetched via a dry-run preview
+// before the dialog opens; see "Migration diff on downgrade".
+const downgradeOrphanedMigrations = ref<string[] | null>(null)
+// Suppresses the safe-mode auto-clear watcher while "Roll back to last
+// known good" programmatically selects a (necessarily older) version.
+const suppressSafeModeAutoClear = ref(false)
 const safeModeStorageKey = 'app_versions_safe_mode'
 const debugModeStorageKey = 'app_versions_debug_mode'
 const lastInstallDebug = ref<InstallDebugEntry[]>([])
@@ -911,6 +921,23 @@ const downgradeConfirmButtons = computed(() => [
 	},
 ])
 
+// Previews the migration diff for a downgrade via a dry-run install request
+// before the confirmation dialog opens, so the dialog can name the exact
+// migrations the target lacks instead of only warning generically; see
+// "Migration diff on downgrade". The dry-run evaluates and reports the
+// downgrade guard without requiring `allowDowngrade` — see "Server-side
+// downgrade guard". A request failure degrades to `null` (generic warning),
+// consistent with a server-side diff failure — it never blocks the downgrade.
+const fetchDowngradePreview = async (appId: string, version: string): Promise<string[] | null> => {
+	try {
+		const { payload } = await requestInstall(appId, version, undefined, false, false, false, true)
+
+		return Array.isArray(payload.orphanedMigrations) ? payload.orphanedMigrations : null
+	} catch {
+		return null
+	}
+}
+
 const confirmDowngrade = async (appId: string, fromVersion: string, toVersion: string): Promise<boolean> => {
 	if (downgradeResolve) {
 		downgradeResolve(false)
@@ -920,6 +947,7 @@ const confirmDowngrade = async (appId: string, fromVersion: string, toVersion: s
 	downgradeConfirmApp.value = appId
 	downgradeConfirmFromVersion.value = fromVersion
 	downgradeConfirmToVersion.value = toVersion
+	downgradeOrphanedMigrations.value = await fetchDowngradePreview(appId, toVersion)
 	return new Promise<boolean>((resolve) => {
 		downgradeResolve = resolve
 		isDowngradeConfirmOpen.value = true
@@ -963,6 +991,7 @@ type InstallApiPayload = {
 	expectedSha?: string
 	actualSha?: string
 	recordedShaMatched?: boolean
+	orphanedMigrations?: string[] | null
 }
 
 const requestInstall = async (
@@ -971,9 +1000,11 @@ const requestInstall = async (
 	overridePin?: 'repin' | 'unpin',
 	pinRequested = false,
 	acceptNewSha = false,
+	allowDowngrade = false,
+	forceDryRun = false,
 ): Promise<{ payload: InstallApiPayload, metaMessage?: string }> => {
 	const query: Record<string, string> = {
-		debug: includeDebug.value ? '1' : '0',
+		debug: (forceDryRun || includeDebug.value) ? '1' : '0',
 		targetVersion: version,
 	}
 	if (overridePin) {
@@ -984,6 +1015,9 @@ const requestInstall = async (
 	}
 	if (acceptNewSha) {
 		query.acceptNewSha = '1'
+	}
+	if (allowDowngrade) {
+		query.allowDowngrade = '1'
 	}
 	const endpoint = withOcsJson(
 		`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(appId)}/versions/${encodeURIComponent(version)}/install`,
@@ -1109,7 +1143,10 @@ const performInstall = async (): Promise<void> => {
 	try {
 		await ensurePasswordConfirmation()
 
-		let installResponse = await requestInstall(selectedAppValue, selectedVersionValue)
+		// Acknowledged above via confirmDowngrade(); carried on every retry
+		// below so a pin-override or SHA-accept round trip doesn't re-trip the
+		// server-side downgrade guard — see "Server-side downgrade guard".
+		let installResponse = await requestInstall(selectedAppValue, selectedVersionValue, undefined, false, false, isDowngrade)
 
 		if (installResponse.metaMessage && installResponse.payload?.category === 'pinned') {
 			const choice = await confirmPinOverride(selectedAppValue, installResponse.payload.pinnedVersion || '', selectedVersionValue)
@@ -1117,7 +1154,7 @@ const performInstall = async (): Promise<void> => {
 				hasInstallResult.value = false
 				return
 			}
-			installResponse = await requestInstall(selectedAppValue, selectedVersionValue, choice)
+			installResponse = await requestInstall(selectedAppValue, selectedVersionValue, choice, false, false, isDowngrade)
 		}
 
 		if (installResponse.metaMessage && installResponse.payload?.code === 'sha_mismatch') {
@@ -1131,7 +1168,7 @@ const performInstall = async (): Promise<void> => {
 				hasInstallResult.value = false
 				return
 			}
-			installResponse = await requestInstall(selectedAppValue, selectedVersionValue, undefined, false, true)
+			installResponse = await requestInstall(selectedAppValue, selectedVersionValue, undefined, false, true, isDowngrade)
 		}
 
 		const { payload, metaMessage } = installResponse
@@ -1193,6 +1230,32 @@ const performInstall = async (): Promise<void> => {
 	}
 }
 
+// "Roll back to last known good" — pure client routing through the standard
+// install flow: select the app, pick the recorded lkg version, and let
+// performInstall() run its normal downgrade confirmation (migration diff
+// preview + dialog) and the server-side downgrade guard. No special install
+// path; see "Last-known-good version record" — Scenario "One-click rollback
+// target". The safe-mode auto-clear watcher is suppressed for this
+// programmatic selection since a rollback target is, by construction, an
+// intentional downgrade.
+const rollbackToLastKnownGood = async (appId: string, version: string): Promise<void> => {
+	if (isInstallingVersion.value || isCheckingVersions.value) {
+		return
+	}
+
+	onSelectApp(appId)
+	await checkVersions()
+
+	suppressSafeModeAutoClear.value = true
+	try {
+		selectedVersion.value = version
+		errorMessage.value = ''
+		await performInstall()
+	} finally {
+		suppressSafeModeAutoClear.value = false
+	}
+}
+
 onMounted(async () => {
 	const storedSafeMode = window?.localStorage?.getItem(safeModeStorageKey)
 	if (storedSafeMode !== null) {
@@ -1224,6 +1287,10 @@ watch([safeModeEnabled, installedVersion, selectedVersion], () => {
 	}
 
 	window.localStorage?.setItem(safeModeStorageKey, safeModeEnabled.value ? 'true' : 'false')
+
+	if (suppressSafeModeAutoClear.value) {
+		return
+	}
 
 	if (safeModeEnabled.value && isDowngradeBlockedBySafeMode(selectedVersion.value)) {
 		selectedVersion.value = ''
@@ -1259,7 +1326,18 @@ watch(debugModeEnabled, () => {
 					<strong>Downgrade info:</strong> {{ versionRangeText(downgradeVersionRange) }}
 				</p>
 				<p :class="$style.versionItemDegradeMessage">
-					Downgrading can break database schema assumptions if migrations were already applied in newer versions. Continue only if you are sure no incompatible schema changes are involved.
+					{{ t('app_versions', 'Downgrading files cannot undo database migrations already applied by the installed version.') }}
+				</p>
+				<div v-if="downgradeOrphanedMigrations && downgradeOrphanedMigrations.length > 0" :class="$style.migrationDiff">
+					<p><strong>{{ t('app_versions', 'Database migrations only present in the installed version:') }}</strong></p>
+					<ul :class="$style.migrationDiffList">
+						<li v-for="migration in downgradeOrphanedMigrations" :key="migration">
+							{{ migration }}
+						</li>
+					</ul>
+				</div>
+				<p v-else :class="$style.versionItemDegradeMessage">
+					{{ orphanedMigrationsSummary(downgradeOrphanedMigrations) }}
 				</p>
 			</NcDialog>
 			<PinDialog
@@ -1428,6 +1506,15 @@ watch(debugModeEnabled, () => {
 												:disabled="isCheckingVersions || isInstallingVersion"
 												@click="onPickApp(app.id)">
 												{{ selectedApp === app.id && isCheckingVersions ? 'Loading…' : 'Choose app' }}
+											</button>
+											<button
+												v-if="!app.isCore && app.lkg && shouldOfferLkgRollback(app)"
+												type="button"
+												:class="$style.appCardButton"
+												:disabled="isCheckingVersions || isInstallingVersion"
+												:title="t('app_versions', 'Roll back to the last version that finalized cleanly through App Versions')"
+												@click="rollbackToLastKnownGood(app.id, app.lkg.version)">
+												{{ t('app_versions', 'Roll back to {version}', { version: app.lkg.version }) }}
 											</button>
 										</article>
 									</div>
@@ -2230,6 +2317,22 @@ watch(debugModeEnabled, () => {
 	border-radius: 6px;
 	font-size: 12px;
 	line-height: 1.3;
+}
+
+.migrationDiff {
+	margin: 8px 0 0;
+	padding: 8px 10px;
+	border: 1px solid #fdba74;
+	background: #ffedd5;
+	color: #7c2d12;
+	border-radius: 6px;
+	font-size: 12px;
+	line-height: 1.3;
+}
+
+.migrationDiffList {
+	margin: 4px 0 0;
+	padding-left: 18px;
 }
 
 .versionItemActions {

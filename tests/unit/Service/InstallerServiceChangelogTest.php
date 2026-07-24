@@ -82,6 +82,7 @@ final class InstallerServiceChangelogTest extends TestCase {
 			$this->createMock(PinStore::class),
 			$this->createMock(IUserSession::class),
 			$this->createMock(ITimeFactory::class),
+			$this->createMock(\OCA\AppVersions\Service\Lkg\LkgStore::class),
 		);
 	}
 
