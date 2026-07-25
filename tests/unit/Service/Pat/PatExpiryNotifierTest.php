@@ -38,7 +38,7 @@ final class PatExpiryNotifierTest extends TestCase {
 		$request = $this->createMock(IRequest::class);
 		$request->method('getServerHost')->willReturn('cloud.example.com');
 
-		return new PatDeeplinkBuilder($request, new ForgeRegistry());
+		return new PatDeeplinkBuilder($request, new ForgeRegistry($this->createMock(\OCP\IConfig::class)));
 	}
 
 	private function timeFactory(): ITimeFactory {

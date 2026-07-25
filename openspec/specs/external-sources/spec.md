@@ -29,6 +29,8 @@ The system MUST support querying public releases from any registered forge throu
 
 #### Scenario: Public releases available
 
+@e2e tests/e2e/forge.spec.ts
+
 - **GIVEN** an admin has bound app `openregister` to source `github:ConductionNL/openregister`
 - **WHEN** the version picker loads
 - **THEN** the system MUST fetch releases from `https://api.github.com/repos/ConductionNL/openregister/releases`
@@ -36,6 +38,8 @@ The system MUST support querying public releases from any registered forge throu
 - **AND** the response MUST be sorted newest-first
 
 #### Scenario: GitHub API rate-limited
+
+@e2e tests/e2e/forge.spec.ts
 
 - **GIVEN** the GitHub API responds with status 403 and `X-RateLimit-Remaining: 0`
 - **WHEN** the system tries to list versions
@@ -121,6 +125,8 @@ The system MUST verify the integrity of an externally-sourced artifact before in
 
 #### Scenario: Missing SHA-256 produces warning, not failure
 
+@e2e tests/e2e/forge.spec.ts
+
 - **GIVEN** the GitHub release has only `openregister-2.5.0.tar.gz` (no `.sha256` sibling)
 - **WHEN** the install proceeds
 - **THEN** the install MUST succeed if other checks pass
@@ -138,6 +144,8 @@ The system MUST verify the integrity of an externally-sourced artifact before in
 On every successful external install, the system MUST record the artifact's SHA-256 in the app's source binding (`source.{appId}` payload, `sha256` map keyed by version). The digest MUST be taken from the verified `.sha256` sibling when one was checked, and otherwise computed locally from the downloaded archive. Recording MUST happen only after the install fully succeeded. The map MUST be capped (200 entries, oldest evicted first).
 
 #### Scenario: Digest recorded from verified sibling
+
+@e2e tests/e2e/forge.spec.ts
 
 - GIVEN `openregister@2.5.0` is installed from `github:ConductionNL/openregister` and the release publishes a matching `.sha256` sibling
 - WHEN the install succeeds
@@ -161,12 +169,16 @@ When the binding records a SHA-256 for the requested version, the system MUST co
 
 #### Scenario: Matching digest proceeds
 
+@e2e tests/e2e/forge.spec.ts
+
 - GIVEN the binding records `sha256["2.3.0"]` for `openregister`
 - WHEN the admin rolls back to 2.3.0 and the downloaded artifact hashes to the recorded digest
 - THEN the install MUST proceed through the existing checks
 - AND the install response MUST indicate the artifact matched the first-install checksum
 
 #### Scenario: Rewritten release fails closed
+
+@e2e tests/e2e/forge.spec.ts
 
 - GIVEN the binding records `sha256["2.3.0"]` and the upstream release asset has since been replaced with different bytes
 - WHEN the admin attempts to reinstall 2.3.0 without `acceptNewSha`
@@ -175,6 +187,8 @@ When the binding records a SHA-256 for the requested version, the system MUST co
 - AND a co-published rewritten `.sha256` sibling MUST NOT cause the check to pass (the recorded digest takes precedence)
 
 #### Scenario: Explicit acceptance replaces the recorded digest
+
+@e2e tests/e2e/forge.spec.ts
 
 - GIVEN a `sha_mismatch` failure for `openregister@2.3.0`
 - WHEN the admin retries with `acceptNewSha: true` (password-confirmed install) and the install succeeds

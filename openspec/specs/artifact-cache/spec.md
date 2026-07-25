@@ -43,6 +43,8 @@ When an install's source download fails (network error, HTTP error, missing rele
 
 #### Scenario: Rollback survives a dead URL
 
+@e2e tests/e2e/forge.spec.ts
+
 - GIVEN 2.3.0 is cached and the App Store download URL now 404s
 - WHEN the admin installs 2.3.0
 - THEN the cached archive MUST be used, signature re-verified with stored materials, and the install MUST succeed with the outcome noting cache use
@@ -66,6 +68,8 @@ When an install's source download fails (network error, HTTP error, missing rele
 Version listings MUST mark cached versions (`cachedOffline: true`). The API MUST expose a cache summary (per-app versions + total size) and a password-confirmed clear operation (all or per app). The UI MUST badge offline-available versions and offer the clear action in settings.
 
 #### Scenario: Offline badge
+
+@e2e tests/e2e/forge.spec.ts
 
 - GIVEN 2.3.0 is cached
 - WHEN the version list renders

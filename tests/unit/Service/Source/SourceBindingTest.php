@@ -204,4 +204,23 @@ final class SourceBindingTest extends TestCase {
 		$this->assertSame(self::SHA_B, $binding->getRecordedSha('2.5.0'));
 		$this->assertCount(1, $binding->getRecordedShaMap());
 	}
+
+	public function testWithRecordedShaMapCarriesDigestsAndDropsInvalidEntries(): void {
+		// A fresh override binding takes on a stored binding's recorded digests,
+		// so a same-source override still enforces trust-on-first-use.
+		$fresh = SourceBinding::github('ConductionNL', 'openregister');
+		$carried = $fresh->withRecordedShaMap([
+			'2.3.0' => self::SHA_A,
+			'2.4.0' => self::SHA_B,
+			'' => self::SHA_A,        // empty version dropped
+			'2.5.0' => 'not-a-digest', // invalid digest dropped
+		]);
+
+		$this->assertSame(self::SHA_A, $carried->getRecordedSha('2.3.0'));
+		$this->assertSame(self::SHA_B, $carried->getRecordedSha('2.4.0'));
+		$this->assertNull($carried->getRecordedSha('2.5.0'));
+		$this->assertCount(2, $carried->getRecordedShaMap());
+		// The original is untouched (immutability).
+		$this->assertCount(0, $fresh->getRecordedShaMap());
+	}
 }

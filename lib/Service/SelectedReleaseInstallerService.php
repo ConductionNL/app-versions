@@ -360,7 +360,10 @@ class SelectedReleaseInstallerService {
 				// previous files and report installed-but-broken.
 				try {
 					$installedApp = $this->finalizer->finalize($appPath, $info, $enabled, null, SourceBinding::appStore()->getId());
-				} catch (Exception $finalizeError) {
+				} catch (\Throwable $finalizeError) {
+					// Throwable, not just Exception: a finalize-phase Error must
+					// still restore the previous files and report
+					// installed-but-broken, not surface as an uncaught fatal.
 					$restoreState = $backupDestination === null
 						? FailureClassifier::RESTORE_NONE
 						: ($this->restoreFromBackup($appPath, $backupDestination) ? FailureClassifier::RESTORE_CLEAN : FailureClassifier::RESTORE_FAILED);

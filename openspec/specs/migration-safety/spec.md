@@ -29,6 +29,8 @@ When the requested version is lower than the installed version (`version_compare
 
 #### Scenario: Acknowledged downgrade proceeds
 
+@e2e tests/e2e/forge.spec.ts
+
 - WHEN the same request carries `allowDowngrade: true`
 - THEN the install MUST proceed through the normal flow (integrity checks, backup, finalize)
 

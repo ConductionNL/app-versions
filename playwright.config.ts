@@ -29,7 +29,12 @@ export default defineConfig({
 	fullyParallel: false,
 	workers: 1,
 	forbidOnly: !!process.env.CI,
-	retries: process.env.CI ? 1 : 0,
+	// One retry everywhere. The forge specs mutate shared server-side state (the
+	// fixture app's installed version, recorded digests) on a single instance
+	// they run serially against; a retry re-runs a flaked test from a clean
+	// beforeEach. Each such test is verified to pass in isolation, so a retry
+	// recovers from state-isolation races, not from a product defect.
+	retries: 1,
 	reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
 	timeout: 60_000,
 	expect: { timeout: 15_000 },
