@@ -18,12 +18,16 @@ The system MUST persist PATs in a dedicated table with encrypted token bytes, ow
 
 #### Scenario: Upload a classic PAT
 
+@e2e exclude a GitHub classic PAT validates against the real github.com/user with scope headers; the codeberg validation path is e2e-covered and the scope logic is unit-tested.
+
 - **GIVEN** an admin POSTs `{label: "ConductionNL prod", kind: "classic", targetPattern: "ConductionNL/*", token: "ghp_abc..."}`
 - **WHEN** the system validates and encrypts the token
 - **THEN** a row MUST be inserted with `owner_uid = current admin uid`, `encrypted_token = ICrypto::encrypt(token)`, `token_hint = "ghp_abcd...xxxx"`, `shared_with_admins = false`
 - **AND** the response MUST contain only the redacted record (no `encrypted_token`, no plaintext)
 
 #### Scenario: PAT not exposed via API after creation
+
+@e2e tests/e2e/pat-management.spec.ts
 
 - **GIVEN** a PAT exists in the database
 - **WHEN** the admin calls `GET /api/pats`
@@ -32,6 +36,8 @@ The system MUST persist PATs in a dedicated table with encrypted token bytes, ow
 - **AND** the response MUST contain `tokenHint` (first 4 + last 4 chars of plaintext, captured at upload)
 
 #### Scenario: Per-admin default; optional share
+
+@e2e exclude per-admin visibility needs a second admin; unit-tested.
 
 - **GIVEN** admin A uploads a PAT with `sharedWithAdmins = false`
 - **WHEN** admin B calls `GET /api/pats`
@@ -47,6 +53,8 @@ PATs MUST be encrypted via `\OCP\Security\ICrypto::encrypt()` before persistence
 
 #### Scenario: Plaintext never reaches a property
 
+@e2e exclude an internal invariant (plaintext confined to the useToken callback); unit-tested.
+
 - **GIVEN** a PAT is being used to authenticate a GitHub fetch
 - **WHEN** the request runs
 - **THEN** the plaintext value MUST NOT be stored on any class property
@@ -59,11 +67,15 @@ The system MUST probe a PAT against `GET {forge.apiBaseUrl}/user` (using the for
 
 #### Scenario: Classic PAT with `repo` scope only — accepted
 
+@e2e exclude requires GitHub's X-OAuth-Scopes header; the scope-acceptance rule is unit-tested in PatValidator.
+
 - **GIVEN** the admin uploads a GitHub `ghp_*` token with `X-OAuth-Scopes: repo`
 - **THEN** the system MUST accept the PAT
 - **AND** `last_validated_scopes` MUST contain `["repo"]`
 
 #### Scenario: Classic PAT with extra write scope — rejected
+
+@e2e exclude requires GitHub's X-OAuth-Scopes header; the over-broad-scope rejection is unit-tested.
 
 - **GIVEN** the admin uploads a GitHub `ghp_*` token with `X-OAuth-Scopes: repo, write:packages, admin:org`
 - **THEN** the system MUST reject with HTTP 400
@@ -71,12 +83,16 @@ The system MUST probe a PAT against `GET {forge.apiBaseUrl}/user` (using the for
 
 #### Scenario: Fine-grained GitHub PAT — best-effort acceptance
 
+@e2e exclude GitHub fine-grained tokens expose no scopes to validate; the best-effort path is unit-tested.
+
 - **GIVEN** the admin uploads a GitHub `github_pat_*` token and the User endpoint returns 200
 - **THEN** the system MUST accept the PAT
 - **AND** record `unverifiable_scope: true` in `last_validated_scopes.warnings`
 - **AND** the API response MUST surface this warning so the UI can display "GitHub did not expose configured permissions; please verify they are read-only."
 
 #### Scenario: Codeberg token — validated via Forgejo, accepted unverifiable-scope
+
+@e2e tests/e2e/pat-management.spec.ts
 
 - **GIVEN** the admin uploads a Codeberg access token for `forge = codeberg`
 - **WHEN** the system probes `https://codeberg.org/api/v1/user` with `Authorization: token <token>` and the endpoint returns 200
@@ -86,11 +102,15 @@ The system MUST probe a PAT against `GET {forge.apiBaseUrl}/user` (using the for
 
 #### Scenario: Invalid or revoked token
 
+@e2e tests/e2e/pat-management.spec.ts
+
 - **GIVEN** the forge User endpoint returns 401
 - **THEN** the system MUST reject with HTTP 400
 - **AND** the error message MUST be "Token is invalid or revoked"
 
 #### Scenario: Expiration captured
+
+@e2e exclude requires a forge token-expiry response header; expiry parsing is unit-tested.
 
 - **GIVEN** a GitHub response includes `github-authentication-token-expiration: 2026-08-15 12:00:00 UTC`
 - **THEN** the system MUST parse and persist `expires_at = 2026-08-15T12:00:00Z`
@@ -101,6 +121,8 @@ When a PAT visible to the current admin matches the source binding's forge AND `
 
 #### Scenario: Private GitHub repo accessible via PAT
 
+@e2e exclude covered above.
+
 - **GIVEN** admin A is bound to source `github:ConductionNL/private-build` and has uploaded a GitHub PAT with `target_pattern = ConductionNL/*`
 - **WHEN** `GET /api/app/private-build/versions` runs
 - **THEN** the GitHub API request MUST include `Authorization: Bearer <token>`
@@ -108,6 +130,8 @@ When a PAT visible to the current admin matches the source binding's forge AND `
 - **AND** `pats.last_used_at` MUST be updated for that PAT
 
 #### Scenario: Private Codeberg repo accessible via Codeberg PAT
+
+@e2e exclude the fixture forge does not gate repos behind auth; PatResolver + auth-header attachment is unit-tested.
 
 - **GIVEN** admin A is bound to source `codeberg:Conduction/private-build` and has uploaded a Codeberg token with `forge = codeberg`, `target_pattern = Conduction/*`
 - **WHEN** the version list runs
@@ -117,11 +141,15 @@ When a PAT visible to the current admin matches the source binding's forge AND `
 
 #### Scenario: No matching PAT — unauthenticated path
 
+@e2e tests/e2e/external-sources.spec.ts
+
 - **GIVEN** there is no PAT covering `codeberg:Conduction/openregister`
 - **WHEN** the version list runs
 - **THEN** the request MUST be unauthenticated (public repo path)
 
 #### Scenario: Expired PAT skipped
+
+@e2e exclude the PatResolver expired-skip is unit-tested.
 
 - **GIVEN** a PAT with `expires_at` in the past
 - **WHEN** `PatResolver::findFor` is called
@@ -129,6 +157,8 @@ When a PAT visible to the current admin matches the source binding's forge AND `
 - **AND** the next-priority PAT (or unauthenticated) MUST be used
 
 #### Scenario: Legacy github PAT still authenticates (backward compat)
+
+@e2e exclude the legacy-forge-default backward-compat is unit-tested.
 
 - **GIVEN** a PAT row that predates this change (no `forge` set, reads back as `github`)
 - **WHEN** it is resolved for a `github:ConductionNL/private-build` binding
@@ -140,11 +170,15 @@ The system MUST expose endpoints for listing, creating, updating, deleting, and 
 
 #### Scenario: Deeplink for classic GitHub PAT
 
+@e2e tests/e2e/pat-management.spec.ts
+
 - **GIVEN** an admin calls `GET /api/pats/deeplink?kind=classic`
 - **THEN** the response MUST contain a `url` of the form `https://github.com/settings/tokens/new?scopes=repo&description=Nextcloud%20App%20Versions...`
 - **AND** the response MUST contain an `instructions` array
 
 #### Scenario: Deeplink for fine-grained GitHub PAT
+
+@e2e tests/e2e/pat-management.spec.ts
 
 - **GIVEN** an admin calls `GET /api/pats/deeplink?kind=fine-grained`
 - **THEN** the response MUST contain `url = https://github.com/settings/personal-access-tokens/new`
@@ -152,11 +186,15 @@ The system MUST expose endpoints for listing, creating, updating, deleting, and 
 
 #### Scenario: Deeplink for Codeberg token
 
+@e2e tests/e2e/pat-management.spec.ts
+
 - **GIVEN** an admin requests a Codeberg token-creation deeplink
 - **THEN** the response MUST contain `url = https://codeberg.org/user/settings/applications`
 - **AND** an `instructions` array describing creating a least-privilege access token and pasting it back into App Versions
 
 #### Scenario: Delete restricted to owner
+
+@e2e exclude requires a second admin to prove cross-owner deletion is refused; unit-tested.
 
 - **GIVEN** admin A's PAT exists, shared with admins
 - **WHEN** admin B calls `DELETE /api/pats/{id}`
@@ -169,6 +207,8 @@ When a Nextcloud user is deleted, all PATs owned by that uid MUST be deleted.
 
 #### Scenario: User deletion sweeps PATs
 
+@e2e exclude requires deleting a user account; the UserDeletedListener sweep is unit-tested.
+
 - **GIVEN** admin A owns PATs P1 (private) and P2 (shared)
 - **WHEN** an admin deletes user A
 - **THEN** the user-deleted listener MUST delete P1 and P2
@@ -180,6 +220,8 @@ Each stored PAT MUST carry a `forge` attribute (`github` | `codeberg`, default `
 
 #### Scenario: Migration adds forge column with github default
 
+@e2e exclude a DB-migration assertion, verified in migration unit coverage.
+
 - **GIVEN** an existing `app_versions_pats` table with rows that predate this change
 - **WHEN** the `forge`-column migration runs
 - **THEN** the column MUST be added as a non-null string with default `github`
@@ -187,6 +229,8 @@ Each stored PAT MUST carry a `forge` attribute (`github` | `codeberg`, default `
 - **AND** re-running the migration MUST be a no-op (guarded by `hasColumn`)
 
 #### Scenario: PAT resolution is forge-scoped
+
+@e2e exclude the forge-scoped resolution is unit-tested in PatResolver.
 
 - **GIVEN** a stored Codeberg PAT (`forge = codeberg`, `target_pattern = Conduction/*`) and a stored GitHub PAT (`forge = github`, `target_pattern = ConductionNL/*`)
 - **WHEN** `PatResolver::findFor` resolves a token for binding `codeberg:Conduction/private-build`
@@ -199,12 +243,16 @@ The admin UI MUST surface access-token (PAT) management so an admin can list red
 
 #### Scenario: List tokens redacted
 
+@e2e tests/e2e/pat-management.spec.ts
+
 - **GIVEN** PATs visible to the current admin exist
 - **WHEN** the admin opens the Tokens tab
 - **THEN** the UI MUST list the tokens from `GET /api/pats`
 - **AND** MUST display only redacted fields (label, forge, token hint, share flag) and never a plaintext token or encrypted bytes
 
 #### Scenario: Add a token via the UI
+
+@e2e tests/e2e/pat-management.spec.ts
 
 - **GIVEN** an admin opens the add-token form
 - **WHEN** the admin selects forge `codeberg`, enters a label and target (owner [+ optional repo]), pastes a token, and submits with a confirmed password
@@ -213,6 +261,8 @@ The admin UI MUST surface access-token (PAT) management so an admin can list red
 
 #### Scenario: Edit label and share flag
 
+@e2e tests/e2e/pat-management.spec.ts
+
 - **GIVEN** a token owned by the current admin is listed
 - **WHEN** the admin changes its label or toggles share-with-admins and confirms their password
 - **THEN** the UI MUST call `PATCH /api/pats/{id}` with the changed fields
@@ -220,12 +270,16 @@ The admin UI MUST surface access-token (PAT) management so an admin can list red
 
 #### Scenario: Delete a token via the UI
 
+@e2e tests/e2e/pat-management.spec.ts
+
 - **GIVEN** a token owned by the current admin is listed
 - **WHEN** the admin deletes it and confirms their password
 - **THEN** the UI MUST call `DELETE /api/pats/{id}`
 - **AND** the token MUST be removed from the list on success
 
 #### Scenario: Per-forge deeplink
+
+@e2e tests/e2e/pat-management.spec.ts
 
 - **GIVEN** an admin clicks "create a token" for forge `codeberg`
 - **WHEN** the UI requests `GET /api/pats/deeplink?forge=codeberg`
@@ -237,17 +291,23 @@ A daily background job MUST, for every PAT with a known `expiresAt`, notify the 
 
 #### Scenario: 14-day warning fires once
 
+@e2e exclude the daily PatExpiryWarningJob fires on tokens crossing an expiry threshold; time cannot be advanced in e2e — the threshold logic is unit-tested.
+
 - **GIVEN** a GitHub PAT "conduction-bot" expiring in 12 days, not yet warned
 - **WHEN** the job runs on two consecutive days
 - **THEN** the owner MUST receive exactly one `pat_expiring` notification (from the first run) naming the token, forge, and days remaining, linking the renewal deeplink
 
 #### Scenario: Escalation at 3 days and at expiry
 
+@e2e exclude the expiry-warning escalation runs in the daily job over aged tokens; unit-tested.
+
 - **GIVEN** the same token reaches 2 days remaining, then expires
 - **WHEN** the job runs on each of those days
 - **THEN** one 3-day-threshold notification and one `pat_expired` notification MUST be delivered (each once)
 
 #### Scenario: Unknown expiry is left alone
+
+@e2e exclude the job skips tokens with no known expiry; unit-tested.
 
 - **GIVEN** a Codeberg token whose validation captured no expiry
 - **WHEN** the job runs
@@ -258,6 +318,8 @@ A daily background job MUST, for every PAT with a known `expiresAt`, notify the 
 `GET /api/pats` MUST expose a derived `expiryState` (`ok` | `expiring` (≤14 d) | `expired` | `unknown`) per token. The Tokens panel MUST badge `expiring` tokens with days remaining (warning tone) and `expired` tokens (error tone), and MUST show "expiry unknown" neutrally for `unknown`.
 
 #### Scenario: Badges reflect state
+
+@e2e exclude the expiry badges need a token with a known expiry; the four badge states are covered by TokensPanel vitest.
 
 - **GIVEN** tokens in states ok, expiring (5 d), expired, unknown
 - **WHEN** the Tokens panel renders

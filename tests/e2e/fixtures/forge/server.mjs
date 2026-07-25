@@ -112,6 +112,12 @@ const server = createServer(async (req, res) => {
 
 		// --- Forgejo API ----------------------------------------------------
 		if (path === '/api/v1/user') {
+			// A token containing "revoked" is treated as invalid, so PAT-validation
+			// can exercise the rejection path; everything else validates.
+			const auth = req.headers['authorization'] ?? ''
+			if (auth.includes('revoked')) {
+				return json(res, 401, { message: 'Unauthorized' })
+			}
 			return json(res, 200, { login: 'fixture-bot', id: 1 })
 		}
 
