@@ -18,6 +18,8 @@ The system MUST expose every install origin (App Store, GitHub releases, future 
 
 #### Scenario: Multiple sources registered
 
+@e2e exclude source-registry wiring is unit-tested (SourceRegistry).
+
 - **GIVEN** the app has a `SourceRegistry` with `appstore` and `github` sources registered
 - **WHEN** an admin opens the version picker for an app
 - **THEN** the registry MUST be able to list versions from any registered source by id
@@ -49,11 +51,15 @@ The system MUST support querying public releases from any registered forge throu
 
 #### Scenario: Repository not found
 
+@e2e tests/e2e/external-sources.spec.ts
+
 - **GIVEN** the forge API responds with 404 for the repo
 - **WHEN** the version picker loads
 - **THEN** the system MUST return an empty version list with a "Repository not found" message
 
 #### Scenario: GitHub behaviour preserved under generic driver
+
+@e2e exclude the GitHub path through ForgeReleaseSource is unit-tested; e2e drives the codeberg path.
 
 - **GIVEN** the driver is now `ForgeReleaseSource` parameterized by the `github` forge
 - **WHEN** a `github:owner/repo` binding lists versions
@@ -65,6 +71,8 @@ The system MUST reject external installs from sources not in the configured allo
 
 #### Scenario: Forge-qualified source in allowlist
 
+@e2e exclude TrustedSourceList glob matching is unit-tested.
+
 - **GIVEN** trusted_sources is `["github:ConductionNL/*", "codeberg:Conduction/*"]`
 - **WHEN** an admin tries to install from `github:ConductionNL/openregister`
 - **THEN** `TrustedSourceList::assertAllowed` MUST succeed
@@ -72,6 +80,8 @@ The system MUST reject external installs from sources not in the configured allo
 - **THEN** `TrustedSourceList::assertAllowed` MUST succeed
 
 #### Scenario: Untrusted Codeberg source rejected
+
+@e2e tests/e2e/external-sources.spec.ts
 
 - **GIVEN** trusted_sources is `["github:ConductionNL/*", "codeberg:Conduction/*"]`
 - **WHEN** an admin tries to install from `codeberg:randomuser/randomapp`
@@ -81,6 +91,8 @@ The system MUST reject external installs from sources not in the configured allo
 
 #### Scenario: Legacy bare pattern treated as github
 
+@e2e exclude the legacy-pattern normalisation is unit-tested.
+
 - **GIVEN** trusted_sources is the legacy bare `["ConductionNL/*"]`
 - **WHEN** an admin tries to install from `github:ConductionNL/openregister`
 - **THEN** the pattern MUST be interpreted as `github:ConductionNL/*` and the source MUST be allowed
@@ -88,11 +100,15 @@ The system MUST reject external installs from sources not in the configured allo
 
 #### Scenario: Cross-forge isolation
 
+@e2e exclude cross-forge allowlist isolation is unit-tested in TrustedSourceList.
+
 - **GIVEN** trusted_sources is `["github:Conduction/*"]`
 - **WHEN** an admin tries to install from `codeberg:Conduction/openregister`
 - **THEN** `TrustedSourceList::assertAllowed` MUST throw `UntrustedSourceException` (a github pattern does not authorize a codeberg source)
 
 #### Scenario: Unset allowlist falls back to default
+
+@e2e exclude the default-allowlist fallback is unit-tested.
 
 - **GIVEN** `app_versions.trusted_sources` has never been set
 - **WHEN** the system reads the allowlist
@@ -104,6 +120,8 @@ The system MUST verify the integrity of an externally-sourced artifact before in
 
 #### Scenario: appId match enforced
 
+@e2e tests/e2e/external-sources.spec.ts
+
 - **GIVEN** the admin requests install of `openregister` from a GitHub release
 - **WHEN** the downloaded archive is extracted and contains `appinfo/info.xml` declaring `<id>otherapp</id>`
 - **THEN** the install MUST fail with a clear message ("Downloaded archive declares appId 'otherapp', expected 'openregister'")
@@ -111,11 +129,15 @@ The system MUST verify the integrity of an externally-sourced artifact before in
 
 #### Scenario: Version match enforced
 
+@e2e tests/e2e/external-sources.spec.ts
+
 - **GIVEN** the admin requests install of `openregister@2.5.0` from GitHub release `v2.5.0`
 - **WHEN** the extracted `appinfo/info.xml` declares `<version>2.4.0</version>`
 - **THEN** the install MUST fail with "Downloaded archive declares version '2.4.0', expected '2.5.0'"
 
 #### Scenario: SHA-256 verification when provided
+
+@e2e tests/e2e/forge.spec.ts
 
 - **GIVEN** the GitHub release has both `openregister-2.5.0.tar.gz` and `openregister-2.5.0.tar.gz.sha256` assets
 - **WHEN** the system downloads the archive
@@ -133,6 +155,8 @@ The system MUST verify the integrity of an externally-sourced artifact before in
 - **AND** the install response payload MUST include `integrityWarning: "No SHA-256 checksum available for this artifact."`
 
 #### Scenario: Asset selection unambiguous
+
+@e2e exclude the single-unambiguous-asset rule is unit-tested in ForgeReleaseSource.
 
 - **GIVEN** a GitHub release exposes two `.tar.gz` assets ("openregister-2.5.0.tar.gz" and "openregister-2.5.0-debug.tar.gz")
 - **WHEN** the install runs without a configured `assetPattern`
@@ -153,11 +177,15 @@ On every successful external install, the system MUST record the artifact's SHA-
 
 #### Scenario: Digest computed and recorded without sibling
 
+@e2e tests/e2e/external-sources.spec.ts
+
 - GIVEN the release for `openregister@2.4.0` has no `.sha256` sibling asset
 - WHEN the install succeeds (with the existing `integrityWarning`)
 - THEN the binding MUST contain `sha256["2.4.0"]` equal to the locally computed SHA-256 of the downloaded archive
 
 #### Scenario: Failed install records nothing
+
+@e2e tests/e2e/external-sources.spec.ts
 
 - GIVEN an external install of `openregister@2.5.0` fails after download (e.g. appId mismatch in `appinfo/info.xml`)
 - WHEN the install aborts
@@ -198,6 +226,8 @@ When the binding records a SHA-256 for the requested version, the system MUST co
 
 #### Scenario: acceptNewSha without a recorded digest is harmless
 
+@e2e tests/e2e/external-sources.spec.ts
+
 - GIVEN no digest is recorded for the requested version
 - WHEN the admin installs with `acceptNewSha: true`
 - THEN the install MUST behave exactly as a normal first install (record on success)
@@ -208,11 +238,15 @@ Recorded digests MUST live inside the source binding payload so their lifecycle 
 
 #### Scenario: Rebinding to a different source discards digests
 
+@e2e tests/e2e/external-sources.spec.ts
+
 - GIVEN `openregister` is bound to `github:ConductionNL/openregister` with recorded digests
 - WHEN the admin rebinds it to `github:myorg/openregister-fork`
 - THEN the new binding MUST contain no `sha256` entries from the previous binding
 
 #### Scenario: Digests visible in version list
+
+@e2e tests/e2e/external-sources.spec.ts
 
 - GIVEN the binding records `sha256["2.3.0"]`
 - WHEN the admin loads the version list for `openregister`
@@ -225,11 +259,15 @@ The system MUST provide HTTP endpoints for listing registered sources and the tr
 
 #### Scenario: List sources
 
+@e2e tests/e2e/external-sources.spec.ts
+
 - **GIVEN** an admin calls `GET /api/sources`
 - **THEN** the response MUST contain the registered source ids (including both github and codeberg forges) and the trusted-source patterns
 - **AND** the response MUST NOT contain any secrets
 
 #### Scenario: Bind a source
+
+@e2e tests/e2e/version-management.spec.ts
 
 - **GIVEN** an admin calls `POST /api/source/openregister/bind` with body `{forge: "github", kind: "github-release", owner: "ConductionNL", repo: "openregister"}`
 - **THEN** the system MUST validate the source against the trusted-source allowlist
@@ -238,11 +276,15 @@ The system MUST provide HTTP endpoints for listing registered sources and the tr
 
 #### Scenario: Bind rejects untrusted source
 
+@e2e tests/e2e/external-sources.spec.ts
+
 - **GIVEN** an admin calls `POST /api/source/foo/bind` with `owner: "untrusted"`
 - **THEN** the system MUST return HTTP 403
 - **AND** the binding MUST NOT be written
 
 #### Scenario: Allowlist write delegates to TrustedSourceList
+
+@e2e exclude the controller→TrustedSourceList delegation is unit-tested.
 
 - **GIVEN** an admin curates the allowlist via `POST /api/trusted-sources` or `DELETE /api/trusted-sources?pattern=…`
 - **THEN** the system MUST persist the change through `TrustedSourceList::setPatterns()`
@@ -254,12 +296,16 @@ The system MUST model each supported release forge as a `Forge` configuration en
 
 #### Scenario: Known forges registered
 
+@e2e exclude ForgeRegistry contents are unit-tested.
+
 - **GIVEN** the `ForgeRegistry`
 - **WHEN** `get('github')` and `get('codeberg')` are called
 - **THEN** `github` MUST resolve to apiBaseUrl `https://api.github.com`, authScheme `Bearer`, exposesScopeHeader `true`, tokenCreateUrl `https://github.com/settings/tokens`
 - **AND** `codeberg` MUST resolve to apiBaseUrl `https://codeberg.org/api/v1`, authScheme `token`, exposesScopeHeader `false`, tokenCreateUrl `https://codeberg.org/user/settings/applications`
 
 #### Scenario: Unknown forge rejected
+
+@e2e exclude ForgeRegistry rejects unknown forges — unit-tested.
 
 - **GIVEN** the `ForgeRegistry`
 - **WHEN** `get('gitlab')` is called
@@ -271,6 +317,8 @@ The system MUST support querying public Codeberg (Forgejo) releases as a source.
 
 #### Scenario: Public Codeberg releases listed via Forgejo API
 
+@e2e tests/e2e/external-sources.spec.ts
+
 - **GIVEN** an admin has bound app `openregister` to source `codeberg:Conduction/openregister`
 - **WHEN** the version picker loads
 - **THEN** the system MUST fetch releases from `https://codeberg.org/api/v1/repos/Conduction/openregister/releases`
@@ -280,12 +328,16 @@ The system MUST support querying public Codeberg (Forgejo) releases as a source.
 
 #### Scenario: Codeberg release resolved to a download asset
 
+@e2e tests/e2e/external-sources.spec.ts
+
 - **GIVEN** a Codeberg release `v2.5.0` with a single `*.tar.gz` asset
 - **WHEN** the install resolves the release
 - **THEN** the system MUST return the asset's `browser_download_url`, asset name, optional `.sha256` sibling URL, and normalized version
 - **AND** asset selection MUST enforce the same unambiguous-match rule as GitHub (fail on multiple matches with "set explicit assetPattern")
 
 #### Scenario: Codeberg auth header uses token scheme
+
+@e2e exclude the token-vs-bearer auth scheme needs a PAT; unit-tested in ForgeReleaseSource/PatValidator.
 
 - **GIVEN** a matching access token resolves for `codeberg:Conduction/private-build`
 - **WHEN** the release listing runs
@@ -297,6 +349,8 @@ The system MUST provide admin-only, password-confirmed endpoints to curate the t
 
 #### Scenario: Curated add persists
 
+@e2e tests/e2e/external-sources.spec.ts
+
 - **GIVEN** an admin calls `POST /api/trusted-sources` with `{forge: "codeberg", owner: "Conduction", repo: "openregister"}` and a confirmed password
 - **THEN** the system MUST construct the pattern `codeberg:Conduction/openregister`
 - **AND** persist it into the allowlist via `TrustedSourceList::setPatterns()`
@@ -304,11 +358,15 @@ The system MUST provide admin-only, password-confirmed endpoints to curate the t
 
 #### Scenario: Curated add of an owner wildcard
 
+@e2e tests/e2e/external-sources.spec.ts
+
 - **GIVEN** an admin calls `POST /api/trusted-sources` with `{forge: "github", owner: "ConductionNL"}` (no `repo`) and a confirmed password
 - **THEN** the system MUST construct the pattern `github:ConductionNL/*`
 - **AND** persist it into the allowlist
 
 #### Scenario: Over-broad glob rejected
+
+@e2e tests/e2e/external-sources.spec.ts
 
 - **GIVEN** an admin calls `POST /api/trusted-sources` with a payload that would yield `*`, `*/*`, `{forge}:*`, an empty owner, or an owner of exactly `*`
 - **THEN** the system MUST NOT modify the allowlist
@@ -316,11 +374,15 @@ The system MUST provide admin-only, password-confirmed endpoints to curate the t
 
 #### Scenario: Unknown forge or bad charset rejected
 
+@e2e exclude buildAndValidatePattern charset/forge validation is unit-tested.
+
 - **GIVEN** an admin calls `POST /api/trusted-sources` with an unknown `forge`, or an `owner`/`repo` that does not match the safe charset `[A-Za-z0-9_.\-]+`
 - **THEN** the system MUST NOT modify the allowlist
 - **AND** the system MUST return HTTP 400 with a message naming the rejected forge or invalid characters
 
 #### Scenario: Remove a pattern
+
+@e2e tests/e2e/external-sources.spec.ts
 
 - **GIVEN** the allowlist contains `codeberg:Conduction/openregister`
 - **WHEN** an admin calls `DELETE /api/trusted-sources?pattern=codeberg%3AConduction%2Fopenregister` (pattern as a query parameter) and a confirmed password
@@ -328,6 +390,8 @@ The system MUST provide admin-only, password-confirmed endpoints to curate the t
 - **AND** a subsequent `GET /api/sources` MUST NOT return that pattern in `trustedPatterns`
 
 #### Scenario: Non-admin forbidden
+
+@e2e tests/e2e/shell.spec.ts
 
 - **GIVEN** a non-admin user calls `POST /api/trusted-sources` or `DELETE /api/trusted-sources?pattern=…`
 - **THEN** the system MUST return HTTP 403 Forbidden
@@ -339,6 +403,8 @@ The admin UI MUST surface source binding so an admin can view an app's current b
 
 #### Scenario: Bind a Codeberg repo via the UI
 
+@e2e tests/e2e/panels.spec.ts
+
 - **GIVEN** an admin opens the Sources tab and selects an installed app
 - **WHEN** the admin chooses forge `codeberg`, enters owner `Conduction` and repo `openregister`, and submits
 - **THEN** the UI MUST call `POST /api/source/{appId}/bind` with the forge-qualified binding
@@ -346,11 +412,15 @@ The admin UI MUST surface source binding so an admin can view an app's current b
 
 #### Scenario: Current binding displayed
 
+@e2e tests/e2e/panels.spec.ts
+
 - **GIVEN** an app is bound to `github:ConductionNL/openregister`
 - **WHEN** the admin opens the Sources tab for that app
 - **THEN** the UI MUST display the current binding (forge, owner, repo) from `GET /api/source/{appId}/binding`
 
 #### Scenario: Allowlist surfaced for both forges
+
+@e2e tests/e2e/panels.spec.ts
 
 - **GIVEN** the allowlist contains `github:ConductionNL/*` and `codeberg:Conduction/*`
 - **WHEN** the admin opens the Trusted sources tab
