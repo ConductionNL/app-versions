@@ -186,6 +186,29 @@ final class SourceBinding {
 	}
 
 	/**
+	 * Returns an immutable copy carrying the given recorded-digest map, replacing
+	 * any current one. Used to preserve a stored binding's digests when the same
+	 * source is resolved through an explicit one-off override — the override
+	 * builds a fresh binding, and without carrying the digests over it would
+	 * silently bypass trust-on-first-use enforcement. Invalid entries are
+	 * dropped and the cap is applied.
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 * @param array<string, string> $map
+	 */
+	public function withRecordedShaMap(array $map): self {
+		$binding = $this;
+		foreach ($map as $version => $sha) {
+			if (is_string($version) && $version !== '' && is_string($sha)
+				&& preg_match(self::SHA256_PATTERN, strtolower($sha)) === 1) {
+				$binding = $binding->withRecordedSha($version, $sha);
+			}
+		}
+
+		return $binding;
+	}
+
+	/**
 	 * @return array<string, string>
 	 */
 	private function sanitizedShaMap(): array {

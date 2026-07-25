@@ -315,7 +315,11 @@ class ExternalReleaseInstallerService {
 			// files and report installed-but-broken.
 			try {
 				$installedApp = $this->finalizer->finalize($destination, $info, $enabled, null, $binding->getId());
-			} catch (Exception $finalizeError) {
+			} catch (\Throwable $finalizeError) {
+				// Throwable, not just Exception: a finalize-phase Error (e.g. a
+				// core API removed between releases) must still restore the
+				// previous files and report installed-but-broken, never surface
+				// as an uncaught fatal that leaves the app half-swapped.
 				$restoreState = $backupDestination === null
 					? FailureClassifier::RESTORE_NONE
 					: ($this->restoreFromBackup($destination, $backupDestination) ? FailureClassifier::RESTORE_CLEAN : FailureClassifier::RESTORE_FAILED);
@@ -437,7 +441,7 @@ class ExternalReleaseInstallerService {
 			// SSRF defence-in-depth: block fetches to internal addresses even
 			// though $url originates from a trusted-source GitHub release JSON.
 			// Mirrors PatValidator. See OWASP A10:2021.
-			'nextcloud' => ['allow_local_address' => false],
+			'nextcloud' => ['allow_local_address' => $this->config->getSystemValueBool('allow_local_remote_servers', false)],
 		];
 
 		if ($pat === null) {
@@ -467,7 +471,7 @@ class ExternalReleaseInstallerService {
 			'timeout' => 30,
 			'headers' => ['User-Agent' => 'Nextcloud-AppVersions'],
 			// SSRF defence-in-depth: same rationale as authenticatedDownload.
-			'nextcloud' => ['allow_local_address' => false],
+			'nextcloud' => ['allow_local_address' => $this->config->getSystemValueBool('allow_local_remote_servers', false)],
 		];
 
 		try {

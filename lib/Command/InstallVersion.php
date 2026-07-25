@@ -70,6 +70,7 @@ class InstallVersion extends Command {
 			->addOption('source', null, InputOption::VALUE_REQUIRED, 'One-off source id override (e.g. github:owner/repo), instead of the app\'s bound source.')
 			->addOption('dry-run', null, InputOption::VALUE_NONE, 'Evaluate the install (integrity checks, downgrade detection) without swapping any files.')
 			->addOption('allow-downgrade', null, InputOption::VALUE_NONE, 'Acknowledge and proceed with a downgrade (target version older than installed). Refused without this flag.')
+			->addOption('accept-new-sha', null, InputOption::VALUE_NONE, 'Accept a changed SHA-256 for a version whose digest was previously recorded (trust-on-first-use), replacing the recorded digest. Refused without this flag when the digest differs.')
 			->addOption('json', null, InputOption::VALUE_NONE, 'Emit the structured outcome as JSON instead of human-readable text.')
 			->setHelp(
 				'Exit codes: 0 success/dry-run-ok, 1 unknown/unclassified, 2 unknown app / bad arguments, '
@@ -103,6 +104,7 @@ class InstallVersion extends Command {
 		$sourceOverride = is_string($sourceOption) && trim($sourceOption) !== '' ? trim($sourceOption) : null;
 		$dryRun = (bool)$input->getOption('dry-run');
 		$allowDowngrade = (bool)$input->getOption('allow-downgrade');
+		$acceptNewSha = (bool)$input->getOption('accept-new-sha');
 
 		$result = $this->installerService->installAppVersion(
 			$appId,
@@ -111,7 +113,7 @@ class InstallVersion extends Command {
 			$sourceOverride,
 			null,
 			false,
-			false,
+			$acceptNewSha,
 			$allowDowngrade,
 			$dryRun,
 		);

@@ -131,7 +131,7 @@ class InstallFinalizer {
 			$this->appConfig->setValueString('core', 'public_' . $name, $appId . '/' . $path);
 		}
 
-		\OC_App::setAppTypes($appId);
+		$this->persistAppTypes($appId);
 		$this->appManager->clearAppsCache();
 
 		// Reached only on success: every earlier step throws on failure and
@@ -144,6 +144,24 @@ class InstallFinalizer {
 		));
 
 		return $appId;
+	}
+
+	/**
+	 * Stores the app's declared `<types>` as the comma-joined `types` app-config
+	 * value that `AppManager` reads (`AppManager::getAppTypes()` loads the
+	 * `types` config key across all apps). This replicates the removed
+	 * `OC_App::setAppTypes()` — gone from Nextcloud 34 — using public API. Without
+	 * it, an app declaring e.g. `<types>filesystem</types>` is not recognised as
+	 * that type after an install through this app, and the finalize phase would
+	 * fatal on the missing static method (which every install path shares).
+	 */
+	private function persistAppTypes(string $appId): void {
+		$appInfo = $this->appManager->getAppInfo($appId);
+		$types = '';
+		if (is_array($appInfo) && isset($appInfo['types']) && is_array($appInfo['types'])) {
+			$types = implode(',', array_map('strval', $appInfo['types']));
+		}
+		$this->appConfig->setValueString($appId, 'types', $types);
 	}
 
 	private static function includeAppScript(string $script): void {

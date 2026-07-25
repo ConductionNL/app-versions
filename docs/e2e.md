@@ -92,3 +92,34 @@ instance:
   `afterEach`, and toggles are restored to their default.
 - Assertions that depend on the App Store are given generous timeouts because
   the upstream payload is large; they are never silently skipped.
+
+## Forge fixture (fixture-backed install specs)
+
+`tests/e2e/forge.spec.ts` drives real installs, TOFU digest enforcement,
+integrity failures, rate-limiting, and offline-cache fallback against a
+**fixture forge** — a Forgejo/Gitea-shaped HTTP double in
+`tests/e2e/fixtures/forge/` — instead of real GitHub/Codeberg. This relies on
+two app config seams (both default to the public host, so production is
+unaffected):
+
+- `forge.{github,codeberg}.{api_base,web_base}` — point a forge at another
+  deployment (self-hosted Forgejo / GitHub Enterprise, or the fixture).
+- the `allow_local_remote_servers` system switch — the app's forge fetches
+  defer to it, so a fixture on the Docker network is reachable only when it is
+  enabled (off by default).
+
+Bootstrap it before the forge specs:
+
+```bash
+tests/e2e/fixtures/forge/bootstrap.sh av-e2e
+```
+
+This builds the app tarballs, starts the fixture container on a shared network
+with Nextcloud, points the codeberg forge at it, enables local-address fetches,
+allowlists `codeberg:fixtureowner/*`, and installs+binds a baseline
+`fixtureapp`. The forge specs skip themselves when the fixture is unreachable.
+
+> Forge **installs** in these specs are driven through `occ app_versions:install`,
+> not the HTTP API: an install calls `opcache_reset()`, which under the test
+> image's mod_php poisons the shared web opcache. `occ` runs with opcache off
+> (`opcache.enable_cli=Off`). Both paths call the same `InstallerService`.

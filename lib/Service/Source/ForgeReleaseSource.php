@@ -17,6 +17,7 @@ use OCA\AppVersions\Service\Advisory\AdvisorySourceInterface;
 use OCA\AppVersions\Service\Pat\PatManager;
 use OCA\AppVersions\Service\Pat\PatResolver;
 use OCP\Http\Client\IClientService;
+use OCP\IConfig;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -45,7 +46,21 @@ class ForgeReleaseSource implements SourceInterface, AdvisorySourceInterface {
 		private PatManager $patManager,
 		private IUserSession $userSession,
 		private ForgeRegistry $forgeRegistry,
+		private IConfig $config,
 	) {
+	}
+
+	/**
+	 * Whether outbound forge fetches may target a local/private address.
+	 *
+	 * Defers to Nextcloud's own `allow_local_remote_servers` system switch
+	 * (default `false`, so a stock instance keeps blocking local addresses)
+	 * rather than hardcoding the answer — an operator who points a forge at a
+	 * self-hosted deployment on a private network flips that one switch, exactly
+	 * as they would for any other server-side fetch.
+	 */
+	private function allowLocalAddress(): bool {
+		return $this->config->getSystemValueBool('allow_local_remote_servers', false);
 	}
 
 	public function getKind(): string {
@@ -288,8 +303,9 @@ class ForgeReleaseSource implements SourceInterface, AdvisorySourceInterface {
 				// IClient throws on 4xx by default; we want to inspect the
 				// status code ourselves to produce useful errors.
 				'http_errors' => false,
-				// SSRF defence-in-depth: only public forge hosts are configured.
-				'nextcloud' => ['allow_local_address' => false],
+				// SSRF defence-in-depth: local addresses are blocked unless the
+				// operator has enabled Nextcloud's allow_local_remote_servers.
+				'nextcloud' => ['allow_local_address' => $this->allowLocalAddress()],
 			]);
 		} catch (Exception $error) {
 			$this->logger->warning('ForgeReleaseSource: fetch failed', [

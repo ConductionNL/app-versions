@@ -857,6 +857,16 @@ class InstallerService {
 				$this->trustedSources->assertBindingAllowed($binding);
 			}
 
+			// A one-off override that names the *same* source as the stored
+			// binding must still honour that binding's recorded SHA-256 digests —
+			// otherwise trust-on-first-use is silently bypassed by passing the
+			// current source id explicitly. Only a genuine rebind to a different
+			// source discards the digests (handled by SourceBindingStore).
+			$stored = $this->bindingStore->get($appId);
+			if ($stored !== null && $stored->getId() === $binding->getId()) {
+				$binding = $binding->withRecordedShaMap($stored->getRecordedShaMap());
+			}
+
 			return $binding;
 		}
 

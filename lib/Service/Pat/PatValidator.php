@@ -16,6 +16,7 @@ use Exception;
 use OCA\AppVersions\Db\Pat;
 use OCA\AppVersions\Service\Source\ForgeRegistry;
 use OCP\Http\Client\IClientService;
+use OCP\IConfig;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -41,6 +42,7 @@ class PatValidator {
 		private IClientService $clientService,
 		private LoggerInterface $logger,
 		private ForgeRegistry $forgeRegistry,
+		private IConfig $config,
 	) {
 	}
 
@@ -96,7 +98,7 @@ class PatValidator {
 				// IClient (Guzzle) throws on 4xx by default; we want to inspect
 				// the status ourselves so we can produce a useful error message.
 				'http_errors' => false,
-				'nextcloud' => ['allow_local_address' => false],
+				'nextcloud' => ['allow_local_address' => $this->config->getSystemValueBool('allow_local_remote_servers', false)],
 			]);
 		} catch (Exception $error) {
 			$this->logger->warning('PatValidator: probe failed', ['forge' => $f->id, 'errorMessage' => $error->getMessage()]);
