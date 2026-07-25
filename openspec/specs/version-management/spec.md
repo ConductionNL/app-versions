@@ -20,6 +20,8 @@ The system MUST display all currently installed Nextcloud apps with their name, 
 
 #### Scenario: Admin views installed apps
 
+@e2e tests/e2e/shell.spec.ts
+
 - GIVEN an admin user opens App Versions via Settings → Administration → App Versions
 - WHEN the app list loads
 - THEN all installed apps MUST be displayed as selectable cards
@@ -28,6 +30,8 @@ The system MUST display all currently installed Nextcloud apps with their name, 
 - AND the App Versions app itself MUST be excluded from the list
 
 #### Scenario: Non-admin user is blocked
+
+@e2e tests/e2e/shell.spec.ts
 
 - GIVEN a non-admin user
 - WHEN they open Settings
@@ -43,6 +47,8 @@ The system MUST query the **bound source** for an app to retrieve all available 
 
 #### Scenario: Bound source is queried first
 
+@e2e tests/e2e/version-management.spec.ts
+
 - GIVEN an admin selects app `openregister` (bound to `github:ConductionNL/openregister`)
 - WHEN the version list loads
 - THEN the system MUST fetch from `https://api.github.com/repos/ConductionNL/openregister/releases`
@@ -50,11 +56,15 @@ The system MUST query the **bound source** for an app to retrieve all available 
 
 #### Scenario: Unbound app falls through to App Store
 
+@e2e tests/e2e/versions.spec.ts
+
 - GIVEN an admin selects app `someapp` (no binding present)
 - WHEN the version list loads
 - THEN the system MUST fetch from the Nextcloud App Store endpoints
 
 #### Scenario: View versions for an app
+
+@e2e tests/e2e/versions.spec.ts
 
 - GIVEN an admin selects app "OpenRegister" from the list
 - WHEN the version list loads
@@ -65,12 +75,16 @@ The system MUST query the **bound source** for an app to retrieve all available 
 
 #### Scenario: App store API is unreachable
 
+@e2e exclude the public App Store cannot be made unreachable from an e2e run; the error path is unit-tested in AppStoreSourceTest.
+
 - GIVEN the Nextcloud App Store API is down or unreachable
 - WHEN an admin tries to fetch versions
 - THEN the system MUST show an error message "Could not fetch versions from the app store"
 - AND the system MUST NOT crash or show a blank page
 
 #### Scenario: Respect update channel
+
+@e2e exclude the server release channel cannot be varied within an e2e run; channel filtering is unit-tested.
 
 - GIVEN the Nextcloud instance is on the "stable" update channel
 - WHEN fetching versions
@@ -84,6 +98,8 @@ When an app is installed via the version manager, the source it was installed fr
 
 #### Scenario: Install from App Store leaves no GitHub binding
 
+@e2e exclude the signed App Store install path is not driven in e2e (see version-management notes); binding-write logic is unit-tested.
+
 - GIVEN an admin installs `someapp@1.2.0` from the App Store via App Versions
 - WHEN the install completes
 - THEN `app_versions.source.someapp` MUST either be unset or set to `{kind: "appstore"}`
@@ -91,12 +107,16 @@ When an app is installed via the version manager, the source it was installed fr
 
 #### Scenario: Install from GitHub binds to that source
 
+@e2e tests/e2e/version-management.spec.ts
+
 - GIVEN an admin installs `openregister@2.5.0` from `github:ConductionNL/openregister`
 - WHEN the install completes
 - THEN `app_versions.source.openregister` MUST be set to `{kind: "github-release", owner: "ConductionNL", repo: "openregister", assetPattern: "*.tar.gz", boundAt: ISO-8601-timestamp}`
 - AND the next call to `GET /api/app/openregister/versions` MUST query the GitHub source, not the App Store
 
 #### Scenario: Re-binding overwrites previous binding
+
+@e2e tests/e2e/version-management.spec.ts
 
 - GIVEN `app_versions.source.openregister` is currently bound to `github:ConductionNL/openregister`
 - WHEN the admin installs `openregister@2.5.0` from the App Store via the source-picker
@@ -111,6 +131,8 @@ The version-list and install endpoints MUST accept an optional `source` paramete
 
 #### Scenario: One-off query without binding change
 
+@e2e tests/e2e/version-management.spec.ts
+
 - GIVEN `openregister` is bound to `github:ConductionNL/openregister`
 - WHEN the admin calls `GET /api/app/openregister/versions?source=appstore`
 - THEN the response MUST contain App Store versions
@@ -124,6 +146,8 @@ The system MUST allow an admin to install any available version of an app, repla
 
 #### Scenario: Install an older version (rollback)
 
+@e2e tests/e2e/version-management.spec.ts
+
 - GIVEN OpenRegister is currently at version 2.5.0
 - WHEN the admin selects version 2.3.0 and confirms their password
 - THEN the system MUST download version 2.3.0 from the app store
@@ -134,12 +158,16 @@ The system MUST allow an admin to install any available version of an app, repla
 
 #### Scenario: Install a newer version (upgrade)
 
+@e2e tests/e2e/version-management.spec.ts
+
 - GIVEN OpenRegister is currently at version 2.3.0 and version 2.5.0 is available
 - WHEN the admin selects version 2.5.0 and confirms
 - THEN the system MUST download and install version 2.5.0
 - AND any database migrations for the new version MUST be triggered
 
 #### Scenario: Installation fails
+
+@e2e tests/e2e/forge.spec.ts
 
 - GIVEN a download or extraction error occurs during installation
 - WHEN the admin attempts to install a version
@@ -150,6 +178,8 @@ The system MUST allow an admin to install any available version of an app, repla
 
 #### Scenario: Failure category drives HTTP status
 
+@e2e tests/e2e/version-management.spec.ts
+
 - GIVEN an install fails with category `preflight_permission`
 - WHEN the response is returned
 - THEN the HTTP status MUST NOT be 500
@@ -158,12 +188,16 @@ The system MUST allow an admin to install any available version of an app, repla
 
 #### Scenario: Frontend surfaces the structured message
 
+@e2e exclude a real UI-triggered install resets opcache and 503s the mod_php test image; the result-panel rendering is covered by App.vue vitest.
+
 - GIVEN the backend returns a failure payload with `message` and `hint`
 - WHEN the frontend renders the install result
 - THEN the frontend MUST display the backend `message`/`hint` rather than the generic OCS meta message
 - AND the result card MUST render the `stage`, `category`, and `hint`
 
 #### Scenario: Password confirmation required
+
+@e2e exclude the e2e admin session is always password-confirmed; the un-confirmed rejection cannot be produced in a browser. Enforced by the PasswordConfirmationRequired attribute (route-auth gate).
 
 - GIVEN an admin clicks "Install" for a specific version
 - WHEN the install action is triggered
@@ -176,11 +210,15 @@ The system MUST provide a debug mode that returns detailed installation logs for
 
 #### Scenario: Enable debug output
 
+@e2e exclude a real install via the web API 503s the test image opcache; the debug toggle is covered by App.vue vitest and the occ path.
+
 - GIVEN an admin enables the "Debug" toggle before installing
 - WHEN the installation completes (success or failure)
 - THEN the response MUST include detailed logs: download URL, file sizes, extraction steps, any warnings
 
 #### Scenario: Verbose real install
+
+@e2e exclude a real install via the web API 503s the test image opcache; the debug/dryRun resolution is unit-tested.
 
 - WHEN the admin installs a version with `debug=1&dryRun=0`
 - THEN a real install MUST be performed
@@ -188,10 +226,14 @@ The system MUST provide a debug mode that returns detailed installation logs for
 
 #### Scenario: Silent dry run
 
+@e2e tests/e2e/version-management.spec.ts
+
 - WHEN the install endpoint is called with `dryRun=1` and no `debug`
 - THEN the dry-run path MUST execute and report its outcome without the debug timeline
 
 #### Scenario: Legacy behavior preserved
+
+@e2e exclude the debug-implies-dryRun resolution matrix is unit-tested; a real install via the web API 503s the test image.
 
 - WHEN the endpoint is called with `debug=1` and no `dryRun` parameter
 - THEN the dry-run path MUST execute (legacy), and the response MAY carry a deprecation notice
@@ -202,6 +244,8 @@ The system MUST detect environment conditions that prevent a successful install 
 
 #### Scenario: Non-manageable app is flagged on its card
 
+@e2e tests/e2e/version-management.spec.ts
+
 - GIVEN an app folder whose parent directory is not writable by the web-server user (e.g. a bind-mounted dev checkout)
 - WHEN the installed-apps list loads
 - THEN that app's card data MUST include `manageable: false`
@@ -211,12 +255,16 @@ The system MUST detect environment conditions that prevent a successful install 
 
 #### Scenario: Writable app reports manageable
 
+@e2e tests/e2e/version-management.spec.ts
+
 - GIVEN an app folder whose parent directory is writable by the web-server user
 - WHEN the installed-apps list loads
 - THEN that app's card data MUST include `manageable: true`
 - AND no blocking `warning` MUST be set for writability
 
 #### Scenario: Install aborts fast on non-writable destination
+
+@e2e exclude the app directory cannot be made non-writable to the web user within an e2e run; the preflight guard is unit-tested in EnvironmentCheckTest.
 
 - GIVEN an app folder whose parent directory is not writable by the web-server user
 - WHEN the admin attempts to install a version of that app
@@ -226,6 +274,8 @@ The system MUST detect environment conditions that prevent a successful install 
 - AND the `hint` MUST advise fixing folder ownership/permissions (likely a bind-mounted dev checkout)
 
 #### Scenario: Dev-checkout heuristics enrich but do not block
+
+@e2e exclude requires a .git dev checkout of a managed app; the advisory heuristics are unit-tested.
 
 - GIVEN an app folder that is writable but contains a `.git` directory
 - WHEN the installed-apps list loads
@@ -238,12 +288,16 @@ The install result MUST report one of three outcomes via `installStatus`: `insta
 
 #### Scenario: Clean install reports installed
 
+@e2e tests/e2e/version-management.spec.ts
+
 - GIVEN a download, extraction, file-swap, and finalize all succeed
 - WHEN the install completes
 - THEN `installStatus` MUST be `installed`
 - AND the backup folder MUST have been removed only after `finalize()` succeeded
 
 #### Scenario: Pre-finalize failure reports reverted
+
+@e2e tests/e2e/forge.spec.ts
 
 - GIVEN the file copy fails before `finalize()` runs
 - WHEN the failure is handled
@@ -252,6 +306,8 @@ The install result MUST report one of three outcomes via `installStatus`: `insta
 - AND the message MUST indicate the previous version is intact
 
 #### Scenario: Finalize-phase failure reports installed-but-broken
+
+@e2e exclude requires injecting a fault into the finalize phase, not reachable through the UI/API; the outcome taxonomy is unit-tested.
 
 - GIVEN `finalize()` throws (e.g. a declared migration or repair step fails)
 - WHEN the failure is handled
@@ -262,12 +318,16 @@ The install result MUST report one of three outcomes via `installStatus`: `insta
 
 #### Scenario: Finalize failure with failed restore reports indeterminate state
 
+@e2e exclude requires a double fault (finalize + restore both fail); not reachable in e2e, unit-tested.
+
 - GIVEN `finalize()` throws AND restoring the previous files from backup also fails
 - WHEN the failure is handled
 - THEN `installStatus` MUST be `installed-but-broken`
 - AND the `hint` MUST state that the install is in an indeterminate state requiring manual intervention
 
 #### Scenario: App that swallows its own init error is out of scope
+
+@e2e exclude explicitly out of scope per the spec — the app cannot detect an installed app that hides its own init failure.
 
 - GIVEN an installed app catches and logs its own initialization/boot exception (no exception propagates to App Versions)
 - WHEN the install otherwise completes the file swap and finalize successfully
@@ -280,6 +340,8 @@ The App Versions UI MUST be surfaced exclusively as a section in the Nextcloud A
 
 #### Scenario: Admin sees App Versions in Administration settings
 
+@e2e tests/e2e/version-management.spec.ts
+
 - GIVEN a Nextcloud administrator opens Settings
 - WHEN the administrator navigates to the Administration area
 - THEN an "App Versions" entry MUST appear in the Administration sidebar
@@ -287,11 +349,15 @@ The App Versions UI MUST be surfaced exclusively as a section in the Nextcloud A
 
 #### Scenario: Top-level navigation entry is absent
 
+@e2e tests/e2e/version-management.spec.ts
+
 - GIVEN any logged-in Nextcloud user
 - WHEN they view the top-level application navigation menu
 - THEN no "App Versions" entry MUST appear in the menu
 
 #### Scenario: No standalone page route remains
+
+@e2e tests/e2e/version-management.spec.ts
 
 - GIVEN the move to admin settings is complete
 - WHEN any user requests the former front-page route of the app
@@ -303,6 +369,8 @@ The App Versions UI MUST be surfaced exclusively as a section in the Nextcloud A
 The admin settings form MUST render the existing App Versions Vue SPA inside the settings panel, reusing the existing template and JS/CSS bundle without modification. The SPA MUST be fully functional (app list, version picker, install) within the embedded settings context.
 
 #### Scenario: SPA loads and functions inside the settings panel
+
+@e2e tests/e2e/shell.spec.ts
 
 - GIVEN an administrator opens Settings → Administration → App Versions
 - WHEN the settings panel loads
@@ -316,12 +384,16 @@ The admin UI MUST present a tab/section switcher with at least the sections Apps
 
 #### Scenario: Tabs rendered in admin settings
 
+@e2e tests/e2e/shell.spec.ts
+
 - **GIVEN** an admin opens Settings → Administration → App Versions
 - **WHEN** the panel loads
 - **THEN** the UI MUST display a tab/section switcher with Apps, Sources, Tokens, and Trusted sources
 - **AND** the Apps tab (the existing apps → versions → install view) MUST be selected by default
 
 #### Scenario: Switching tabs
+
+@e2e tests/e2e/shell.spec.ts
 
 - **GIVEN** the admin is on the Apps tab
 - **WHEN** the admin selects the Sources, Tokens, or Trusted sources tab
@@ -330,6 +402,8 @@ The admin UI MUST present a tab/section switcher with at least the sections Apps
 
 #### Scenario: Settings-context shell adaptation
 
+@e2e tests/e2e/shell.spec.ts
+
 - **GIVEN** the app is mounted inside the admin Settings section (per `move-to-admin-settings`)
 - **WHEN** the UI renders
 - **THEN** the UI MUST NOT render the full app-shell chrome (`NcContent`/`NcAppContent` navigation rail)
@@ -337,11 +411,15 @@ The admin UI MUST present a tab/section switcher with at least the sections Apps
 
 #### Scenario: Existing apps/versions flow preserved
 
+@e2e tests/e2e/versions.spec.ts
+
 - **GIVEN** an admin is on the default Apps tab
 - **WHEN** the admin selects an app and views its versions
 - **THEN** the existing version list and install flow MUST behave as before this change
 
 #### Scenario: Non-admin user is blocked
+
+@e2e tests/e2e/shell.spec.ts
 
 - **GIVEN** a non-admin user reaches the panel
 - **WHEN** it loads

@@ -20,6 +20,8 @@ Expose App Versions' version listing and version-specific install through `occ`,
 
 #### Scenario: Human listing
 
+@e2e tests/e2e/cli.spec.ts
+
 - GIVEN `openregister` is installed and bound to the App Store
 - WHEN `occ app_versions:versions openregister` runs
 - THEN it MUST print the installed version and the available versions with compatibility markers
@@ -27,10 +29,14 @@ Expose App Versions' version listing and version-specific install through `occ`,
 
 #### Scenario: JSON listing
 
+@e2e tests/e2e/cli.spec.ts
+
 - WHEN `occ app_versions:versions openregister --json` runs
 - THEN stdout MUST be valid JSON containing `installedVersion`, `availableVersions`, `sourceId`
 
 #### Scenario: Unknown app
+
+@e2e tests/e2e/cli.spec.ts
 
 - WHEN `occ app_versions:versions nope` runs
 - THEN the exit code MUST be non-zero and stderr MUST name the problem
@@ -41,11 +47,15 @@ Expose App Versions' version listing and version-specific install through `occ`,
 
 #### Scenario: Reproducible pinned install
 
+@e2e tests/e2e/cli.spec.ts
+
 - GIVEN a provisioning script for a fresh instance
 - WHEN `occ app_versions:install openregister 2.3.0` runs and the source delivers a valid signed release
 - THEN version 2.3.0 MUST be installed and the exit code MUST be 0
 
 #### Scenario: Downgrade requires the flag
+
+@e2e tests/e2e/cli.spec.ts
 
 - GIVEN `openregister` installed at 2.5.0
 - WHEN `occ app_versions:install openregister 2.3.0` runs without `--allow-downgrade`
@@ -54,11 +64,15 @@ Expose App Versions' version listing and version-specific install through `occ`,
 
 #### Scenario: Dry run leaves the instance untouched
 
+@e2e tests/e2e/cli.spec.ts
+
 - WHEN `occ app_versions:install openregister 2.3.0 --dry-run --json` runs
 - THEN stdout MUST report the dry-run outcome (`updateType`, checks passed)
 - AND the installed version MUST remain unchanged
 
 #### Scenario: Integrity failure exits distinctly
+
+@e2e tests/e2e/cli.spec.ts
 
 - GIVEN the downloaded artifact fails its checksum
 - WHEN the install command runs
@@ -69,6 +83,8 @@ Expose App Versions' version listing and version-specific install through `occ`,
 Commands MUST run without password confirmation (CLI executes as the server user, matching core `occ app:install` semantics) and MUST be registered via `info.xml` so they exist wherever the app is enabled. The command MUST refuse to run when the app being managed is App Versions itself or a core/always-enabled app, mirroring the API guard.
 
 #### Scenario: Self-management refused
+
+@e2e tests/e2e/cli.spec.ts
 
 - WHEN `occ app_versions:install app_versions 1.0.0` runs
 - THEN it MUST refuse with a non-zero exit code
