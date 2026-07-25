@@ -53,4 +53,26 @@ test.describe('app discovery', () => {
 		await expect(page.getByRole('tabpanel', { name: 'Apps' })).toBeVisible()
 		await expect(page.getByText('Selected app')).toBeVisible()
 	})
+
+	test('the installed-only filter returns only installed apps', async ({ page }) => {
+		// The Discover tab exposes an installed-only toggle backed by the API's
+		// `installedOnly` param; assert the contract at the API the UI calls.
+		const res = await page.request.get(
+			'/ocs/v2.php/apps/app_versions/api/discover?q=files&installedOnly=1&format=json',
+			{ headers: { 'OCS-APIRequest': 'true' } },
+		)
+		const results = (await res.json())?.ocs?.data?.results ?? []
+		expect(results.length).toBeGreaterThan(0)
+		for (const hit of results) {
+			expect(hit.installedVersion, `${hit.appId} should be installed`).toBeTruthy()
+		}
+	})
+
+	test('a search with no matches shows the empty state', async ({ page }) => {
+		await openSettings(page)
+		await openTab(page, 'Discover')
+		await page.getByTestId('discover-search-input').fill('zznomatchapp-qxwv')
+		await expect(page.getByTestId('discover-empty')).toBeVisible({ timeout: 90_000 })
+		await expect(page.getByTestId('discover-hit')).toHaveCount(0)
+	})
 })
