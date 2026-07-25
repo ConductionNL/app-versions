@@ -20,12 +20,16 @@ The system MUST write one audit entry for every install operation executed throu
 
 #### Scenario: Successful App Store install is recorded
 
+@e2e tests/e2e/audit.spec.ts
+
 - GIVEN admin `alice` has `openregister@2.5.0` installed
 - WHEN she installs `openregister@2.3.0` from the App Store via App Versions and the install succeeds
 - THEN one audit entry MUST exist with `actor_uid=alice`, `app_id=openregister`, `operation=install`, `from_version=2.5.0`, `to_version=2.3.0`, `source_id=appstore`, `status=success`
 - AND `created_at` MUST be the operation time in UTC
 
 #### Scenario: Failed install is recorded with the failure reason
+
+@e2e exclude driving a failed install to assert its audit row is covered by AuditLogger unit tests; the forge fail-closed path is e2e-covered separately.
 
 - GIVEN a download error occurs during an install attempt (e.g. HTTP 404 on the artifact)
 - WHEN the install fails
@@ -35,12 +39,16 @@ The system MUST write one audit entry for every install operation executed throu
 
 #### Scenario: External install records source and integrity warning
 
+@e2e exclude the integrity-warning branch needs a sibling-less external install asserted at the audit layer; the AuditLogger write is unit-tested.
+
 - GIVEN admin `alice` installs `openregister@2.5.0` from `github:ConductionNL/openregister` and no `.sha256` sibling asset exists
 - WHEN the install succeeds with `integrityWarning: "No SHA-256 checksum available for this artifact."`
 - THEN the audit entry MUST record `source_id=github:ConductionNL/openregister` and `status=success`
 - AND `message` MUST contain the integrity warning text
 
 #### Scenario: Audit write failure does not break the install
+
+@e2e exclude requires injecting an audit-store write failure; the best-effort write path is unit-tested.
 
 - GIVEN the audit table is unavailable (e.g. migration not yet run)
 - WHEN an admin installs a version and the install itself succeeds
@@ -49,6 +57,8 @@ The system MUST write one audit entry for every install operation executed throu
 - AND no exception from the audit path MUST reach the API response
 
 #### Scenario: No secrets in audit entries
+
+@e2e exclude entries never carry token material by construction; asserted in AuditLogger unit tests.
 
 - GIVEN an external install for a private repo authenticates with a stored PAT
 - WHEN the audit entry is written (success or failure)
@@ -62,11 +72,15 @@ The system MUST write an audit entry with `operation=bind_source` whenever a sou
 
 #### Scenario: Explicit bind is recorded
 
+@e2e exclude the bind_source audit row is unit-tested; e2e covers binding via re-bind without asserting the row.
+
 - GIVEN admin `alice` calls `POST /api/source/openregister/bind` with `{kind: "github-release", owner: "ConductionNL", repo: "openregister"}`
 - WHEN the binding is persisted
 - THEN one audit entry MUST exist with `actor_uid=alice`, `app_id=openregister`, `operation=bind_source`, `source_id=github:ConductionNL/openregister`, `status=success`
 
 #### Scenario: Rebinding records the previous source
+
+@e2e exclude the previous-source capture on rebind is unit-tested in AuditLogger.
 
 - GIVEN `openregister` is bound to `github:ConductionNL/openregister`
 - WHEN an admin rebinds it to the App Store
@@ -81,6 +95,8 @@ The system MUST expose audit entries through `GET /api/audit` — admin-only, pa
 
 #### Scenario: Admin lists the audit log
 
+@e2e tests/e2e/audit.spec.ts
+
 - GIVEN 75 audit entries exist
 - WHEN an admin calls `GET /api/audit`
 - THEN the response MUST contain the 50 newest entries, newest-first
@@ -88,11 +104,15 @@ The system MUST expose audit entries through `GET /api/audit` — admin-only, pa
 
 #### Scenario: Filter by app
 
+@e2e tests/e2e/audit.spec.ts
+
 - GIVEN audit entries exist for `openregister` and `calendar`
 - WHEN an admin calls `GET /api/audit?appId=openregister`
 - THEN every returned entry MUST have `app_id=openregister`
 
 #### Scenario: Non-admin is blocked
+
+@e2e tests/e2e/audit.spec.ts
 
 - GIVEN a non-admin authenticated user
 - WHEN they call `GET /api/audit`
@@ -100,6 +120,8 @@ The system MUST expose audit entries through `GET /api/audit` — admin-only, pa
 - AND no audit data MUST be returned
 
 #### Scenario: No mutation endpoints exist
+
+@e2e tests/e2e/audit.spec.ts
 
 - GIVEN any authenticated user, including an admin
 - WHEN they attempt `PUT`/`PATCH`/`DELETE` against `/api/audit` or `/api/audit/{id}`
@@ -114,6 +136,8 @@ The system MUST present the audit trail in the admin UI: a global history view a
 
 #### Scenario: Global history view
 
+@e2e tests/e2e/audit.spec.ts
+
 @e2e tests/e2e/panels.spec.ts
 
 - GIVEN audit entries exist for multiple apps
@@ -123,6 +147,8 @@ The system MUST present the audit trail in the admin UI: a global history view a
 - AND additional pages MUST be loadable without a full page reload
 
 #### Scenario: Per-app history tab
+
+@e2e tests/e2e/panels.spec.ts
 
 - GIVEN the admin opened the version picker for `openregister`
 - WHEN they switch to the History tab
@@ -137,6 +163,8 @@ The system MUST prune audit entries older than `app_versions.audit_retention_day
 
 #### Scenario: Old entries are pruned
 
+@e2e exclude retention pruning runs in a daily TimedJob over aged rows; time cannot be advanced in e2e — unit-tested.
+
 - GIVEN `audit_retention_days` is unset (default 365)
 - AND an audit entry is 400 days old
 - WHEN the daily prune job runs
@@ -144,6 +172,8 @@ The system MUST prune audit entries older than `app_versions.audit_retention_day
 - AND entries newer than 365 days MUST remain
 
 #### Scenario: Retention floor is enforced
+
+@e2e exclude the retention floor is a config-bounded prune rule, unit-tested.
 
 - GIVEN an admin sets `audit_retention_days` to `7`
 - WHEN the prune job runs
@@ -173,6 +203,8 @@ The system MUST write audit entries for pin operations: `pin` (on pin creation, 
 - THEN one audit entry MUST exist with `operation=unpin`, `from_version=2.3.0`, `status=success`
 
 #### Scenario: Drift is audited as system action
+
+@e2e exclude drift requires the NC updater to change a pinned app out-of-band; not reproducible in e2e (pinning is monitored-not-enforced) — unit-tested.
 
 - GIVEN `openregister` pinned at 2.3.0 drifts to 2.5.0 via Nextcloud's own updater
 - WHEN the drift handler records the drift
