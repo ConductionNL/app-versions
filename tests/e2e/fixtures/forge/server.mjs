@@ -71,7 +71,13 @@ function releaseJson(repo) {
 				browser_download_url: `${PUBLIC_BASE}/dl/${r.asset}.sha256`,
 			})
 		}
-		return { tag_name: r.tag, name: r.tag, assets }
+		return {
+			tag_name: r.tag,
+			name: r.tag,
+			// Release notes — mapped to the version's changelog by the app.
+			body: r.body ?? `## ${r.tag}\n\n- Fixture release notes for ${r.tag}`,
+			assets,
+		}
 	})
 }
 
@@ -106,6 +112,12 @@ const server = createServer(async (req, res) => {
 
 		// --- Forgejo API ----------------------------------------------------
 		if (path === '/api/v1/user') {
+			// A token containing "revoked" is treated as invalid, so PAT-validation
+			// can exercise the rejection path; everything else validates.
+			const auth = req.headers['authorization'] ?? ''
+			if (auth.includes('revoked')) {
+				return json(res, 401, { message: 'Unauthorized' })
+			}
 			return json(res, 200, { login: 'fixture-bot', id: 1 })
 		}
 

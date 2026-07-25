@@ -29,6 +29,8 @@ The system MUST let an admin pin an app to its **currently installed** version v
 
 #### Scenario: Pin requires password confirmation
 
+@e2e exclude the e2e admin session is always password-confirmed; the un-confirmed path is enforced by the PasswordConfirmationRequired attribute (route-auth gate).
+
 - GIVEN an admin session without recent password confirmation
 - WHEN `PUT /api/app/openregister/pin` is called
 - THEN the request MUST be rejected by the `PasswordConfirmationRequired` mechanism
@@ -36,12 +38,16 @@ The system MUST let an admin pin an app to its **currently installed** version v
 
 #### Scenario: Install-then-pin
 
+@e2e exclude occ install has no --pin flag and the pin:true API param requires a real web install that 503s the mod_php test image; the atomic install-then-pin is unit-tested.
+
 - GIVEN `openregister` is installed at 2.5.0
 - WHEN the admin installs 2.3.0 with `pin: true` and the install succeeds
 - THEN `pin.openregister` MUST record version 2.3.0
 - AND if the install fails, no pin MUST be written
 
 #### Scenario: Non-admin is blocked
+
+@e2e tests/e2e/shell.spec.ts
 
 - GIVEN a non-admin authenticated user
 - WHEN they call any pin endpoint
@@ -71,12 +77,16 @@ When an app is pinned, `installVersion` for any version other than the pinned on
 
 #### Scenario: Install over a pin is rejected
 
+@e2e tests/e2e/pinning-guards.spec.ts
+
 - GIVEN `openregister` is pinned at 2.3.0
 - WHEN an admin calls `installVersion('openregister', '2.5.0')` without `overridePin`
 - THEN the system MUST respond HTTP 409 with a message naming the pinned version 2.3.0
 - AND no download or filesystem change MUST happen
 
 #### Scenario: Override with re-pin
+
+@e2e exclude occ install exposes no --override-pin flag and overridePin via a web install 503s the test image; the override path is unit-tested.
 
 - GIVEN `openregister` is pinned at 2.3.0
 - WHEN the admin installs 2.5.0 with `overridePin=repin` and the install succeeds
@@ -85,11 +95,15 @@ When an app is pinned, `installVersion` for any version other than the pinned on
 
 #### Scenario: Override with unpin
 
+@e2e exclude same as override-with-re-pin — the overridePin=unpin path is unit-tested.
+
 - GIVEN `openregister` is pinned at 2.3.0
 - WHEN the admin installs 2.5.0 with `overridePin=unpin` and the install succeeds
 - THEN `pin.openregister` MUST be removed
 
 #### Scenario: Reinstalling the pinned version needs no override
+
+@e2e tests/e2e/pinning-guards.spec.ts
 
 - GIVEN `openregister` is pinned at 2.3.0
 - WHEN the admin installs 2.3.0 (re-pin / repair reinstall)
@@ -104,6 +118,8 @@ The system MUST detect when a pinned app's installed version no longer matches i
 
 #### Scenario: NC updater updates a pinned app
 
+@e2e exclude a pin is monitored, not enforced against NC core; an out-of-band core update is not reproducible in e2e.
+
 - GIVEN `openregister` is pinned at 2.3.0
 - WHEN an admin updates it to 2.5.0 via Nextcloud's regular Apps page
 - THEN the `AppUpdateEvent` listener MUST detect that the installed version 2.5.0 differs from the pin
@@ -111,17 +127,23 @@ The system MUST detect when a pinned app's installed version no longer matches i
 
 #### Scenario: Reconciliation job catches missed drift
 
+@e2e exclude drift reconciliation is a daily TimedJob over an out-of-band version change; unit-tested.
+
 - GIVEN `openregister` is pinned at 2.3.0 and was updated to 2.5.0 while App Versions was disabled
 - WHEN the daily reconciliation job runs
 - THEN the drift MUST be detected and recorded exactly as in the listener path
 
 #### Scenario: No drift while versions match
 
+@e2e exclude the reconcile job's no-drift path is unit-tested.
+
 - GIVEN `openregister` is pinned at 2.3.0 and installed at 2.3.0
 - WHEN the reconciliation job runs
 - THEN no drift MUST be recorded and no notification MUST be sent
 
 #### Scenario: Drift handled once per version
+
+@e2e exclude drift dedup in the listener/reconcile path is unit-tested.
 
 - GIVEN drift to 2.5.0 was already recorded and notified
 - WHEN the reconciliation job runs again with the app still at 2.5.0
@@ -135,12 +157,16 @@ On newly detected drift the system MUST notify admin-group members via `OCP\Noti
 
 #### Scenario: Admins are notified
 
+@e2e exclude drift notifications are raised by the reconcile job; unit-tested.
+
 - GIVEN drift of `openregister` from pinned 2.3.0 to installed 2.5.0 is newly detected
 - WHEN the drift handler runs
 - THEN every member of the `admin` group MUST receive a Nextcloud notification naming `openregister`, 2.3.0, and 2.5.0
 - AND the notification MUST link into App Versions
 
 #### Scenario: Re-pin reinstalls the pinned version
+
+@e2e exclude the drift-banner Re-pin action requires reproducing out-of-band drift; unit-tested.
 
 - GIVEN the UI shows the drift banner for `openregister` (pinned 2.3.0, installed 2.5.0)
 - WHEN the admin clicks Re-pin and confirms their password
@@ -149,12 +175,16 @@ On newly detected drift the system MUST notify admin-group members via `OCP\Noti
 
 #### Scenario: Accept the new version
 
+@e2e exclude the drift-banner Accept action requires reproducing drift; unit-tested.
+
 - GIVEN the drift banner for `openregister` (pinned 2.3.0, installed 2.5.0)
 - WHEN the admin chooses Accept → "move pin to 2.5.0"
 - THEN `pin.openregister` MUST record version 2.5.0 with cleared drift markers
 - AND choosing Accept → "remove pin" MUST delete the pin record instead
 
 #### Scenario: No autonomous reinstall
+
+@e2e exclude the app never reinstalls autonomously (monitored-not-enforced); asserted in reconcile-job unit tests.
 
 - GIVEN drift is detected outside any admin session (cron)
 - WHEN the drift handler completes
@@ -184,6 +214,8 @@ Pinned apps MUST be visibly badged in the app list and version picker (pinned ve
 - THEN it MUST contain the explanation that the pin does not block Nextcloud's own updater and that drift triggers a notification
 
 #### Scenario: List pins with live status
+
+@e2e tests/e2e/pinning-guards.spec.ts
 
 - GIVEN pins exist for `openregister` (no drift) and `calendar` (drifted)
 - WHEN the admin calls `GET /api/pins`

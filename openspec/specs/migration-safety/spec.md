@@ -36,6 +36,8 @@ When the requested version is lower than the installed version (`version_compare
 
 #### Scenario: Upgrades are unaffected
 
+@e2e tests/e2e/version-management.spec.ts
+
 - GIVEN installed 2.3.0
 - WHEN 2.5.0 is requested without `allowDowngrade`
 - THEN the guard MUST NOT trigger
@@ -48,6 +50,8 @@ For a downgrade (acknowledged or dry-run), after extracting the target archive a
 
 #### Scenario: Diff names the orphaned steps
 
+@e2e exclude the fixture app ships no migrations; MigrationDiffer is unit-tested with fabricated Version*.php fixtures.
+
 - GIVEN installed 2.5.0 contains `Version2040Date20260101000000.php` and target 2.3.0 does not
 - WHEN a dry-run downgrade to 2.3.0 runs
 - THEN `orphanedMigrations` MUST contain `Version2040Date20260101000000`
@@ -55,11 +59,15 @@ For a downgrade (acknowledged or dry-run), after extracting the target archive a
 
 #### Scenario: No schema drift
 
+@e2e exclude the empty-diff case is unit-tested in MigrationDiffer.
+
 - GIVEN target and installed ship identical migration sets
 - WHEN the dry-run runs
 - THEN `orphanedMigrations` MUST be an empty list and the UI MUST say no schema steps differ
 
 #### Scenario: Diff failure degrades gracefully
+
+@e2e exclude an unreadable migration directory is not reproducible in e2e; the degrade path is unit-tested.
 
 - GIVEN a target archive whose migration directory cannot be read
 - WHEN an acknowledged downgrade runs
@@ -73,16 +81,22 @@ After every successful finalize, the system MUST record `lkg.{appId}` (JSON: `ve
 
 #### Scenario: Success updates the record
 
+@e2e tests/e2e/install-effects.spec.ts
+
 - GIVEN `openregister` finalizes 2.5.0 successfully
 - THEN `lkg.openregister` MUST record version 2.5.0 with timestamp and source
 
 #### Scenario: Failure preserves the record
+
+@e2e tests/e2e/install-effects.spec.ts
 
 - GIVEN `lkg.openregister` records 2.5.0
 - WHEN an install of 2.6.0 fails and is reverted
 - THEN `lkg.openregister` MUST still record 2.5.0
 
 #### Scenario: One-click rollback target
+
+@e2e exclude the Roll-back-to-last-known-good UI action needs installed!=lkg; the lkg record is e2e-covered and the action is covered by App.vue vitest.
 
 - GIVEN installed 2.6.0 (broken) and `lkg.openregister` = 2.5.0
 - WHEN the admin clicks "Roll back to last known good"

@@ -20,6 +20,8 @@ The system MUST expose a single `DiscoveryProviderInterface` so additional sourc
 
 #### Scenario: Multiple providers registered
 
+@e2e exclude provider registry wiring is unit-tested (DiscoveryAggregator).
+
 - **GIVEN** the system has `AppStoreDiscovery`, `GithubPrivateDiscovery`, and `GithubSearchDiscovery` registered
 - **WHEN** an admin calls `GET /api/discover?q=register`
 - **THEN** the aggregator MUST iterate every enabled provider
@@ -31,6 +33,8 @@ The system MUST search the Nextcloud App Store catalog by case-insensitive subst
 
 #### Scenario: Match by name
 
+@e2e tests/e2e/discovery.spec.ts
+
 - **GIVEN** the App Store catalog contains an app with name "Open Register"
 - **WHEN** an admin searches for `register`
 - **THEN** the result MUST contain a hit with `appId = "openregister"` (or whatever the actual id is)
@@ -38,11 +42,15 @@ The system MUST search the Nextcloud App Store catalog by case-insensitive subst
 
 #### Scenario: No match
 
+@e2e tests/e2e/discovery.spec.ts
+
 - **GIVEN** no App Store entry matches the query
 - **WHEN** the admin searches
 - **THEN** the App Store provider MUST return `hits = []` with no error
 
 #### Scenario: Catalog cache hit
+
+@e2e exclude the 1-hour catalog cache is unit-tested in AppStoreDiscovery.
 
 - **GIVEN** the App Store catalog was fetched within the last hour
 - **WHEN** a second search runs
@@ -55,6 +63,8 @@ When the current admin has at least one PAT in `app_versions_pats`, the system M
 
 #### Scenario: With PAT and matching private repo
 
+@e2e exclude requires a real private GitHub repo + PAT; GithubPrivateDiscovery is unit-tested.
+
 - **GIVEN** an admin has uploaded a PAT with `target_pattern = ConductionNL/*`
 - **AND** the org has a private repo `ConductionNL/private-app` with `appinfo/info.xml` declaring `<id>privateapp</id>`
 - **WHEN** the admin searches for `private`
@@ -65,12 +75,16 @@ When the current admin has at least one PAT in `app_versions_pats`, the system M
 
 #### Scenario: PAT covers a non-allowlisted repo
 
+@e2e exclude the installable-flag-vs-allowlist logic is unit-tested.
+
 - **GIVEN** an admin's PAT can see `OtherOrg/some-app` but `OtherOrg/*` is NOT in the trusted-source allowlist
 - **WHEN** the search returns a hit for that repo
 - **THEN** the hit MUST be returned with `installable = false`
 - **AND** `installableReason` MUST explain the missing allowlist entry
 
 #### Scenario: No PAT configured
+
+@e2e exclude the private provider is disabled without a PAT; unit-tested.
 
 - **GIVEN** the current admin has no visible PATs
 - **WHEN** discovery runs
@@ -83,11 +97,15 @@ The system MUST provide an opt-in public GitHub code search provider that is dis
 
 #### Scenario: Disabled by default
 
+@e2e exclude the public-search opt-in flag is unit-tested.
+
 - **GIVEN** `app_versions.discovery.github_search_enabled` has never been set
 - **WHEN** the admin calls `GET /api/sources`
 - **THEN** `github-search` MUST appear in the providers list with `enabled = false`
 
 #### Scenario: Enabled returns public hits
+
+@e2e exclude opt-in public GitHub code search needs real GitHub; unit-tested.
 
 - **GIVEN** the admin runs `occ config:app:set app_versions discovery.github_search_enabled --value=true`
 - **WHEN** they search for `register`
@@ -95,6 +113,8 @@ The system MUST provide an opt-in public GitHub code search provider that is dis
 - **AND** return up to 30 hits annotated with allowlist status
 
 #### Scenario: Rate limited
+
+@e2e exclude provider rate-limit handling is unit-tested; the public providers cannot be rate-limited on demand in e2e.
 
 - **GIVEN** GitHub returns 403 with `X-RateLimit-Remaining: 0`
 - **WHEN** the search runs
@@ -107,6 +127,8 @@ The system MUST de-duplicate hits by `appId` and present a single result per app
 
 #### Scenario: Same app from multiple providers
 
+@e2e exclude cross-provider dedupe is unit-tested; only one provider returns the fixture in e2e.
+
 - **GIVEN** App Store has `openregister` AND a PAT-visible repo also has `appinfo/info.xml` declaring id `openregister`
 - **WHEN** the admin searches for `register`
 - **THEN** the response MUST contain ONE result row for `openregister`
@@ -114,11 +136,15 @@ The system MUST de-duplicate hits by `appId` and present a single result per app
 
 #### Scenario: Already installed apps annotated
 
+@e2e tests/e2e/discovery.spec.ts
+
 - **GIVEN** `openregister` is currently installed at version `0.2.13`
 - **WHEN** the admin searches for `register`
 - **THEN** the result row MUST include `installedVersion = "0.2.13"`
 
 #### Scenario: installedOnly filter
+
+@e2e tests/e2e/discovery.spec.ts
 
 - **GIVEN** the admin calls `GET /api/discover?q=register&installedOnly=true`
 - **WHEN** the response builds
@@ -130,6 +156,8 @@ The system MUST expose `GET /api/discover` with admin-only access and consistent
 
 #### Scenario: Query too short
 
+@e2e tests/e2e/discovery.spec.ts
+
 - **GIVEN** an admin calls `GET /api/discover?q=a`
 - **WHEN** the request is processed
 - **THEN** the system MUST return HTTP 400
@@ -137,12 +165,16 @@ The system MUST expose `GET /api/discover` with admin-only access and consistent
 
 #### Scenario: Source filter
 
+@e2e exclude the source-filter NcSelect exposes no stable test hook; provider selection is unit-tested.
+
 - **GIVEN** an admin calls `GET /api/discover?q=register&sources=appstore`
 - **WHEN** discovery runs
 - **THEN** only `AppStoreDiscovery` MUST run
 - **AND** the response's `providers` list MUST still report all providers' enabled state
 
 #### Scenario: Non-admin blocked
+
+@e2e tests/e2e/shell.spec.ts
 
 - **GIVEN** a non-admin user calls the endpoint
 - **THEN** the response MUST be 403 Forbidden
@@ -153,6 +185,8 @@ The admin SPA MUST provide a Discover tab containing a debounced search input (c
 
 #### Scenario: Search renders multi-source hits
 
+@e2e tests/e2e/discovery.spec.ts
+
 - GIVEN an admin on the Discover tab with a PAT configured
 - WHEN they type "openregister" (debounced)
 - THEN hits from the App Store and GitHub private providers MUST render with source badges
@@ -160,11 +194,15 @@ The admin SPA MUST provide a Discover tab containing a debounced search input (c
 
 #### Scenario: Partial provider failure stays usable
 
+@e2e exclude cannot force one provider to fail while another succeeds in e2e; the aggregator fail-soft path is unit-tested.
+
 - GIVEN the GitHub provider errors (rate limit) while the App Store provider succeeds
 - WHEN the search completes
 - THEN App Store hits MUST render and a dismissible note MUST name the failing provider
 
 #### Scenario: Input validation mirrors the API
+
+@e2e tests/e2e/discovery.spec.ts
 
 - WHEN the admin types a single character
 - THEN no request MUST be sent and a hint MUST indicate the minimum length
@@ -175,17 +213,23 @@ From a hit, the admin MUST be able to: (a) for an installed app, jump to the App
 
 #### Scenario: Installed hit opens the picker
 
+@e2e tests/e2e/discovery.spec.ts
+
 - GIVEN `openregister` is installed
 - WHEN the admin activates its Discover hit
 - THEN the Apps tab MUST open with the `openregister` version picker expanded
 
 #### Scenario: Installable candidate prefills bind
 
+@e2e exclude requires a not-installed, allowlisted app to appear in App Store/GitHub discovery; the fixture app is not published there.
+
 - GIVEN a not-installed private app hit with candidate `github:ConductionNL/hermiq` and that pattern allowlisted
 - WHEN the admin activates the hit's install action
 - THEN the Sources bind flow MUST open prefilled with `github:ConductionNL/hermiq`
 
 #### Scenario: Non-installable explains why
+
+@e2e exclude requires a non-installable discovery hit from a real provider; the reason rendering is covered by DiscoverPanel vitest.
 
 - GIVEN a hit whose only candidate is not allowlisted
 - WHEN it renders

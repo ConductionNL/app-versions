@@ -15,6 +15,8 @@ read-only and MUST NOT change any installed or pinned version.
 
 #### Scenario: A pinned older version with an open advisory is flagged
 
+@e2e exclude the /api/advisories endpoint correlates every installed app (too slow for e2e); the pinned-to-vulnerable correlation is unit-tested in AdvisoryService and was confirmed live against the fixture (state=pinned-to-vulnerable, recommended 1.1.0).
+
 - **GIVEN** an app the admin has pinned to an older version that has a published security advisory
 - **WHEN** the version list is shown
 - **THEN** that app MUST be marked `pinned-to-vulnerable`, with the advisory id, severity, and summary

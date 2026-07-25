@@ -20,16 +20,22 @@ After a successful install, the system MUST store the downloaded archive and its
 
 #### Scenario: Successful install populates the cache
 
+@e2e tests/e2e/install-effects.spec.ts
+
 - GIVEN `openregister` 2.3.0 installs successfully from the App Store
 - THEN the archive, its sha256, signature, and certificate MUST be stored under the app's cache folder for version 2.3.0
 
 #### Scenario: Retention prunes oldest
+
+@e2e exclude requires artifact_cache_keep bound + several installs; the prune rule is unit-tested.
 
 - GIVEN `artifact_cache_keep` is 3 and versions 2.1.0, 2.2.0, 2.3.0 are cached
 - WHEN 2.4.0 installs successfully
 - THEN 2.1.0's archive MUST be removed and the other three retained
 
 #### Scenario: Cache write failure is non-fatal
+
+@e2e exclude a cache write failure cannot be injected in e2e; the best-effort write is unit-tested.
 
 - GIVEN app data is unwritable
 - WHEN an install succeeds
@@ -51,11 +57,15 @@ When an install's source download fails (network error, HTTP error, missing rele
 
 #### Scenario: Tampered cache is discarded
 
+@e2e exclude requires tampering the on-disk cache file; the sha re-check is unit-tested.
+
 - GIVEN the cached 2.3.0 archive no longer matches its stored sha256
 - WHEN the fallback is attempted
 - THEN the artifact MUST be discarded and the original download error returned
 
 #### Scenario: Untrusted source is not served from cache
+
+@e2e exclude the allowlist gate precedes any cache read; unit-tested.
 
 - GIVEN a cached artifact for an app whose source pattern was removed from the allowlist
 - WHEN an install of that version is attempted
@@ -76,6 +86,8 @@ Version listings MUST mark cached versions (`cachedOffline: true`). The API MUST
 - THEN the 2.3.0 row MUST show an offline-available indicator
 
 #### Scenario: Clear cache
+
+@e2e tests/e2e/install-effects.spec.ts
 
 - WHEN the admin clears the cache with password confirmation
 - THEN all cached archives MUST be removed and the summary MUST report empty
