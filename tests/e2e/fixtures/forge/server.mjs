@@ -71,7 +71,13 @@ function releaseJson(repo) {
 				browser_download_url: `${PUBLIC_BASE}/dl/${r.asset}.sha256`,
 			})
 		}
-		return { tag_name: r.tag, name: r.tag, assets }
+		return {
+			tag_name: r.tag,
+			name: r.tag,
+			// Release notes — mapped to the version's changelog by the app.
+			body: r.body ?? `## ${r.tag}\n\n- Fixture release notes for ${r.tag}`,
+			assets,
+		}
 	})
 }
 

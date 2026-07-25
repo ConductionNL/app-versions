@@ -20,11 +20,15 @@ Admins choosing a version to install — especially rolling back past intermedia
 
 #### Scenario: Forge release body is returned
 
+@e2e tests/e2e/install-effects.spec.ts
+
 - GIVEN `openregister` is bound to `github:ConductionNL/openregister` and release 2.3.0 has a body "Fixes LDAP sync"
 - WHEN the admin fetches `/api/app/openregister/versions`
 - THEN the 2.3.0 entry MUST contain `changelog: "Fixes LDAP sync"`
 
 #### Scenario: Missing notes are null, listing still works
+
+@e2e exclude the null-changelog mapping is unit-tested in AppStoreSource/ForgeReleaseSource.
 
 - GIVEN a release without notes
 - WHEN versions are fetched
@@ -32,6 +36,8 @@ Admins choosing a version to install — especially rolling back past intermedia
 - AND the version listing MUST succeed with all other fields intact
 
 #### Scenario: Oversized changelog is truncated server-side
+
+@e2e exclude the 8 KiB truncation is unit-tested.
 
 - GIVEN a release whose notes exceed 8 KiB
 - WHEN versions are fetched
@@ -68,11 +74,15 @@ When the admin selects a target version different from the installed one, the UI
 
 #### Scenario: Upgrade range aggregation
 
+@e2e exclude the installed->target range aggregation is covered by ChangelogRangePanel vitest.
+
 - GIVEN `openregister` installed at 2.3.0 and target 2.5.0 selected, with releases 2.4.0 and 2.5.0 in between
 - WHEN the aggregate panel renders
 - THEN it MUST list 2.4.0 and 2.5.0 each with their notes
 
 #### Scenario: Downgrade shows what is being undone
+
+@e2e exclude the downgrade range ordering is covered by ChangelogRangePanel vitest.
 
 - GIVEN installed 2.5.0 and target 2.3.0
 - WHEN the aggregate panel renders
