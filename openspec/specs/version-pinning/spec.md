@@ -127,7 +127,7 @@ The system MUST detect when a pinned app's installed version no longer matches i
 
 #### Scenario: Reconciliation job catches missed drift
 
-@e2e exclude drift reconciliation is a daily TimedJob over an out-of-band version change; unit-tested.
+@e2e tests/e2e/jobs.spec.ts
 
 - GIVEN `openregister` is pinned at 2.3.0 and was updated to 2.5.0 while App Versions was disabled
 - WHEN the daily reconciliation job runs
@@ -135,7 +135,7 @@ The system MUST detect when a pinned app's installed version no longer matches i
 
 #### Scenario: No drift while versions match
 
-@e2e exclude the reconcile job's no-drift path is unit-tested.
+@e2e tests/e2e/jobs.spec.ts
 
 - GIVEN `openregister` is pinned at 2.3.0 and installed at 2.3.0
 - WHEN the reconciliation job runs

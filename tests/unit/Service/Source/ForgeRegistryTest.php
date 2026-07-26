@@ -16,7 +16,7 @@ use PHPUnit\Framework\TestCase;
 final class ForgeRegistryTest extends TestCase {
 	/**
 	 * @param array<string, string> $overrides keyed by the full app-config key
-	 *   (e.g. `forge.github.api_base`)
+	 *                                         (e.g. `forge.github.api_base`)
 	 */
 	private function registry(array $overrides = []): ForgeRegistry {
 		$config = $this->createMock(IConfig::class);

@@ -226,4 +226,45 @@ final class AppStoreSourceTest extends TestCase {
 		$source->listVersions('openregister', $this->binding());
 		$source->listVersions('openregister', $this->binding());
 	}
+
+	public function testStaleCacheServedWhenRefetchFails(): void {
+		// A good payload was cached long ago (TTL lapsed), and the live App Store
+		// is having an outage — here a 200 with an empty body, the exact episode
+		// observed against garm3. The listing must serve the stale copy rather
+		// than blank out; a flaky upstream is why the cache exists.
+		$body = json_encode([
+			'data' => [['id' => 'openregister', 'releases' => [['version' => '2.3.0']]]],
+		], JSON_THROW_ON_ERROR);
+
+		$response = $this->createMock(IResponse::class);
+		$response->method('getStatusCode')->willReturn(200);
+		$response->method('getBody')->willReturn(''); // upstream returns nothing
+
+		$client = $this->createMock(IClient::class);
+		$client->method('get')->willReturn($response);
+		$clientService = $this->createMock(IClientService::class);
+		$clientService->method('newClient')->willReturn($client);
+
+		$config = $this->createMock(IConfig::class);
+		$config->method('getSystemValueString')->willReturn('28.0.0');
+		$config->method('getAppValue')->willReturnCallback(
+			function (string $app, string $key, string $default = '') use ($body): string {
+				if (str_starts_with($key, 'appstore.payload_ts.')) {
+					return '1'; // cached at epoch 1 ⇒ TTL long lapsed
+				}
+				if (str_starts_with($key, 'appstore.payload.')) {
+					return $body;
+				}
+				return $default;
+			},
+		);
+
+		$l10nFactory = $this->createMock(IFactory::class);
+		$l10nFactory->method('findLanguage')->willReturn('en');
+
+		$source = new AppStoreSource($clientService, $config, $l10nFactory);
+		$result = $source->listVersions('openregister', $this->binding());
+
+		$this->assertSame('2.3.0', $result['versions'][0]['version'], 'stale cache must serve during an upstream outage');
+	}
 }
