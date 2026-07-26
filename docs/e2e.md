@@ -44,7 +44,10 @@ docker exec -u www-data av-e2e php occ app:disable firstrunwizard
 
 # The version specs need a genuine App Store app with real release history.
 # Shipped apps (dashboard, files, …) are unsuitable: they follow the server
-# release, so the picker reports that rather than listing versions.
+# release, so the picker reports that rather than listing versions. The auth
+# setup step installs `notes` automatically (idempotent), so this line is only
+# needed when provisioning by hand; the downgrade spec targets the oldest
+# release the store still lists, so it survives the store pruning old versions.
 docker exec -u www-data av-e2e php occ app:install notes
 ```
 

@@ -18,7 +18,7 @@ The system MUST persist PATs in a dedicated table with encrypted token bytes, ow
 
 #### Scenario: Upload a classic PAT
 
-@e2e exclude a GitHub classic PAT validates against the real github.com/user with scope headers; the codeberg validation path is e2e-covered and the scope logic is unit-tested.
+@e2e tests/e2e/pat-validation.spec.ts
 
 - **GIVEN** an admin POSTs `{label: "ConductionNL prod", kind: "classic", targetPattern: "ConductionNL/*", token: "ghp_abc..."}`
 - **WHEN** the system validates and encrypts the token
@@ -53,7 +53,7 @@ PATs MUST be encrypted via `\OCP\Security\ICrypto::encrypt()` before persistence
 
 #### Scenario: Plaintext never reaches a property
 
-@e2e exclude an internal invariant (plaintext confined to the useToken callback); unit-tested.
+@e2e tests/e2e/pat-validation.spec.ts
 
 - **GIVEN** a PAT is being used to authenticate a GitHub fetch
 - **WHEN** the request runs
@@ -67,7 +67,7 @@ The system MUST probe a PAT against `GET {forge.apiBaseUrl}/user` (using the for
 
 #### Scenario: Classic PAT with `repo` scope only — accepted
 
-@e2e exclude requires GitHub's X-OAuth-Scopes header; the scope-acceptance rule is unit-tested in PatValidator.
+@e2e tests/e2e/pat-validation.spec.ts
 
 - **GIVEN** the admin uploads a GitHub `ghp_*` token with `X-OAuth-Scopes: repo`
 - **THEN** the system MUST accept the PAT
@@ -75,7 +75,7 @@ The system MUST probe a PAT against `GET {forge.apiBaseUrl}/user` (using the for
 
 #### Scenario: Classic PAT with extra write scope — rejected
 
-@e2e exclude requires GitHub's X-OAuth-Scopes header; the over-broad-scope rejection is unit-tested.
+@e2e tests/e2e/pat-validation.spec.ts
 
 - **GIVEN** the admin uploads a GitHub `ghp_*` token with `X-OAuth-Scopes: repo, write:packages, admin:org`
 - **THEN** the system MUST reject with HTTP 400
@@ -110,7 +110,7 @@ The system MUST probe a PAT against `GET {forge.apiBaseUrl}/user` (using the for
 
 #### Scenario: Expiration captured
 
-@e2e exclude requires a forge token-expiry response header; expiry parsing is unit-tested.
+@e2e tests/e2e/pat-validation.spec.ts
 
 - **GIVEN** a GitHub response includes `github-authentication-token-expiration: 2026-08-15 12:00:00 UTC`
 - **THEN** the system MUST parse and persist `expires_at = 2026-08-15T12:00:00Z`
@@ -131,7 +131,7 @@ When a PAT visible to the current admin matches the source binding's forge AND `
 
 #### Scenario: Private Codeberg repo accessible via Codeberg PAT
 
-@e2e exclude the fixture forge does not gate repos behind auth; PatResolver + auth-header attachment is unit-tested.
+@e2e tests/e2e/pat-validation.spec.ts
 
 - **GIVEN** admin A is bound to source `codeberg:Conduction/private-build` and has uploaded a Codeberg token with `forge = codeberg`, `target_pattern = Conduction/*`
 - **WHEN** the version list runs
@@ -149,7 +149,7 @@ When a PAT visible to the current admin matches the source binding's forge AND `
 
 #### Scenario: Expired PAT skipped
 
-@e2e exclude the PatResolver expired-skip is unit-tested.
+@e2e tests/e2e/pat-validation.spec.ts
 
 - **GIVEN** a PAT with `expires_at` in the past
 - **WHEN** `PatResolver::findFor` is called
@@ -194,7 +194,7 @@ The system MUST expose endpoints for listing, creating, updating, deleting, and 
 
 #### Scenario: Delete restricted to owner
 
-@e2e exclude requires a second admin to prove cross-owner deletion is refused; unit-tested.
+@e2e tests/e2e/pat-validation.spec.ts
 
 - **GIVEN** admin A's PAT exists, shared with admins
 - **WHEN** admin B calls `DELETE /api/pats/{id}`
@@ -207,7 +207,7 @@ When a Nextcloud user is deleted, all PATs owned by that uid MUST be deleted.
 
 #### Scenario: User deletion sweeps PATs
 
-@e2e exclude requires deleting a user account; the UserDeletedListener sweep is unit-tested.
+@e2e tests/e2e/pat-validation.spec.ts
 
 - **GIVEN** admin A owns PATs P1 (private) and P2 (shared)
 - **WHEN** an admin deletes user A
@@ -291,7 +291,7 @@ A daily background job MUST, for every PAT with a known `expiresAt`, notify the 
 
 #### Scenario: 14-day warning fires once
 
-@e2e exclude the daily PatExpiryWarningJob fires on tokens crossing an expiry threshold; time cannot be advanced in e2e — the threshold logic is unit-tested.
+@e2e tests/e2e/jobs.spec.ts
 
 - **GIVEN** a GitHub PAT "conduction-bot" expiring in 12 days, not yet warned
 - **WHEN** the job runs on two consecutive days
@@ -307,7 +307,7 @@ A daily background job MUST, for every PAT with a known `expiresAt`, notify the 
 
 #### Scenario: Unknown expiry is left alone
 
-@e2e exclude the job skips tokens with no known expiry; unit-tested.
+@e2e tests/e2e/jobs.spec.ts
 
 - **GIVEN** a Codeberg token whose validation captured no expiry
 - **WHEN** the job runs

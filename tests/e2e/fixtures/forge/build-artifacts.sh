@@ -39,6 +39,22 @@ make() { # filename appid infoversion [extrabyte]
   ( cd "$OUT" && sha256sum "$file" | awk '{print $1}' > "$file.sha256" )
 }
 
+make_with_migration() { # filename appid infoversion migrationclass
+  local file="$1" appid="$2" ver="$3" mig="$4"
+  rm -rf "$tmp/build"; mkdir -p "$tmp/build/$appid/appinfo" "$tmp/build/$appid/lib/Migration"
+  infoxml "$appid" "$ver" > "$tmp/build/$appid/appinfo/info.xml"
+  # A no-op migration step so this version's archive carries a Version*.php the
+  # migration-diff can compare against an installed copy that lacks it.
+  cat > "$tmp/build/$appid/lib/Migration/$mig.php" <<PHP
+<?php
+namespace OCA\\ForgeFixtureApp\\Migration;
+use OCP\\Migration\\SimpleMigrationStep;
+class $mig extends SimpleMigrationStep {}
+PHP
+  tar -C "$tmp/build" -czf "$OUT/$file" "$appid"
+  ( cd "$OUT" && sha256sum "$file" | awk '{print $1}' > "$file.sha256" )
+}
+
 # Well-formed releases for fixtureapp: below, at, and above the 1.0.0 baseline.
 make fixtureapp-0.9.0.tar.gz fixtureapp 0.9.0
 make fixtureapp-1.0.0.tar.gz fixtureapp 1.0.0
@@ -49,5 +65,31 @@ make fixtureapp-1.0.1-tampered.tar.gz fixtureapp 1.0.1 tampered
 # Integrity failures: appId mismatch, version mismatch (tag says 1.0.1, info says 9.9.9).
 make fixtureapp-wrongid.tar.gz notfixtureapp 1.0.1
 make fixtureapp-wrongversion.tar.gz fixtureapp 9.9.9
+# 1.2.0 ships a migration step the 1.0.0 baseline lacks, so a downgrade off it
+# has an orphaned migration for the diff to name.
+make_with_migration fixtureapp-1.2.0.tar.gz fixtureapp 1.2.0 Version1020Date20260101000000
+
+# 1.3.0 ships a migration that throws in changeSchema, so the finalize phase
+# fails and the installer must revert to the previous version.
+make_bad_finalize() { # filename appid version
+  local file="$1" appid="$2" ver="$3"
+  rm -rf "$tmp/build"; mkdir -p "$tmp/build/$appid/appinfo" "$tmp/build/$appid/lib/Migration"
+  infoxml "$appid" "$ver" > "$tmp/build/$appid/appinfo/info.xml"
+  cat > "$tmp/build/$appid/lib/Migration/Version1030Date20260101000000.php" <<PHP
+<?php
+namespace OCA\\ForgeFixtureApp\\Migration;
+use Closure;
+use OCP\\Migration\\IOutput;
+use OCP\\Migration\\SimpleMigrationStep;
+class Version1030Date20260101000000 extends SimpleMigrationStep {
+	public function changeSchema(IOutput \\\$output, Closure \\\$schemaClosure, array \\\$options) {
+		throw new \\RuntimeException('fixture: deliberate finalize failure');
+	}
+}
+PHP
+  tar -C "$tmp/build" -czf "$OUT/$file" "$appid"
+  ( cd "$OUT" && sha256sum "$file" | awk '{print $1}' > "$file.sha256" )
+}
+make_bad_finalize fixtureapp-1.3.0.tar.gz fixtureapp 1.3.0
 
 echo "built artifacts in $OUT:"; ls -1 "$OUT" | grep -v '.sha256$'

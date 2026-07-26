@@ -77,13 +77,28 @@ test.describe('version listing and release notes', () => {
 
 	test('the API refuses an unacknowledged downgrade with a 409', async ({ page }) => {
 		// The downgrade guard is server-enforced, so assert it at the API boundary
-		// where every consumer (UI, occ, scripts) hits it.
+		// where every consumer (UI, occ, scripts) hits it. The target must be a
+		// version the source actually lists and that is older than what is
+		// installed — the App Store prunes ancient releases, so pick the oldest
+		// still-listed release below the installed version at runtime rather than
+		// hard-coding a version that may have aged out of the catalogue.
+		const listing = (await (await page.request.get(
+			`/ocs/v2.php/apps/app_versions/api/app/${APP}/versions?format=json`,
+			{ headers: { 'OCS-APIRequest': 'true' } },
+		)).json())?.ocs?.data
+		const installed = String(listing?.installedVersion ?? '')
+		const versions: string[] = (listing?.availableVersions ?? []).map((v: any) => String(v.version))
+		expect(versions.length, `${APP} must list versions from the source`).toBeGreaterThan(0)
+		const older = versions[versions.length - 1] // oldest listed
+		expect(older, 'an older release exists to attempt a downgrade to').not.toBe(installed)
+
 		const res = await page.request.post(
-			`/ocs/v2.php/apps/app_versions/api/app/${APP}/versions/1.0.0/install?format=json`,
+			`/ocs/v2.php/apps/app_versions/api/app/${APP}/versions/${older}/install?format=json`,
 			{ headers: { 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' }, data: {} },
 		)
 		const body = await res.text()
-		// Must be refused, and must explain itself rather than 500.
+		// Must be refused as a downgrade, and must explain itself rather than 500
+		// or a bare "not found".
 		expect(body).not.toContain('"installed"')
 		expect(body.toLowerCase()).toMatch(/downgrad|older|pin|confirm|password/)
 	})

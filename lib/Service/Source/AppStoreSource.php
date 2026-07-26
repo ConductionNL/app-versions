@@ -31,8 +31,7 @@ use UnexpectedValueException;
  * @psalm-api
  */
 class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
-	private const PRIMARY_ENDPOINT = 'https://garm3.nextcloud.com/api/v1/apps.json';
-	private const PLATFORM_ENDPOINT = 'https://garm3.nextcloud.com/api/v1/platform/%s/apps.json';
+	private const DEFAULT_API_BASE = 'https://garm3.nextcloud.com/api/v1';
 	private const MAX_PAGES = 20;
 
 	/**
@@ -213,7 +212,7 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 	 * @return array<array-key, mixed>|null
 	 */
 	private function fetchAppPayload(string $appId): ?array {
-		$cached = $this->readCachedPayload($appId);
+		$cached = $this->readCachedPayload($appId, false);
 		if ($cached !== null) {
 			return $cached;
 		}
@@ -221,25 +220,36 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 		$payload = $this->fetchAppPayloadUncached($appId);
 		if ($payload !== null) {
 			$this->writeCachedPayload($appId, $payload);
+
+			return $payload;
 		}
 
-		return $payload;
+		// The live fetch failed (App Store outage, a 200-with-empty-body episode,
+		// a timeout, …). Rather than blank every listing, fall back to the last
+		// cached payload even though its TTL has lapsed — stale-if-error. A flaky
+		// upstream is the whole reason this cache exists.
+		return $this->readCachedPayload($appId, true);
 	}
 
 	/**
-	 * Returns a still-valid cached payload for the app, or null when there is
-	 * none or it has expired. A malformed cache entry is treated as a miss.
+	 * Returns a cached payload for the app, or null when there is none or the
+	 * stored JSON is malformed. When $ignoreTtl is false the entry is only
+	 * returned while still within its TTL (the normal fast path); when true the
+	 * age check is skipped so a stale copy can serve as a last resort during an
+	 * upstream outage.
 	 *
 	 * @return array<array-key, mixed>|null
 	 */
-	private function readCachedPayload(string $appId): ?array {
-		$cachedAt = (int)$this->config->getAppValue(
-			'app_versions',
-			self::PAYLOAD_CACHE_TS_PREFIX . $appId,
-			'0',
-		);
-		if ($cachedAt <= 0 || (time() - $cachedAt) >= self::PAYLOAD_CACHE_TTL_SECONDS) {
-			return null;
+	private function readCachedPayload(string $appId, bool $ignoreTtl): ?array {
+		if (!$ignoreTtl) {
+			$cachedAt = (int)$this->config->getAppValue(
+				'app_versions',
+				self::PAYLOAD_CACHE_TS_PREFIX . $appId,
+				'0',
+			);
+			if ($cachedAt <= 0 || (time() - $cachedAt) >= self::PAYLOAD_CACHE_TTL_SECONDS) {
+				return null;
+			}
 		}
 
 		$raw = $this->config->getAppValue('app_versions', self::PAYLOAD_CACHE_PREFIX . $appId, '');
@@ -283,11 +293,25 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 	/**
 	 * @return array<array-key, mixed>|null
 	 */
+	/**
+	 * The App Store API base URL. Defaults to the public store but MAY be
+	 * overridden via the `appstore.api_base` app config so an instance can point
+	 * at a mirror (or, in an e2e environment, at a fixture). A blank override
+	 * keeps the default; a trailing slash is trimmed.
+	 */
+	private function apiBase(): string {
+		/** @var string|null $raw */
+		$raw = $this->config->getAppValue('app_versions', 'appstore.api_base', '');
+		$override = trim((string)$raw);
+
+		return rtrim($override !== '' ? $override : self::DEFAULT_API_BASE, '/');
+	}
+
 	private function fetchAppPayloadUncached(string $appId): ?array {
 		$client = $this->clientService->newClient();
 
 		for ($page = 1; $page <= self::MAX_PAGES; $page++) {
-			$endpoint = self::PRIMARY_ENDPOINT . '?filter=' . rawurlencode($appId) . '&page=' . $page;
+			$endpoint = $this->apiBase() . '/apps.json?filter=' . rawurlencode($appId) . '&page=' . $page;
 			try {
 				$response = $client->get($endpoint, ['timeout' => self::FETCH_TIMEOUT_SECONDS]);
 				if ($response->getStatusCode() !== 200) {
@@ -315,7 +339,7 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 		}
 
 		$platformVersion = $this->getPlatformVersion();
-		$platformEndpoint = sprintf(self::PLATFORM_ENDPOINT, rawurlencode($platformVersion));
+		$platformEndpoint = $this->apiBase() . '/platform/' . rawurlencode($platformVersion) . '/apps.json';
 
 		for ($page = 1; $page <= self::MAX_PAGES; $page++) {
 			$endpoint = $platformEndpoint . '?page=' . $page;

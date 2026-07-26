@@ -158,6 +158,31 @@ export async function occ(...args: string[]): Promise<string> {
 	return stdout
 }
 
+/** Runs a query against the instance's SQLite DB, returning stdout rows. */
+export async function sql(query: string): Promise<string> {
+	const { stdout } = await execFileAsync('docker', [
+		'exec', NC_CONTAINER, 'php', '-r',
+		`$p=new PDO("sqlite:/var/www/html/data/nc.db.db");$s=$p->query(${JSON.stringify(query)});foreach($s->fetchAll(PDO::FETCH_NUM) as $r){echo implode("\\t",array_map(fn($v)=>$v??"",$r)),"\\n";}`,
+	], { maxBuffer: 8 * 1024 * 1024 }).catch((e) => ({ stdout: (e as { stdout?: string }).stdout ?? '' }))
+	return stdout.trim()
+}
+
+/** Runs a mutating SQL statement against the instance's SQLite DB. */
+export async function sqlExec(stmt: string): Promise<void> {
+	await execFileAsync('docker', [
+		'exec', NC_CONTAINER, 'php', '-r',
+		`$p=new PDO("sqlite:/var/www/html/data/nc.db.db");$p->exec(${JSON.stringify(stmt)});`,
+	]).catch(() => undefined)
+}
+
+/** Force-executes an app background job by class-name substring, once. */
+export async function runJob(classSubstring: string): Promise<void> {
+	const id = (await sql(`SELECT id FROM oc_jobs WHERE class LIKE '%${classSubstring}%' LIMIT 1`)).split('\t')[0].trim()
+	if (id) {
+		await occ('background-job:execute', id, '--force-execute')
+	}
+}
+
 /** The fixture app's clean source binding, with no recorded digests. */
 const CLEAN_FIXTURE_BINDING = JSON.stringify({
 	kind: 'github-release',

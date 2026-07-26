@@ -24,6 +24,7 @@ const PUBLIC_BASE = process.env.PUBLIC_BASE || `http://forge-fixture:${PORT}`
 // filename served for that tag; `sha` toggles whether a .sha256 sibling is
 // advertised.
 const DEFAULT_RELEASES = [
+	{ tag: 'v1.2.0', asset: 'fixtureapp-1.2.0.tar.gz', sha: true },
 	{ tag: 'v1.1.0', asset: 'fixtureapp-1.1.0.tar.gz', sha: true },
 	{ tag: 'v1.0.1', asset: 'fixtureapp-1.0.1.tar.gz', sha: true },
 	{ tag: 'v1.0.0', asset: 'fixtureapp-1.0.0.tar.gz', sha: true },
@@ -45,9 +46,9 @@ function freshState() {
 	}
 }
 
-function json(res, code, body) {
+function json(res, code, body, headers = {}) {
 	const payload = Buffer.from(JSON.stringify(body))
-	res.writeHead(code, { 'content-type': 'application/json', 'content-length': payload.length })
+	res.writeHead(code, { 'content-type': 'application/json', 'content-length': payload.length, ...headers })
 	res.end(payload)
 }
 
@@ -97,6 +98,7 @@ const server = createServer(async (req, res) => {
 			const key = b.repo || 'fixtureowner/fixtureapp'
 			state.repos[key] = {
 				status: b.status,
+				requireAuth: b.requireAuth ?? false,
 				releases: b.releases ?? (state.repos[key]?.releases ?? []),
 				advisories: b.advisories ?? (state.repos[key]?.advisories ?? []),
 			}
@@ -110,26 +112,38 @@ const server = createServer(async (req, res) => {
 			return json(res, 200, { ok: true })
 		}
 
-		// --- Forgejo API ----------------------------------------------------
-		if (path === '/api/v1/user') {
-			// A token containing "revoked" is treated as invalid, so PAT-validation
-			// can exercise the rejection path; everything else validates.
-			const auth = req.headers['authorization'] ?? ''
+		// --- Forge API (Forgejo `/api/v1/...` and GitHub `/...` shapes) -----
+		// GitHub base is `https://api.github.com` (no `/api/v1`); Codeberg is
+		// `https://codeberg.org/api/v1`. Accept an optional `/api/v1` prefix so
+		// one fixture serves both when github/codeberg base URLs point here.
+		const api = path.replace(/^\/api\/v1/, '')
+		const auth = req.headers['authorization'] ?? ''
+
+		if (api === '/user') {
+			// A token containing "revoked" is invalid, so PAT validation can
+			// exercise the rejection path. Scopes and expiry are derived from the
+			// token so tests are deterministic: "scope-repo" -> repo only;
+			// "scope-admin" -> over-broad; "expires" -> a near expiry header.
 			if (auth.includes('revoked')) {
 				return json(res, 401, { message: 'Unauthorized' })
 			}
-			return json(res, 200, { login: 'fixture-bot', id: 1 })
+			const headers = {}
+			if (auth.includes('scope-admin')) headers['x-oauth-scopes'] = 'repo, admin:org, write:packages'
+			else if (auth.includes('scope-repo')) headers['x-oauth-scopes'] = 'repo'
+			if (auth.includes('expires')) headers['github-authentication-token-expiration'] = '2026-08-15 12:00:00 UTC'
+			return json(res, 200, { login: 'fixture-bot', id: 1 }, headers)
 		}
 
-		let m = path.match(/^\/api\/v1\/repos\/([^/]+)\/([^/]+)\/releases$/)
+		let m = api.match(/^\/repos\/([^/]+)\/([^/]+)\/releases$/)
 		if (m) {
 			const repo = state.repos[`${m[1]}/${m[2]}`]
 			if (!repo) return json(res, 404, { message: 'Not Found' })
+			if (repo.requireAuth && !auth) return json(res, 404, { message: 'Not Found' })
 			if (repo.status) return json(res, repo.status, { message: `forced ${repo.status}` })
 			return json(res, 200, releaseJson(repo))
 		}
 
-		m = path.match(/^\/api\/v1\/repos\/([^/]+)\/([^/]+)\/security-advisories$/)
+		m = api.match(/^\/repos\/([^/]+)\/([^/]+)\/security-advisories$/)
 		if (m) {
 			const repo = state.repos[`${m[1]}/${m[2]}`]
 			if (!repo) return json(res, 404, { message: 'Not Found' })
