@@ -15,9 +15,24 @@ jobs:
       php-version: "8.3"
       php-test-versions: '["8.3", "8.4"]'
       nextcloud-test-refs: '["stable31", "stable32", "stable33"]'
+      # This repo's PHP toolchain is the upstream Nextcloud app-template one:
+      # php-cs-fixer + psalm (+ rector, phpunit). It has no phpcs.xml, no
+      # phpmd.xml and no phpstan.neon, and correspondingly no `phpcs`, `phpmd`,
+      # `phpstan` or `phpmetrics` composer script.
+      #
+      # Those four legs were nevertheless switched on, so quality.yml ran
+      # `composer <tool>` and got `Command "<tool>" is not defined.` — i.e. the
+      # phpmd / phpstan / phpmetrics jobs have been failing on every run for
+      # months for the absence of a tool, not for a finding, and the phpcs job
+      # passed VACUOUSLY (quality.yml maps composer's exit 1 to "warnings only →
+      # pass"). Turning them off makes CI say what is true. Adopting them for
+      # real is tracked as a follow-up issue; flip these back when the configs
+      # and scripts land.
       enable-psalm: true
-      enable-phpstan: true
-      enable-phpmetrics: true
+      enable-phpstan: false
+      enable-phpcs: false
+      enable-phpmd: false
+      enable-phpmetrics: false
       enable-frontend: true
       enable-eslint: true
       enable-phpunit: true
