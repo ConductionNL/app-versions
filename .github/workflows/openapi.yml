@@ -21,6 +21,8 @@ concurrency:
 jobs:
   openapi:
     runs-on: ubuntu-latest
+    # Observed fleet-wide: max 1.0 min (n=5). Deliberately loose.
+    timeout-minutes: 20
 
     if: ${{ github.repository_owner != 'nextcloud-gmbh' }}
 
