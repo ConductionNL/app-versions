@@ -231,7 +231,7 @@ onMounted(loadPats)
 				type="password"
 				:label="t('app_versions', 'Token')"
 				autocomplete="off" />
-			<NcButton native-type="submit" type="primary" :disabled="loading">
+			<NcButton variant="primary" type="submit" :disabled="loading">
 				{{ t('app_versions', 'Add token') }}
 			</NcButton>
 		</form>

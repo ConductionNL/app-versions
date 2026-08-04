@@ -134,7 +134,7 @@ onMounted(loadPatterns)
 			<NcCheckboxRadioSwitch v-model="confirmTrust">
 				{{ t('app_versions', 'I trust this source and understand apps will be installed from it.') }}
 			</NcCheckboxRadioSwitch>
-			<NcButton native-type="submit" type="primary" :disabled="loading">
+			<NcButton variant="primary" type="submit" :disabled="loading">
 				{{ t('app_versions', 'Add trusted source') }}
 			</NcButton>
 		</form>
