@@ -164,7 +164,7 @@ const bind = async (): Promise<void> => {
 			<NcTextField v-model="owner" :label="t('app_versions', 'Owner')" placeholder="ConductionNL" />
 			<NcTextField v-model="repo" :label="t('app_versions', 'Repository')" placeholder="openregister" />
 			<NcTextField v-model="assetPattern" :label="t('app_versions', 'Asset pattern')" placeholder="*.tar.gz" />
-			<NcButton native-type="submit" type="primary" :disabled="loading">
+			<NcButton variant="primary" type="submit" :disabled="loading">
 				{{ t('app_versions', 'Bind source') }}
 			</NcButton>
 		</form>
