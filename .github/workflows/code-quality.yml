@@ -79,9 +79,37 @@ jobs:
       # here — the job reported `skipped`, which the Quality Report renders
       # identically to a pass. Unlike the two jobs above, this one is NOT gated
       # on the security job, so it reaches a verdict on this PR.
-      # Pinned to v1.0.1 so a change to the gate package cannot move this
-      # repo's verdict without a commit here.
+      # Pinned to a tag so a change to the gate package cannot move this repo's
+      # verdict without a commit here. That pin is the point — and it is also
+      # why it has to be MOVED deliberately, which is what this change does.
+      #
+      # v1.0.1 -> v1.2.0 (ConductionNL/.github#159). v1.0.1 is `f4d9756`
+      # (2026-08-03) and PREDATES three gate fixes, so every Hydra Gates run
+      # this repo has ever made executed a script in which:
+      #
+      #   #147  16 gates reported PASS when their helper never ran
+      #   #148  gate-33 had no axe report to read and never said so
+      #   #149  gates 6 and 7 reported PASS on an EMPTY scope
+      #
+      # A gate that reports PASS without having run is the exact defect those
+      # PRs were written to close, and the pin kept it live here: the fixes
+      # were merged and ran nowhere. Note the shape — the tick was identical
+      # either way, so nothing in this repo's history shows the difference.
+      #
+      # v1.2.0 is `688898b`, and its `hydra-gates/` tree was byte-identical to
+      # `.github@main` when the tag was cut. Deliberately a TAG and not `main`:
+      # on 2026-08-05 a commit on `main` (#161) made the shared quality.yml
+      # unresolvable for 18 minutes fleet-wide — every run in that window
+      # start-up-failed with ZERO jobs while reporting an ordinary red — and
+      # was reverted in #166. A tag cannot do that to this repo.
+      #
+      # Measured before opening this PR, full tree, isolated /tmp, this repo at
+      # its current development head: 4 gates fail at v1.0.1 (38 skip-link, 40
+      # form-label-association, 43 table-headers, 45 prefers-reduced-motion)
+      # and the SAME 4 fail at v1.2.0 — this bump adds no new failure here. It
+      # adds honesty: the declared inventory goes 61 -> 63 and gates 24 and 33
+      # now print SKIPPED with a reason instead of being silently absent.
       # `enable-axe` deliberately NOT set: a vanilla Nextcloud 34 already carries
       # serious/critical violations from core's own UI.
       enable-hydra-gates: true
-      hydra-gates-ref: v1.0.1
+      hydra-gates-ref: v1.2.0
