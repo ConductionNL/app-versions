@@ -11,7 +11,18 @@ jobs:
   quality:
     uses: ConductionNL/.github/.github/workflows/quality.yml@main
     with:
-      app-name: app-versions
+      # This is the NEXTCLOUD APP ID, not the repository name. The shared
+      # workflow checks the app out into `server/apps/<app-name>` and then runs
+      # `occ app:enable <app-name>`; Nextcloud requires the directory name to
+      # equal the id in appinfo/info.xml, which here is `app_versions` (with an
+      # underscore) while the repo is `app-versions` (with a hyphen).
+      # With the hyphen, every job that boots a Nextcloud died on
+      # `App not found` — measured on run 31031058500: all six PHPUnit matrix
+      # legs and E2E Tests (Playwright) failed at that one line, before a
+      # single test was collected. It had never surfaced because those jobs
+      # also carry `needs.security.result != 'failure'` and Security (npm) was
+      # red, so they reported `skipped` instead.
+      app-name: app_versions
       php-version: "8.3"
       php-test-versions: '["8.3", "8.4"]'
       nextcloud-test-refs: '["stable31", "stable32", "stable33"]'
