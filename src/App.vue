@@ -2267,7 +2267,7 @@ watch(dryRunEnabled, () => {
 .appCardTitle {
 	font-weight: 700;
 	color: var(--color-main-text);
-	word-break: break-word;
+	overflow-wrap: break-word;
 }
 
 .appCardMeta {
@@ -2609,7 +2609,10 @@ watch(dryRunEnabled, () => {
 	font-size: 12px;
 }
 
-.versionItem:hover .versionSelectButton,
+/* Declared before the `.versionItem:hover .versionSelectButton` rule below so
+   the single-class selectors never follow a more specific one that targets the
+   same element (stylelint `no-descending-specificity`). Both orderings render
+   identically — specificity, not source order, decides here. */
 .versionSelectButton:focus-visible {
 	visibility: visible;
 	opacity: 1;
@@ -2617,6 +2620,11 @@ watch(dryRunEnabled, () => {
 
 .versionSelectButton:hover {
 	filter: brightness(1.05);
+}
+
+.versionItem:hover .versionSelectButton {
+	visibility: visible;
+	opacity: 1;
 }
 
 .selectedVersionFlag {

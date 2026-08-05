@@ -84,7 +84,7 @@ defineProps<{
 .text {
 	margin: 0;
 	white-space: pre-wrap;
-	word-break: break-word;
+	overflow-wrap: break-word;
 	font-size: 12px;
 	line-height: 1.4;
 }
