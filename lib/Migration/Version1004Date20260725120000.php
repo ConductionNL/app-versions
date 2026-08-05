@@ -30,6 +30,22 @@ use OCP\Migration\SimpleMigrationStep;
  * existing NULLs and gives the column a `false` default so an omitted insert
  * stores `false` rather than NULL.
  *
+ * It deliberately does NOT set the column NOT NULL. Nextcloud's
+ * MigrationService rejects a NOT NULL boolean outright — a `bool` is an
+ * integer of length 1 there and the platform cannot store `false` in it:
+ *
+ *     Column "oc_app_versions_pats"."shared_with_admins" is type Bool
+ *     and also NotNull, so it can not store "false".
+ *
+ * Version1000Date20260502120000 already documents that rule at the point it
+ * creates the column; this step broke it, and the exception aborts the whole
+ * `occ app:enable` — i.e. the app could not be installed on a fresh
+ * Nextcloud 31/32/33 at all. It went unnoticed because no CI job had ever
+ * successfully reached `app:enable` (see .github/workflows/code-quality.yml).
+ * The default plus the backfill above achieve what the NOT NULL was reaching
+ * for: no existing row is NULL, and an insert that omits the field stores
+ * `false`.
+ *
  * @spec openspec/specs/pat-management/spec.md
  * @psalm-suppress UnusedClass
  */
@@ -60,7 +76,6 @@ class Version1004Date20260725120000 extends SimpleMigrationStep {
 
 		$column = $schema->getTable('app_versions_pats')->getColumn('shared_with_admins');
 		$column->setDefault(false);
-		$column->setNotnull(true);
 
 		return $schema;
 	}
