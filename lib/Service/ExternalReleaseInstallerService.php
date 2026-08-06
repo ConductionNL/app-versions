@@ -583,7 +583,14 @@ class ExternalReleaseInstallerService {
 		$ignoreMaxApps = (array)$this->config->getSystemValue('app_install_overwrite', []);
 		$ignoreMax = in_array($expectedAppId, $ignoreMaxApps, true);
 		$serverVersion = Server::get(\OCP\ServerVersion::class)->getVersionString();
-		if (!$this->appManager->isAppCompatible($serverVersion, $info, $ignoreMax)) {
+		// \OC_App, not $this->appManager. IAppManager has no isAppCompatible()
+		// on Nextcloud 31, so calling it there is a fatal:
+		//   Call to undefined method OC\App\AppManager::isAppCompatible()
+		// thrown after the archive has been downloaded and hashed, which made
+		// every external install fail at the last moment. The legacy static
+		// takes the same arguments, and the dependency check on the next line
+		// already comes from the same class.
+		if (!\OC_App::isAppCompatible($serverVersion, $info, $ignoreMax)) {
 			$appName = isset($info['name']) && is_string($info['name']) ? $info['name'] : $expectedAppId;
 			throw new Exception(sprintf(
 				'App "%s" is not compatible with this Nextcloud version.',
