@@ -23,6 +23,7 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJob;
 use OCP\BackgroundJob\IJobList;
 use OCP\IAppConfig;
+use OCP\IConfig;
 use OCP\Migration\IOutput;
 use OCP\Server;
 use Psr\Log\LoggerInterface;
@@ -42,6 +43,13 @@ use Psr\Log\LoggerInterface;
 class InstallFinalizer {
 	public function __construct(
 		private IAppConfig $appConfig,
+		/**
+		 * Only for the handful of keys Nextcloud core owns and writes itself.
+		 * IConfig::setAppValue() is deprecated, but it is the sole public way
+		 * to store a value untyped (VALUE_MIXED), and matching core's own type
+		 * is the entire point. See the comment on the writes below.
+		 */
+		private IConfig $config,
 		private IAppManager $appManager,
 		private IJobList $jobList,
 		private LoggerInterface $logger,
@@ -117,18 +125,35 @@ class InstallFinalizer {
 		$installedVersion = $infoVersion !== ''
 			? $infoVersion
 			: $this->appManager->getAppVersion($appId, false);
-		$this->appConfig->setValueString($appId, 'installed_version', $installedVersion);
-		$this->appConfig->setValueString($appId, 'enabled', $enabled);
+		/**
+		 * setAppValue, not setValueString, for the keys core owns.
+		 *
+		 * Since Nextcloud 29 every appconfig row carries a type, and core only
+		 * tolerates a write whose type differs from the stored one when the
+		 * stored type is VALUE_MIXED. Core writes installed_version, enabled
+		 * and its own remote_/public_ routes through the untyped
+		 * IConfig::setAppValue(), so they land as MIXED. Writing them as
+		 * VALUE_STRING here left a typed row that core could no longer update,
+		 * and the next `occ app:enable` died with
+		 *
+		 *   conflict between new type (mixed) and old type (string)
+		 *
+		 * That made every app installed through App Versions impossible to
+		 * enable, which is most of the point of the app. Config we own stays
+		 * on the typed API; only core's keys use core's semantics.
+		 */
+		$this->config->setAppValue($appId, 'installed_version', $installedVersion);
+		$this->config->setAppValue($appId, 'enabled', $enabled);
 
 		/** @var array<string, string> $remote */
 		$remote = (array)($info['remote'] ?? []);
 		foreach ($remote as $name => $path) {
-			$this->appConfig->setValueString('core', 'remote_' . $name, $appId . '/' . $path);
+			$this->config->setAppValue('core', 'remote_' . $name, $appId . '/' . $path);
 		}
 		/** @var array<string, string> $public */
 		$public = (array)($info['public'] ?? []);
 		foreach ($public as $name => $path) {
-			$this->appConfig->setValueString('core', 'public_' . $name, $appId . '/' . $path);
+			$this->config->setAppValue('core', 'public_' . $name, $appId . '/' . $path);
 		}
 
 		$this->persistAppTypes($appId);
@@ -161,7 +186,9 @@ class InstallFinalizer {
 		if (is_array($appInfo) && isset($appInfo['types']) && is_array($appInfo['types'])) {
 			$types = implode(',', array_map('strval', $appInfo['types']));
 		}
-		$this->appConfig->setValueString($appId, 'types', $types);
+		// Core-owned key as well: OC_App writes app types untyped, so a typed
+		// row here would collide the same way installed_version did.
+		$this->config->setAppValue($appId, 'types', $types);
 	}
 
 	private static function includeAppScript(string $script): void {
