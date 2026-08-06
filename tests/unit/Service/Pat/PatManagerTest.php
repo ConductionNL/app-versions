@@ -104,4 +104,63 @@ final class PatManagerTest extends TestCase {
 		$this->assertIsArray($validated);
 		$this->assertSame(['repo'], $validated['scopes']);
 	}
+
+	public function testRefreshValidationClearsLedgerWhenExpiryChanges(): void {
+		$pat = Pat::fromRow([
+			'id' => 1,
+			'owner_uid' => 'alice',
+			'label' => 'conduction-bot',
+			'target_pattern' => 'ConductionNL/*',
+			'kind' => Pat::KIND_CLASSIC,
+			'forge' => 'github',
+			'encrypted_token' => 'x',
+			'token_hint' => 'x',
+			'shared_with_admins' => false,
+			'expires_at' => '2026-08-01 00:00:00',
+			'created_at' => '2026-01-01 00:00:00',
+			'warned_thresholds' => '["14d","3d"]',
+		]);
+		$this->assertTrue($pat->hasWarnedThreshold('14d'));
+
+		$mapper = $this->createMock(PatMapper::class);
+		$mapper->expects($this->once())->method('update')->willReturnArgument(0);
+		$manager = new PatManager($mapper, $this->createMock(ICrypto::class));
+
+		$validation = \OCA\AppVersions\Service\Pat\ValidationResult::accepted(
+			['repo'],
+			[],
+			'2026-09-01 00:00:00'
+		);
+
+		$updated = $manager->refreshValidation($pat, $validation);
+
+		$this->assertSame([], $updated->getWarnedThresholdsList());
+	}
+
+	public function testUpdateClearsLedgerOnlyWhenExpiryFieldChanged(): void {
+		$pat = Pat::fromRow([
+			'id' => 1,
+			'owner_uid' => 'alice',
+			'label' => 'conduction-bot',
+			'target_pattern' => 'ConductionNL/*',
+			'kind' => Pat::KIND_CLASSIC,
+			'forge' => 'github',
+			'encrypted_token' => 'x',
+			'token_hint' => 'x',
+			'shared_with_admins' => false,
+			'expires_at' => '2026-08-01 00:00:00',
+			'created_at' => '2026-01-01 00:00:00',
+			'warned_thresholds' => '["14d"]',
+		]);
+
+		$mapper = $this->createMock(PatMapper::class);
+		$mapper->expects($this->once())->method('update')->willReturnArgument(0);
+		$manager = new PatManager($mapper, $this->createMock(ICrypto::class));
+
+		// Only label changes — the ledger must survive.
+		$pat->setLabel('renamed');
+		$updated = $manager->update($pat);
+
+		$this->assertSame(['14d'], $updated->getWarnedThresholdsList());
+	}
 }

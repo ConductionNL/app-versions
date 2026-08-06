@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 /**
- * @license AGPL-3.0-or-later
+ * @license EUPL-1.2
  * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
  */
 
 
@@ -50,21 +53,5 @@ final class ValidationResult {
 	 */
 	public static function accepted(array $scopes, array $warnings, ?string $expiresAt): self {
 		return new self(true, $scopes, $warnings, $expiresAt, null);
-	}
-
-	/**
-	 * Serializes the validation outcome for the API response; see "PAT validation on upload".
-	 *
-	 * @spec openspec/specs/pat-management/spec.md
-	 * @return array<string, mixed>
-	 */
-	public function toArray(): array {
-		return [
-			'ok' => $this->ok,
-			'scopes' => $this->scopes,
-			'warnings' => $this->warnings,
-			'expiresAt' => $this->expiresAt,
-			'error' => $this->error,
-		];
 	}
 }

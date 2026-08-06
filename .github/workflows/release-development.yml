@@ -1,0 +1,35 @@
+# Publishes an installable build of the development branch.
+#
+# App Versions is the app that installs other apps, so it has a bootstrap
+# problem of its own: until there is a downloadable artifact, it cannot be
+# put on an instance, and until it is on an instance nothing else can be
+# installed with it.
+#
+# This publishes a GitHub prerelease with a .tar.gz on every push to
+# development. It is not a substitute for the app store, which is still
+# where this app should eventually come from, but it is enough to sideload
+# onto a test instance.
+name: Development Release
+
+on:
+  push:
+    branches: [development]
+  workflow_dispatch:
+
+concurrency:
+  group: development-release
+  cancel-in-progress: true
+
+jobs:
+  release:
+    uses: ConductionNL/.github/.github/workflows/release-beta.yml@main
+    with:
+      # app_versions, with an underscore, to match <id> in info.xml. The
+      # packaged directory takes this name and Nextcloud refuses an app
+      # whose folder does not match its id.
+      app-name: app_versions
+      channel: dev
+      # Vite 7, engines.node ^24. The shared default of Node 18 fails the
+      # frontend build, which is why this app had no releases at all.
+      node-version: "24"
+    secrets: inherit

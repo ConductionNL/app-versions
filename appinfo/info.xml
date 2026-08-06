@@ -4,24 +4,32 @@
 	<id>app_versions</id>
 	<name>App Versions</name>
 	<summary>Install any earlier or newer version of already installed Nextcloud apps</summary>
-	<description>App Versions gives Nextcloud administrators the ability to roll back apps to previous versions or install specific newer versions. Essential for debugging, testing compatibility, and recovering from broken updates.</description>
-	<version>1.0.0</version>
-	<licence>agpl</licence>
+	<description>> ⚠️ **Active development — not for production use yet.** This app is under active development. Although it may carry a stable release status, **please do not use it in production environments before 12 June 2026.** See [conduction.nl/apps](https://conduction.nl/apps) for release planning and what this app does.
+
+App Versions gives Nextcloud administrators the ability to roll back apps to previous versions or install specific newer versions. Essential for debugging, testing compatibility, and recovering from broken updates.</description>
+	<version>1.4.1</version>
+	<licence>EUPL-1.2</licence>
 	<author mail="info@conduction.nl" homepage="https://conduction.nl">Conduction B.V.</author>
 	<namespace>AppVersions</namespace>
 	<category>tools</category>
-	<bugs>https://github.com/ConductionNL/app-versions/issues</bugs>
-	<repository>https://github.com/ConductionNL/app-versions</repository>
+	<bugs>https://codeberg.org/Conduction/app-versions/issues</bugs>
+	<repository>https://codeberg.org/Conduction/app-versions</repository>
 	<dependencies>
 		<nextcloud min-version="31" max-version="34"/>
 	</dependencies>
-	<navigations>
-		<navigation>
-			<id>app_versions</id>
-			<name>App Versions</name>
-			<route>app_versions.page.index</route>
-			<icon>app.svg</icon>
-			<type>link</type>
-		</navigation>
-	</navigations>
+	<background-jobs>
+		<job>OCA\AppVersions\BackgroundJob\AdvisoryRefreshJob</job>
+		<job>OCA\AppVersions\BackgroundJob\PatExpiryWarningJob</job>
+		<job>OCA\AppVersions\BackgroundJob\AutoUpdateJob</job>
+		<job>OCA\AppVersions\Cron\PruneAuditJob</job>
+		<job>OCA\AppVersions\Cron\PinReconcileJob</job>
+	</background-jobs>
+	<commands>
+		<command>OCA\AppVersions\Command\ListVersions</command>
+		<command>OCA\AppVersions\Command\InstallVersion</command>
+	</commands>
+	<settings>
+		<admin>OCA\AppVersions\Settings\Admin</admin>
+		<admin-section>OCA\AppVersions\Sections\AdminSection</admin-section>
+	</settings>
 </info>

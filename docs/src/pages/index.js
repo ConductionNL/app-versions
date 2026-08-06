@@ -266,8 +266,8 @@ export default function Home() {
           title="App Versions"
           tagline={TAGLINE}
           primaryCta={{
-            label: 'View on GitHub',
-            href: 'https://github.com/ConductionNL/app-versions',
+            label: 'View on Codeberg',
+            href: 'https://codeberg.org/Conduction/app-versions',
             tone: 'orange',
           }}
           secondaryCta={{ label: 'Read the docs', href: '/docs/intro' }}

@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 /**
- * @license AGPL-3.0-or-later
+ * @license EUPL-1.2
  * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
  */
 
 
@@ -17,6 +20,8 @@ use OCP\User\Events\UserDeletedEvent;
 /**
  * Removes any PATs owned by a deleted user so credentials don't outlive
  * the account that uploaded them.
+ *
+ * @psalm-api
  *
  * @template-implements IEventListener<UserDeletedEvent>
  */

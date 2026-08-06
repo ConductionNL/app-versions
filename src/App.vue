@@ -1,8 +1,27 @@
 <script setup lang="ts">
-import NcAppContent from '@nextcloud/vue/components/NcAppContent'
-import NcContent from '@nextcloud/vue/components/NcContent'
+import NcButton from '@nextcloud/vue/components/NcButton'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
-import { computed, onMounted, ref, watch } from 'vue'
+import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { t } from '@nextcloud/l10n'
+import CachePanel from './components/CachePanel.vue'
+import ChangelogRangePanel from './components/ChangelogRangePanel.vue'
+import DiscoverPanel, { type PrefillBindPayload } from './components/DiscoverPanel.vue'
+import HistoryPanel from './components/HistoryPanel.vue'
+import PinDriftBanner from './components/PinDriftBanner.vue'
+import PolicySelector, { type PolicyLevel } from './components/PolicySelector.vue'
+import SourcesPanel from './components/SourcesPanel.vue'
+import TokensPanel from './components/TokensPanel.vue'
+import TrustedSourcesPanel from './components/TrustedSourcesPanel.vue'
+import VersionChangelog from './components/VersionChangelog.vue'
+import PinDialog from './dialogs/PinDialog.vue'
+import type { PinRecord } from './dialogs/PinDialog.vue'
+import PinOverrideDialog from './dialogs/PinOverrideDialog.vue'
+import ShaMismatchDialog from './dialogs/ShaMismatchDialog.vue'
+import { AUTO_UPDATE_WINDOW_DEFAULT, isValidAutoUpdateWindow } from './utils/autoUpdateWindow'
+import { buildChangelogRange } from './utils/changelog'
+import { orphanedMigrationsSummary, shouldOfferLkgRollback, type LkgRecord } from './utils/migrationSafety'
+import { compareVersions, parseVersionCore } from './utils/versionCompare'
 
 type AppOption = {
 	id: string
@@ -11,10 +30,32 @@ type AppOption = {
 	summary: string
 	preview: string
 	isCore: boolean
+	manageable?: boolean
+	warning?: string | null
+	installedVersion?: string | null
+	lkg?: LkgRecord | null
 }
 
 type AppVersion = {
 	version: string
+	changelog?: string | null
+	recordedSha?: string | null
+	cachedOffline?: boolean
+}
+
+type AdvisoryRecord = {
+	id: string
+	severity: string
+	summary: string
+}
+
+type AdvisoryCorrelation = {
+	appId: string
+	installedVersion: string | null
+	state: 'none' | 'advisory-available' | 'pinned-to-vulnerable'
+	advisories: AdvisoryRecord[]
+	recommendedVersion: string | null
+	error: string | null
 }
 
 type InstallDebugEntry = {
@@ -31,12 +72,17 @@ type InstallResult = {
 	message: string
 	dryRun: boolean
 	installStatus: string
+	stage?: string | null
+	category?: string | null
+	hint?: string | null
 	debug?: InstallDebugEntry[]
+	recordedShaMatched?: boolean | null
+	orphanedMigrations?: string[] | null
 }
 
-const isAdmin = ref(false)
 const isLoading = ref(true)
 const apps = ref<AppOption[]>([])
+const advisories = ref<Record<string, AdvisoryCorrelation>>({})
 const appFilter = ref('')
 const showFilters = ref(false)
 const coreAppsVisibility = ref<'show' | 'hide'>('show')
@@ -53,18 +99,159 @@ const errorMessage = ref('')
 const selectedVersion = ref('')
 const safeModeEnabled = ref(true)
 const debugModeEnabled = ref(false)
+// Independent of debugModeEnabled — see MODIFIED "Debug Mode": dryRun is now
+// its own explicit request parameter, decoupled from debug/verbosity.
+const dryRunEnabled = ref(false)
 const isDowngradeConfirmOpen = ref(false)
 const downgradeConfirmFromVersion = ref('')
 const downgradeConfirmToVersion = ref('')
 const downgradeConfirmApp = ref('')
 let downgradeResolve: ((value: boolean) => void) | null = null
+// Migration diff for the downgrade dialog — fetched via a dry-run preview
+// before the dialog opens; see "Migration diff on downgrade".
+const downgradeOrphanedMigrations = ref<string[] | null>(null)
+// Suppresses the safe-mode auto-clear watcher while "Roll back to last
+// known good" programmatically selects a (necessarily older) version.
+const suppressSafeModeAutoClear = ref(false)
 const safeModeStorageKey = 'app_versions_safe_mode'
 const debugModeStorageKey = 'app_versions_debug_mode'
+const dryRunStorageKey = 'app_versions_dry_run_mode'
 const lastInstallDebug = ref<InstallDebugEntry[]>([])
 const lastInstallResult = ref<InstallResult | null>(null)
 const hasInstallResult = ref(false)
 const installRequestFromVersion = ref('')
 const installRequestToVersion = ref('')
+
+// Pinning (see "Pin an installed app to its current version", "Drift
+// detection", "Drift response — notify and offer re-pin"). Pins are fetched
+// once and kept in a per-appId map, mirroring the `advisories` pattern.
+const pins = ref<Record<string, PinRecord>>({})
+const isPinDialogOpen = ref(false)
+const pinDialogAppId = ref('')
+const pinDialogVersion = ref('')
+const isPinOverrideDialogOpen = ref(false)
+const pinOverrideAppId = ref('')
+const pinOverridePinnedVersion = ref('')
+const pinOverrideTargetVersion = ref('')
+let pinOverrideResolve: ((choice: 'repin' | 'unpin' | 'cancel') => void) | null = null
+
+// SHA-256 mismatch on reinstall (trust-on-first-use enforcement) — see
+// "Recorded SHA-256 enforced on reinstall".
+const isShaMismatchDialogOpen = ref(false)
+const shaMismatchAppId = ref('')
+const shaMismatchVersion = ref('')
+const shaMismatchExpectedSha = ref('')
+const shaMismatchActualSha = ref('')
+let shaMismatchResolve: ((accept: boolean) => void) | null = null
+
+// Auto-update policies (see "Per-app update policy", "Nightly policy
+// execution through the standard installer", "Global kill switch and
+// window"). Policies and the two global settings are fetched together from
+// GET /api/policies, mirroring the `pins`/`advisories` per-appId map pattern.
+type PolicyRecord = { appId: string, level: PolicyLevel, setBy: string, setAt: string }
+const policies = ref<Record<string, PolicyRecord>>({})
+const isSavingPolicy = ref(false)
+const autoUpdateEnabled = ref(false)
+const savedAutoUpdateEnabled = ref(false)
+const autoUpdateWindowInput = ref(AUTO_UPDATE_WINDOW_DEFAULT)
+const savedAutoUpdateWindow = ref(AUTO_UPDATE_WINDOW_DEFAULT)
+const isSavingAutoUpdateSettings = ref(false)
+const autoUpdateSettingsError = ref('')
+const autoUpdateSettingsNotice = ref('')
+
+// Admin-settings tabs: the existing apps→versions→install view plus the
+// source / token / trusted-source management panels, and the Discover tab
+// (multi-source search over the previously-unreachable discovery backend).
+const tabs = [
+	{ id: 'apps' },
+	{ id: 'history' },
+	{ id: 'sources' },
+	{ id: 'tokens' },
+	{ id: 'trusted' },
+	{ id: 'discover' },
+	{ id: 'cache' },
+]
+const currentTab = ref('apps')
+const tablistEl = ref<HTMLElement | null>(null)
+
+// Literal strings (not interpolated) so they remain extractable for translation.
+const tabLabel = (id: string): string => ({
+	apps: t('app_versions', 'Apps'),
+	history: t('app_versions', 'History'),
+	sources: t('app_versions', 'Sources'),
+	tokens: t('app_versions', 'Tokens'),
+	trusted: t('app_versions', 'Trusted sources'),
+	discover: t('app_versions', 'Discover'),
+	cache: t('app_versions', 'Artifact cache'),
+}[id] ?? id)
+
+// Prefill applied to the Sources bind form when a Discover hit's install
+// action is activated; see "Hits route into existing flows".
+const sourcesPrefill = ref<PrefillBindPayload | null>(null)
+
+/**
+ * Routes an installed Discover hit into the Apps tab with its version picker
+ * expanded; see "Hits route into existing flows" ("Installed hit opens the
+ * picker").
+ *
+ * @spec openspec/specs/app-discovery/spec.md
+ */
+const onDiscoverOpenApp = async (appId: string): Promise<void> => {
+	currentTab.value = 'apps'
+	appFilter.value = appId
+	await onPickApp(appId)
+}
+
+/**
+ * Routes a not-installed Discover hit's installable candidate into the
+ * Sources bind flow, prefilled; see "Hits route into existing flows"
+ * ("Installable candidate prefills bind").
+ *
+ * @spec openspec/specs/app-discovery/spec.md
+ */
+const onDiscoverPrefillBind = (payload: PrefillBindPayload): void => {
+	sourcesPrefill.value = payload
+	currentTab.value = 'sources'
+}
+
+/**
+ * Routes a non-installable Discover hit to the Trusted sources tab; see
+ * "Hits route into existing flows" ("Non-installable explains why").
+ *
+ * @spec openspec/specs/app-discovery/spec.md
+ */
+const onDiscoverOpenTrusted = (): void => {
+	currentTab.value = 'trusted'
+}
+
+// Per-app detail view within the "Apps" tab: the version picker (default) or
+// that app's audit history; see "Per-app history tab".
+const appDetailTab = ref<'versions' | 'history'>('versions')
+
+// WAI-ARIA tablist keyboard support: Left/Right (and Home/End) move between
+// tabs and move focus to the newly selected tab, per the tabs pattern.
+const onTabKeydown = async (event: KeyboardEvent): Promise<void> => {
+	const keys = ['ArrowRight', 'ArrowLeft', 'Home', 'End']
+	if (!keys.includes(event.key)) {
+		return
+	}
+	event.preventDefault()
+	const index = tabs.findIndex((tab) => tab.id === currentTab.value)
+	let next = index
+	if (event.key === 'ArrowRight') {
+		next = (index + 1) % tabs.length
+	} else if (event.key === 'ArrowLeft') {
+		next = (index - 1 + tabs.length) % tabs.length
+	} else if (event.key === 'Home') {
+		next = 0
+	} else if (event.key === 'End') {
+		next = tabs.length - 1
+	}
+	currentTab.value = tabs[next].id
+	await nextTick()
+	const buttons = tablistEl.value?.querySelectorAll<HTMLElement>('[role="tab"]')
+	buttons?.[next]?.focus()
+}
 
 type VersionRangeInfo = {
 	major: number
@@ -73,91 +260,6 @@ type VersionRangeInfo = {
 	direction: 'upgrade' | 'degrade'
 	from: string
 	to: string
-}
-
-const parseVersionCore = (version: string): { major: number, minor: number, patch: number } => {
-	const [core] = version.split('-', 2)
-	const [rawMajor, rawMinor, rawPatch] = core.split('.')
-
-	return {
-		major: Number.parseInt(rawMajor || '0', 10) || 0,
-		minor: Number.parseInt(rawMinor || '0', 10) || 0,
-		patch: Number.parseInt(rawPatch || '0', 10) || 0,
-	}
-}
-
-const compareVersions = (left: string, right: string): number => {
-	const [leftCore, leftPre = ''] = left.split('-', 2)
-	const [rightCore, rightPre = ''] = right.split('-', 2)
-	const leftParts = leftCore.split('.').map((part) => Number(part || '0'))
-	const rightParts = rightCore.split('.').map((part) => Number(part || '0'))
-
-	for (let index = 0; index < Math.max(leftParts.length, rightParts.length); index++) {
-		const leftPart = leftParts[index] ?? 0
-		const rightPart = rightParts[index] ?? 0
-
-		if (leftPart > rightPart) {
-			return 1
-		}
-		if (leftPart < rightPart) {
-			return -1
-		}
-	}
-
-	if (leftPre === rightPre) {
-		return 0
-	}
-	if (!leftPre) {
-		return 1
-	}
-	if (!rightPre) {
-		return -1
-	}
-
-	const leftPreParts = leftPre.split('.')
-	const rightPreParts = rightPre.split('.')
-	for (let index = 0; index < Math.max(leftPreParts.length, rightPreParts.length); index++) {
-		const leftPart = leftPreParts[index]
-		const rightPart = rightPreParts[index]
-
-		if (leftPart === undefined) {
-			return -1
-		}
-		if (rightPart === undefined) {
-			return 1
-		}
-
-		const leftNumeric = /^\d+$/.test(leftPart)
-		const rightNumeric = /^\d+$/.test(rightPart)
-
-		if (leftNumeric && rightNumeric) {
-			const leftNum = Number(leftPart)
-			const rightNum = Number(rightPart)
-			if (leftNum > rightNum) {
-				return 1
-			}
-			if (leftNum < rightNum) {
-				return -1
-			}
-			continue
-		}
-
-		if (leftNumeric) {
-			return -1
-		}
-		if (rightNumeric) {
-			return 1
-		}
-
-		if (leftPart > rightPart) {
-			return 1
-		}
-		if (leftPart < rightPart) {
-			return -1
-		}
-	}
-
-	return 0
 }
 
 const changeActionLabel = computed(() => {
@@ -181,12 +283,13 @@ const changeActionLabel = computed(() => {
 	return ''
 })
 
-const hasSidebarSelect = computed(() => isAdmin.value)
+const hasSidebarSelect = computed(() => !isLoading.value)
 const sidebarLabel = computed(() => hasSidebarSelect.value ? 'Select an app from store' : 'Loading…')
 const hasInfoPanel = computed(() => selectedApp.value || installedVersion.value || versions.value.length > 0 || availableSource.value || errorMessage.value || hasCheckedVersions.value)
 const hasSplitLayout = computed(() => Boolean(selectedApp.value || installedVersion.value || hasInstallResult.value))
 const isSafeMode = computed(() => safeModeEnabled.value)
 const includeDebug = computed(() => debugModeEnabled.value)
+const dryRunRequested = computed(() => dryRunEnabled.value)
 
 const apiUrl = (path: string): string => {
 	const oc = window.OC as unknown as {
@@ -209,7 +312,7 @@ const withOcsJson = (path: string, query: Record<string, string | number | boole
 	return `${path}${separator}${params.toString()}`
 }
 
-const unwrapOcsResponse = async <T>(response: Response): Promise<T> => {
+const unwrapOcsResponse = async <T, >(response: Response): Promise<T> => {
 	if (!response.ok) {
 		// Keep payload-based failures parseable for callers that return useful data with 4xx.
 	}
@@ -239,7 +342,7 @@ type OcsWrapped<T> = {
 	data?: T
 }
 
-const unwrapOcsResponseWithMeta = async <T>(response: Response): Promise<{ payload: T, metaMessage?: string }> => {
+const unwrapOcsResponseWithMeta = async <T, >(response: Response): Promise<{ payload: T, metaMessage?: string }> => {
 	const raw = (await response.json()) as OcsWrapped<T>
 	if (typeof raw !== 'object' || raw === null) {
 		throw new Error('Unexpected response format')
@@ -266,7 +369,11 @@ const normalizeInstallResult = (payload: {
 	message?: string
 	dryRun?: boolean
 	installStatus?: string
+	stage?: string | null
+	category?: string | null
+	hint?: string | null
 	debug?: unknown
+	recordedShaMatched?: boolean
 }): InstallResult => {
 	const normalizedUpdateType = payload.updateType ?? 'none'
 	const normalizedFrom = payload.fromVersion ?? null
@@ -289,7 +396,11 @@ const normalizeInstallResult = (payload: {
 		message: finalMessage,
 		dryRun: Boolean(payload.dryRun),
 		installStatus: payload.installStatus || 'failed',
+		stage: payload.stage ?? null,
+		category: payload.category ?? null,
+		hint: payload.hint ?? null,
 		debug: Array.isArray(payload.debug) ? payload.debug as InstallDebugEntry[] : [],
+		recordedShaMatched: payload.recordedShaMatched ?? null,
 	}
 }
 
@@ -299,11 +410,11 @@ const installStatusTone = computed<'success' | 'warning' | 'error' | 'info'>(() 
 		return 'info'
 	}
 
-	if (result.installStatus === 'dry-run') {
+	if (result.installStatus === 'dry-run' || result.installStatus === 'reverted') {
 		return 'warning'
 	}
 
-	if (result.installStatus === 'failed' || result.installStatus === 'error') {
+	if (result.installStatus === 'failed' || result.installStatus === 'error' || result.installStatus === 'installed-but-broken') {
 		return 'error'
 	}
 
@@ -311,6 +422,16 @@ const installStatusTone = computed<'success' | 'warning' | 'error' | 'info'>(() 
 })
 
 const installStatusLabel = computed(() => {
+	const status = lastInstallResult.value?.installStatus
+	if (status === 'dry-run') {
+		return 'Dry run'
+	}
+	if (status === 'reverted') {
+		return 'Reverted'
+	}
+	if (status === 'installed-but-broken') {
+		return 'Installed but broken'
+	}
 	switch (installStatusTone.value) {
 	case 'warning':
 		return 'Dry run'
@@ -321,26 +442,7 @@ const installStatusLabel = computed(() => {
 	}
 })
 
-const checkAdmin = async (): Promise<void> => {
-	errorMessage.value = ''
-	try {
-		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/admin-check')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
-		const payload = await unwrapOcsResponse<{ isAdmin: boolean }>(response)
-		isAdmin.value = Boolean(payload.isAdmin)
-	} catch {
-		isAdmin.value = false
-		errorMessage.value = 'Could not verify admin permissions.'
-	} finally {
-		isLoading.value = false
-	}
-}
-
 const checkUpdateChannel = async (): Promise<void> => {
-	if (!isAdmin.value) {
-		updateChannel.value = ''
-		return
-	}
-
 	try {
 		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/update-channel')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
 		const payload = await unwrapOcsResponse<{ updateChannel: string }>(response)
@@ -351,16 +453,212 @@ const checkUpdateChannel = async (): Promise<void> => {
 }
 
 const loadApps = async (): Promise<void> => {
-	if (!isAdmin.value) {
-		return
-	}
-
 	try {
 		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/apps')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
 		const payload = await unwrapOcsResponse<{ apps: AppOption[] }>(response)
 		apps.value = payload.apps || []
 	} catch (error) {
 		errorMessage.value = error instanceof Error ? error.message : 'Could not fetch app list.'
+	}
+}
+
+// Advisory correlation is fetched separately from the app list so a slow or
+// unreachable advisory source never delays the (fast) app list. The badge
+// appears once this resolves. Read-only — it never changes a version.
+const loadAdvisories = async (): Promise<void> => {
+	try {
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/advisories')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
+		const payload = await unwrapOcsResponse<{ advisories: Record<string, AdvisoryCorrelation> }>(response)
+		advisories.value = payload.advisories || {}
+	} catch {
+		// Non-fatal: the app list stays usable without advisory badges.
+		advisories.value = {}
+	}
+}
+
+const advisoryFor = (appId: string): AdvisoryCorrelation | null => advisories.value[appId] ?? null
+
+// Badge shown next to a version with a recorded SHA-256 on the binding — see
+// "Recorded digests are binding-scoped and surfaced". After a reinstall that
+// verified the digest against that same version, the badge is upgraded to
+// reflect the fresh verification instead of just "on record".
+const recordedShaBadgeLabel = (version: string): string => {
+	const lastResult = lastInstallResult.value
+	if (lastResult?.recordedShaMatched === true && lastResult.toVersion === version) {
+		return t('app_versions', 'Matches first-install checksum')
+	}
+	return t('app_versions', 'Checksum recorded')
+}
+
+const advisoryBadgeLabel = (state: AdvisoryCorrelation['state']): string => {
+	if (state === 'pinned-to-vulnerable') {
+		return t('app_versions', 'Vulnerable version')
+	}
+	if (state === 'advisory-available') {
+		return t('app_versions', 'Advisory')
+	}
+	return ''
+}
+
+// Pins, like advisories, are fetched separately from the app list and never
+// block it; read-only for badges, writes go through PinDialog / the drift
+// banner / the pin-override dialog. See "Honest pin presentation".
+const loadPins = async (): Promise<void> => {
+	try {
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/pins')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
+		const payload = await unwrapOcsResponse<{ pins: PinRecord[] }>(response)
+		const map: Record<string, PinRecord> = {}
+		for (const pin of payload.pins || []) {
+			map[pin.appId] = pin
+		}
+		pins.value = map
+	} catch {
+		pins.value = {}
+	}
+}
+
+const pinFor = (appId: string): PinRecord | null => pins.value[appId] ?? null
+
+const pinTooltip = (pin: PinRecord | null): string => {
+	if (!pin) {
+		return ''
+	}
+	const parts = [t('app_versions', 'Pinned by {user} on {date}', { user: pin.pinnedBy, date: pin.pinnedAt })]
+	if (pin.reason) {
+		parts.push(pin.reason)
+	}
+	return parts.join(' — ')
+}
+
+// Auto-update policies + global settings, fetched once and kept in a
+// per-appId map, same pattern as pins/advisories; read-only badges here,
+// writes go through onPolicyChange()/saveAutoUpdateSettings().
+const loadPolicies = async (): Promise<void> => {
+	try {
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/policies')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
+		const payload = await unwrapOcsResponse<{ policies?: PolicyRecord[], autoUpdateEnabled?: boolean, autoUpdateWindow?: string }>(response)
+		const map: Record<string, PolicyRecord> = {}
+		for (const policy of payload.policies || []) {
+			map[policy.appId] = policy
+		}
+		policies.value = map
+		autoUpdateEnabled.value = Boolean(payload.autoUpdateEnabled)
+		savedAutoUpdateEnabled.value = autoUpdateEnabled.value
+		autoUpdateWindowInput.value = payload.autoUpdateWindow || AUTO_UPDATE_WINDOW_DEFAULT
+		savedAutoUpdateWindow.value = autoUpdateWindowInput.value
+	} catch {
+		// Non-fatal: the app list stays usable without policy badges.
+		policies.value = {}
+	}
+}
+
+const policyLevelFor = (appId: string): PolicyLevel => policies.value[appId]?.level ?? 'none'
+
+const onPolicyChange = async (appId: string, level: PolicyLevel): Promise<void> => {
+	if (isSavingPolicy.value) {
+		return
+	}
+	isSavingPolicy.value = true
+	errorMessage.value = ''
+	try {
+		await ensurePasswordConfirmation()
+		if (level === 'none') {
+			const response = await fetch(apiUrl(withOcsJson(`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(appId)}/policy`)), {
+				method: 'DELETE',
+				headers: { ...ocsHeaders, Accept: 'application/json', 'Content-Type': 'application/json' },
+			})
+			await unwrapOcsResponse(response)
+			const next = { ...policies.value }
+			delete next[appId]
+			policies.value = next
+		} else {
+			const response = await fetch(apiUrl(withOcsJson(`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(appId)}/policy`, { level })), {
+				method: 'PUT',
+				headers: { ...ocsHeaders, Accept: 'application/json', 'Content-Type': 'application/json' },
+				body: JSON.stringify({ level }),
+			})
+			const payload = await unwrapOcsResponse<{ appId: string, policy: PolicyRecord }>(response)
+			policies.value = { ...policies.value, [appId]: { ...payload.policy, appId } }
+		}
+	} catch (e) {
+		errorMessage.value = e instanceof Error ? e.message : t('app_versions', 'Could not update the auto-update policy.')
+	} finally {
+		isSavingPolicy.value = false
+	}
+}
+
+const isAutoUpdateWindowValid = computed(() => isValidAutoUpdateWindow(autoUpdateWindowInput.value))
+const isAutoUpdateSettingsDirty = computed(() => (
+	autoUpdateEnabled.value !== savedAutoUpdateEnabled.value
+	|| autoUpdateWindowInput.value.trim() !== savedAutoUpdateWindow.value
+))
+
+const saveAutoUpdateSettings = async (): Promise<void> => {
+	autoUpdateSettingsError.value = ''
+	autoUpdateSettingsNotice.value = ''
+	if (!isAutoUpdateWindowValid.value) {
+		autoUpdateSettingsError.value = t('app_versions', 'Window must be in HH:MM-HH:MM format.')
+		return
+	}
+
+	isSavingAutoUpdateSettings.value = true
+	try {
+		await ensurePasswordConfirmation()
+		const window = autoUpdateWindowInput.value.trim()
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/auto-update/settings', {
+			enabled: autoUpdateEnabled.value ? '1' : '0',
+			window,
+		})), {
+			method: 'PUT',
+			headers: { ...ocsHeaders, Accept: 'application/json', 'Content-Type': 'application/json' },
+			body: JSON.stringify({ enabled: autoUpdateEnabled.value, window }),
+		})
+		const payload = await unwrapOcsResponse<{ autoUpdateEnabled?: boolean, autoUpdateWindow?: string }>(response)
+		autoUpdateEnabled.value = Boolean(payload.autoUpdateEnabled)
+		autoUpdateWindowInput.value = payload.autoUpdateWindow || window
+		savedAutoUpdateEnabled.value = autoUpdateEnabled.value
+		savedAutoUpdateWindow.value = autoUpdateWindowInput.value
+		autoUpdateSettingsNotice.value = t('app_versions', 'Automatic update settings saved.')
+	} catch (e) {
+		autoUpdateSettingsError.value = e instanceof Error ? e.message : t('app_versions', 'Could not save automatic update settings.')
+	} finally {
+		isSavingAutoUpdateSettings.value = false
+	}
+}
+
+const openPinDialog = (appId: string, version: string): void => {
+	pinDialogAppId.value = appId
+	pinDialogVersion.value = version
+	isPinDialogOpen.value = true
+}
+
+const onPinned = (pin: PinRecord): void => {
+	pins.value = { ...pins.value, [pin.appId]: pin }
+}
+
+const onPinDriftUpdated = (appId: string, pin: PinRecord | null): void => {
+	const next = { ...pins.value }
+	if (pin) {
+		next[appId] = pin
+	} else {
+		delete next[appId]
+	}
+	pins.value = next
+}
+
+const unpinApp = async (appId: string): Promise<void> => {
+	try {
+		await ensurePasswordConfirmation()
+		const response = await fetch(apiUrl(withOcsJson(`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(appId)}/pin`)), {
+			method: 'DELETE',
+			headers: { ...ocsHeaders, Accept: 'application/json', 'Content-Type': 'application/json' },
+		})
+		await unwrapOcsResponse(response)
+		const next = { ...pins.value }
+		delete next[appId]
+		pins.value = next
+	} catch (e) {
+		errorMessage.value = e instanceof Error ? e.message : t('app_versions', 'Could not unpin this app.')
 	}
 }
 
@@ -374,6 +672,7 @@ const resetSelectedAppState = (): void => {
 	lastInstallDebug.value = []
 	lastInstallResult.value = null
 	hasInstallResult.value = false
+	appDetailTab.value = 'versions'
 }
 
 const checkVersions = async (preserveInstallResult = false): Promise<void> => {
@@ -394,20 +693,23 @@ const checkVersions = async (preserveInstallResult = false): Promise<void> => {
 
 	isCheckingVersions.value = true
 	errorMessage.value = ''
+	availableSource.value = ''
+	installedVersion.value = ''
 
-		try {
-			const url = withOcsJson(`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(appId)}/versions`)
-			const response = await fetch(apiUrl(url), { headers: { ...ocsHeaders, Accept: 'application/json' } })
+	try {
+		const url = withOcsJson(`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(appId)}/versions`)
+		const response = await fetch(apiUrl(url), { headers: { ...ocsHeaders, Accept: 'application/json' } })
 		const payload = await unwrapOcsResponse<{
 			availableVersions?: AppVersion[]
 			versions?: AppVersion[]
 			installedVersion: string | null
 			source?: string
+			sourceId?: string
 			error?: string
 		}>(response)
 		versions.value = payload.availableVersions || payload.versions || []
 		installedVersion.value = payload.installedVersion || ''
-		availableSource.value = payload.source || ''
+		availableSource.value = payload.sourceId || payload.source || ''
 		errorMessage.value = payload.error ?? ''
 		hasCheckedVersions.value = true
 	} catch (error) {
@@ -448,7 +750,7 @@ const ensurePasswordConfirmation = async (): Promise<void> => {
 		passwordConfirmation.requirePasswordConfirmation(
 			() => resolve(),
 			undefined,
-			() => reject(new Error('Password confirmation was cancelled'))
+			() => reject(new Error('Password confirmation was cancelled')),
 		)
 	})
 }
@@ -456,6 +758,13 @@ const ensurePasswordConfirmation = async (): Promise<void> => {
 const onSelectApp = (appId: string) => {
 	selectedApp.value = appId
 	resetSelectedAppState()
+}
+
+// A source was (re)bound via the Sources panel; refresh versions if that app is selected.
+const onPanelBound = async (appId: string): Promise<void> => {
+	if (selectedApp.value === appId) {
+		await checkVersions(true)
+	}
 }
 
 const onPickApp = async (appId: string) => {
@@ -694,6 +1003,11 @@ const selectedVersionRange = computed(() => {
 
 const downgradeVersionRange = computed(() => getVersionRangeSummary(downgradeConfirmFromVersion.value, downgradeConfirmToVersion.value))
 
+// Aggregate "changes between installed → target" panel — reuses the
+// already-fetched `versions` array, zero extra requests; see "Aggregate
+// range changelog on target selection".
+const changelogRange = computed(() => buildChangelogRange(installedVersion.value, selectedVersion.value, versions.value))
+
 const versionRangeText = (summary: VersionRangeInfo | null): string => {
 	if (!summary) {
 		return ''
@@ -706,7 +1020,7 @@ const versionRangeText = (summary: VersionRangeInfo | null): string => {
 	return `${summary.direction === 'upgrade' ? 'Upgrade' : 'Downgrade'} crosses ${summary.major} major and ${summary.minor} minor version step${summary.minor === 1 ? '' : 's'}.`
 }
 
-	const downgradeConfirmButtons = computed(() => [
+const downgradeConfirmButtons = computed(() => [
 	{
 		label: 'Cancel',
 		type: 'tertiary',
@@ -729,6 +1043,23 @@ const versionRangeText = (summary: VersionRangeInfo | null): string => {
 	},
 ])
 
+// Previews the migration diff for a downgrade via a dry-run install request
+// before the confirmation dialog opens, so the dialog can name the exact
+// migrations the target lacks instead of only warning generically; see
+// "Migration diff on downgrade". The dry-run evaluates and reports the
+// downgrade guard without requiring `allowDowngrade` — see "Server-side
+// downgrade guard". A request failure degrades to `null` (generic warning),
+// consistent with a server-side diff failure — it never blocks the downgrade.
+const fetchDowngradePreview = async (appId: string, version: string): Promise<string[] | null> => {
+	try {
+		const { payload } = await requestInstall(appId, version, undefined, false, false, false, true)
+
+		return Array.isArray(payload.orphanedMigrations) ? payload.orphanedMigrations : null
+	} catch {
+		return null
+	}
+}
+
 const confirmDowngrade = async (appId: string, fromVersion: string, toVersion: string): Promise<boolean> => {
 	if (downgradeResolve) {
 		downgradeResolve(false)
@@ -738,6 +1069,7 @@ const confirmDowngrade = async (appId: string, fromVersion: string, toVersion: s
 	downgradeConfirmApp.value = appId
 	downgradeConfirmFromVersion.value = fromVersion
 	downgradeConfirmToVersion.value = toVersion
+	downgradeOrphanedMigrations.value = await fetchDowngradePreview(appId, toVersion)
 	return new Promise<boolean>((resolve) => {
 		downgradeResolve = resolve
 		isDowngradeConfirmOpen.value = true
@@ -763,6 +1095,147 @@ const onSelectVersion = (version: string): void => {
 
 	selectedVersion.value = version
 	errorMessage.value = ''
+}
+
+type InstallApiPayload = {
+	appId: string
+	toVersion: string
+	fromVersion?: string
+	installedVersion?: string
+	updateType?: string
+	message?: string
+	dryRun?: boolean
+	installStatus?: string
+	debug?: unknown
+	category?: string
+	code?: string
+	pinnedVersion?: string
+	expectedSha?: string
+	actualSha?: string
+	recordedShaMatched?: boolean
+	orphanedMigrations?: string[] | null
+}
+
+const requestInstall = async (
+	appId: string,
+	version: string,
+	overridePin?: 'repin' | 'unpin',
+	pinRequested = false,
+	acceptNewSha = false,
+	allowDowngrade = false,
+	forceDryRun = false,
+): Promise<{ payload: InstallApiPayload, metaMessage?: string }> => {
+	// dryRun is sent explicitly and independently of debug — see MODIFIED
+	// "Debug Mode". debug now controls diagnostic verbosity only.
+	const query: Record<string, string> = {
+		debug: includeDebug.value ? '1' : '0',
+		dryRun: (forceDryRun || dryRunRequested.value) ? '1' : '0',
+		targetVersion: version,
+	}
+	if (overridePin) {
+		query.overridePin = overridePin
+	}
+	if (pinRequested) {
+		query.pin = '1'
+	}
+	if (acceptNewSha) {
+		query.acceptNewSha = '1'
+	}
+	if (allowDowngrade) {
+		query.allowDowngrade = '1'
+	}
+	const endpoint = withOcsJson(
+		`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(appId)}/versions/${encodeURIComponent(version)}/install`,
+		query,
+	)
+	const response = await fetch(apiUrl(endpoint), {
+		method: 'POST',
+		headers: {
+			...ocsHeaders,
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+		},
+		body: JSON.stringify({ version }),
+	})
+
+	return unwrapOcsResponseWithMeta<InstallApiPayload>(response)
+}
+
+// Offers Re-pin / Unpin-and-install / Cancel when the install endpoint
+// refuses to overwrite a pin (409); see "Pins are enforced on App Versions'
+// own install path".
+const confirmPinOverride = (appId: string, pinnedVersion: string, targetVersion: string): Promise<'repin' | 'unpin' | 'cancel'> => {
+	if (pinOverrideResolve) {
+		pinOverrideResolve('cancel')
+		pinOverrideResolve = null
+	}
+
+	pinOverrideAppId.value = appId
+	pinOverridePinnedVersion.value = pinnedVersion
+	pinOverrideTargetVersion.value = targetVersion
+
+	return new Promise((resolve) => {
+		pinOverrideResolve = resolve
+		isPinOverrideDialogOpen.value = true
+	})
+}
+
+const onPinOverrideResolve = (choice: 'repin' | 'unpin' | 'cancel'): void => {
+	pinOverrideResolve?.(choice)
+	pinOverrideResolve = null
+}
+
+// Offers "Accept new checksum and install" / Cancel when the install endpoint
+// refuses to reinstall because the downloaded artifact does not match the
+// SHA-256 recorded at first install (422, code "sha_mismatch"); see
+// "Recorded SHA-256 enforced on reinstall".
+const confirmShaMismatch = (appId: string, version: string, expectedSha: string, actualSha: string): Promise<boolean> => {
+	if (shaMismatchResolve) {
+		shaMismatchResolve(false)
+		shaMismatchResolve = null
+	}
+
+	shaMismatchAppId.value = appId
+	shaMismatchVersion.value = version
+	shaMismatchExpectedSha.value = expectedSha
+	shaMismatchActualSha.value = actualSha
+
+	return new Promise((resolve) => {
+		shaMismatchResolve = resolve
+		isShaMismatchDialogOpen.value = true
+	})
+}
+
+const onShaMismatchResolve = (accept: boolean): void => {
+	shaMismatchResolve?.(accept)
+	shaMismatchResolve = null
+}
+
+// Re-pin from the drift banner reinstalls the pinned version through this
+// same install path (source resolution, allowlist, integrity checks all
+// apply) — see "Re-pin reinstalls the pinned version". No override is
+// needed: the target equals the pin's own version.
+const onRepinRequested = async (appId: string, version: string): Promise<void> => {
+	if (isInstallingVersion.value) {
+		return
+	}
+	isInstallingVersion.value = true
+	errorMessage.value = ''
+	try {
+		await ensurePasswordConfirmation()
+		const { metaMessage } = await requestInstall(appId, version)
+		if (metaMessage) {
+			errorMessage.value = metaMessage
+		}
+		await loadPins()
+		if (selectedApp.value === appId) {
+			await checkVersions(true)
+		}
+	} catch (e) {
+		errorMessage.value = e instanceof Error ? e.message : t('app_versions', 'Could not re-pin this app.')
+	} finally {
+		isInstallingVersion.value = false
+	}
 }
 
 const performInstall = async (): Promise<void> => {
@@ -795,35 +1268,35 @@ const performInstall = async (): Promise<void> => {
 	try {
 		await ensurePasswordConfirmation()
 
-const endpoint = withOcsJson(
-	`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(selectedAppValue)}/versions/${encodeURIComponent(selectedVersionValue)}/install`,
-	{
-		debug: includeDebug.value ? '1' : '0',
-		targetVersion: selectedVersionValue,
-	}
-)
-		const response = await fetch(apiUrl(endpoint), {
-			method: 'POST',
-			headers: {
-				...ocsHeaders,
-				Accept: 'application/json',
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({
-				version: selectedVersionValue,
-			}),
-		})
-		const { payload, metaMessage } = await unwrapOcsResponseWithMeta<{
-			appId: string
-			toVersion: string
-			fromVersion?: string
-			installedVersion?: string
-			updateType?: string
-			message?: string
-			dryRun?: boolean
-			installStatus?: string
-			debug?: unknown
-		}>(response)
+		// Acknowledged above via confirmDowngrade(); carried on every retry
+		// below so a pin-override or SHA-accept round trip doesn't re-trip the
+		// server-side downgrade guard — see "Server-side downgrade guard".
+		let installResponse = await requestInstall(selectedAppValue, selectedVersionValue, undefined, false, false, isDowngrade)
+
+		if (installResponse.metaMessage && installResponse.payload?.category === 'pinned') {
+			const choice = await confirmPinOverride(selectedAppValue, installResponse.payload.pinnedVersion || '', selectedVersionValue)
+			if (choice === 'cancel') {
+				hasInstallResult.value = false
+				return
+			}
+			installResponse = await requestInstall(selectedAppValue, selectedVersionValue, choice, false, false, isDowngrade)
+		}
+
+		if (installResponse.metaMessage && installResponse.payload?.code === 'sha_mismatch') {
+			const accept = await confirmShaMismatch(
+				selectedAppValue,
+				selectedVersionValue,
+				installResponse.payload.expectedSha || '',
+				installResponse.payload.actualSha || '',
+			)
+			if (!accept) {
+				hasInstallResult.value = false
+				return
+			}
+			installResponse = await requestInstall(selectedAppValue, selectedVersionValue, undefined, false, true, isDowngrade)
+		}
+
+		const { payload, metaMessage } = installResponse
 		const result = normalizeInstallResult(payload)
 		const requestedFrom = installRequestFromVersion.value
 		const requestedTo = installRequestToVersion.value
@@ -835,40 +1308,77 @@ const endpoint = withOcsJson(
 				: result.toVersion || requestedTo,
 			installedVersion: result.installedVersion ?? requestedFrom,
 		}
-			lastInstallDebug.value = result.debug ?? []
-			hasInstallResult.value = true
+		lastInstallDebug.value = result.debug ?? []
+		hasInstallResult.value = true
 
-			if (metaMessage) {
-				errorMessage.value = metaMessage
-				if (lastInstallResult.value) {
-					lastInstallResult.value = {
-						...lastInstallResult.value,
-						message: metaMessage,
-						installStatus: 'failed',
-					}
+		if (metaMessage) {
+			// Failure: prefer the structured backend payload over the generic
+			// OCS meta message. Show the actionable hint first, then the
+			// "what happened" message; fall back to metaMessage only when the
+			// backend supplied neither. Preserve the backend installStatus
+			// (e.g. reverted / installed-but-broken) instead of forcing failed.
+			const structured = lastInstallResult.value
+			const backendMessage = structured && structured.message && structured.message !== 'Install completed.'
+				? structured.message
+				: ''
+			const hint = structured?.hint || ''
+			errorMessage.value = hint || backendMessage || metaMessage
+			if (structured) {
+				lastInstallResult.value = {
+					...structured,
+					message: backendMessage || metaMessage,
+					installStatus: structured.installStatus || 'failed',
 				}
-			} else {
-				selectedApp.value = ''
-				installedVersion.value = ''
-				availableSource.value = ''
-				selectedVersion.value = ''
-				await checkVersions(true)
 			}
-		} catch (error) {
-			errorMessage.value = error instanceof Error ? error.message : 'Could not install selected version.'
-			hasInstallResult.value = true
-			lastInstallResult.value = {
-				appId: selectedAppValue,
-				fromVersion: requestedFromVersion || null,
-				toVersion: requestedToVersion,
-				message: errorMessage.value,
-				dryRun: false,
-				installStatus: 'failed',
-				updateType: 'none',
-			}
-		} finally {
-			isInstallingVersion.value = false
+		} else {
+			selectedApp.value = ''
+			installedVersion.value = ''
+			availableSource.value = ''
+			selectedVersion.value = ''
+			await checkVersions(true)
+			await loadPins()
 		}
+	} catch (error) {
+		errorMessage.value = error instanceof Error ? error.message : 'Could not install selected version.'
+		hasInstallResult.value = true
+		lastInstallResult.value = {
+			appId: selectedAppValue,
+			fromVersion: requestedFromVersion || null,
+			toVersion: requestedToVersion,
+			message: errorMessage.value,
+			dryRun: false,
+			installStatus: 'failed',
+			updateType: 'none',
+		}
+	} finally {
+		isInstallingVersion.value = false
+	}
+}
+
+// "Roll back to last known good" — pure client routing through the standard
+// install flow: select the app, pick the recorded lkg version, and let
+// performInstall() run its normal downgrade confirmation (migration diff
+// preview + dialog) and the server-side downgrade guard. No special install
+// path; see "Last-known-good version record" — Scenario "One-click rollback
+// target". The safe-mode auto-clear watcher is suppressed for this
+// programmatic selection since a rollback target is, by construction, an
+// intentional downgrade.
+const rollbackToLastKnownGood = async (appId: string, version: string): Promise<void> => {
+	if (isInstallingVersion.value || isCheckingVersions.value) {
+		return
+	}
+
+	onSelectApp(appId)
+	await checkVersions()
+
+	suppressSafeModeAutoClear.value = true
+	try {
+		selectedVersion.value = version
+		errorMessage.value = ''
+		await performInstall()
+	} finally {
+		suppressSafeModeAutoClear.value = false
+	}
 }
 
 onMounted(async () => {
@@ -880,10 +1390,26 @@ onMounted(async () => {
 	if (storedDebugMode !== null) {
 		debugModeEnabled.value = storedDebugMode === 'true'
 	}
+	const storedDryRunMode = window?.localStorage?.getItem(dryRunStorageKey)
+	if (storedDryRunMode !== null) {
+		dryRunEnabled.value = storedDryRunMode === 'true'
+	}
 
-	await checkAdmin()
-	await checkUpdateChannel()
-	await loadApps()
+	// Access is enforced server-side: the page is an admin-only ISettings
+	// section and every OCS endpoint guards on isAdmin(). No client-side admin
+	// probe is needed — load the data directly so a flaky probe can never blank
+	// out the panel for a confirmed admin.
+	try {
+		await checkUpdateChannel()
+		await loadApps()
+	} finally {
+		isLoading.value = false
+	}
+	// Kick off advisory correlation, pin state, and auto-update policies after
+	// the list renders (non-blocking).
+	void loadAdvisories()
+	void loadPins()
+	void loadPolicies()
 })
 
 watch([safeModeEnabled, installedVersion, selectedVersion], () => {
@@ -892,6 +1418,10 @@ watch([safeModeEnabled, installedVersion, selectedVersion], () => {
 	}
 
 	window.localStorage?.setItem(safeModeStorageKey, safeModeEnabled.value ? 'true' : 'false')
+
+	if (suppressSafeModeAutoClear.value) {
+		return
+	}
 
 	if (safeModeEnabled.value && isDowngradeBlockedBySafeMode(selectedVersion.value)) {
 		selectedVersion.value = ''
@@ -905,17 +1435,24 @@ watch(debugModeEnabled, () => {
 
 	window.localStorage?.setItem(debugModeStorageKey, debugModeEnabled.value ? 'true' : 'false')
 })
+
+watch(dryRunEnabled, () => {
+	if (typeof window === 'undefined') {
+		return
+	}
+
+	window.localStorage?.setItem(dryRunStorageKey, dryRunEnabled.value ? 'true' : 'false')
+})
 </script>
 
 <template>
-	<NcContent app-name="app_versions">
-		<NcAppContent :class="$style.content">
+	<div :class="$style.section">
+		<div :class="$style.content">
 			<NcDialog
 				:open="isDowngradeConfirmOpen"
 				name="Confirm downgrade"
 				:buttons="downgradeConfirmButtons"
-				@update:open="onDowngradeDialogClose"
-			>
+				@update:open="onDowngradeDialogClose">
 				<p class="$style.downgradeConfirmText">
 					<strong>{{ downgradeConfirmApp }}</strong>
 				</p>
@@ -928,12 +1465,66 @@ watch(debugModeEnabled, () => {
 					<strong>Downgrade info:</strong> {{ versionRangeText(downgradeVersionRange) }}
 				</p>
 				<p :class="$style.versionItemDegradeMessage">
-					Downgrading can break database schema assumptions if migrations were already applied in newer versions. Continue only if you are sure no incompatible schema changes are involved.
+					{{ t('app_versions', 'Downgrading files cannot undo database migrations already applied by the installed version.') }}
 				</p>
-				</NcDialog>
-				<div :class="$style.layout">
+				<div v-if="downgradeOrphanedMigrations && downgradeOrphanedMigrations.length > 0" :class="$style.migrationDiff">
+					<p><strong>{{ t('app_versions', 'Database migrations only present in the installed version:') }}</strong></p>
+					<ul :class="$style.migrationDiffList">
+						<li v-for="migration in downgradeOrphanedMigrations" :key="migration">
+							{{ migration }}
+						</li>
+					</ul>
+				</div>
+				<p v-else :class="$style.versionItemDegradeMessage">
+					{{ orphanedMigrationsSummary(downgradeOrphanedMigrations) }}
+				</p>
+			</NcDialog>
+			<PinDialog
+				:open="isPinDialogOpen"
+				:app-id="pinDialogAppId"
+				:version="pinDialogVersion"
+				@update:open="isPinDialogOpen = $event"
+				@pinned="onPinned" />
+			<PinOverrideDialog
+				:open="isPinOverrideDialogOpen"
+				:app-id="pinOverrideAppId"
+				:pinned-version="pinOverridePinnedVersion"
+				:target-version="pinOverrideTargetVersion"
+				@update:open="isPinOverrideDialogOpen = $event"
+				@resolve="onPinOverrideResolve" />
+			<ShaMismatchDialog
+				:open="isShaMismatchDialogOpen"
+				:app-id="shaMismatchAppId"
+				:version="shaMismatchVersion"
+				:expected-sha="shaMismatchExpectedSha"
+				:actual-sha="shaMismatchActualSha"
+				@update:open="isShaMismatchDialogOpen = $event"
+				@resolve="onShaMismatchResolve" />
+			<h2>{{ t('app_versions', 'App Versions') }}</h2>
+			<div :class="$style.well">
+				<div ref="tablistEl"
+					:class="$style.tabs"
+					role="tablist"
+					:aria-label="t('app_versions', 'App Versions sections')"
+					@keydown="onTabKeydown">
+					<NcButton v-for="tab in tabs"
+						:id="`${tab.id}-tab`"
+						:key="tab.id"
+						role="tab"
+						:aria-selected="currentTab === tab.id ? 'true' : 'false'"
+						:aria-controls="`${tab.id}-panel`"
+						:tabindex="currentTab === tab.id ? 0 : -1"
+						:type="currentTab === tab.id ? 'primary' : 'tertiary'"
+						@click="currentTab = tab.id">
+						{{ tabLabel(tab.id) }}
+					</NcButton>
+				</div>
+				<div v-show="currentTab === 'apps'"
+					id="apps-panel"
+					role="tabpanel"
+					aria-labelledby="apps-tab"
+					:class="$style.layout">
 					<main :class="$style.mainContent">
-						<h2>App Versions!</h2>
 						<div :class="$style.settingsPanel">
 							<p v-if="updateChannel" :class="$style.updateChannel">
 								Update channel: <strong>{{ updateChannel }}</strong>
@@ -941,22 +1532,70 @@ watch(debugModeEnabled, () => {
 							<div :class="$style.settingsToggles">
 								<label :class="$style.safeMode">
 									<input
-										type="checkbox"
 										v-model="safeModeEnabled"
+										type="checkbox"
 										:class="$style.safeModeCheckbox"
-										:disabled="isInstallingVersion"
-									/>
+										:disabled="isInstallingVersion">
 									<span>Safe mode (block downgrades and respects update channel)</span>
 								</label>
 								<label :class="$style.safeMode">
 									<input
+										v-model="dryRunEnabled"
 										type="checkbox"
-										v-model="debugModeEnabled"
 										:class="$style.safeModeCheckbox"
-										:disabled="isInstallingVersion"
-									/>
-									<span>Enable install dry-run (show debug output)</span>
+										:disabled="isInstallingVersion">
+									<span>Dry run (evaluate the install, apply no changes)</span>
 								</label>
+								<label :class="$style.safeMode">
+									<input
+										v-model="debugModeEnabled"
+										type="checkbox"
+										:class="$style.safeModeCheckbox"
+										:disabled="isInstallingVersion">
+									<span>Show install debug output</span>
+								</label>
+							</div>
+							<div :class="$style.autoUpdateSettings" data-testid="auto-update-settings">
+								<h3>{{ t('app_versions', 'Automatic updates') }}</h3>
+								<p :class="$style.hint">
+									{{ t('app_versions', 'When enabled, App Versions installs qualifying newer versions per app policy during the nightly window, honoring pins and reporting every outcome.') }}
+								</p>
+								<label :class="$style.safeMode">
+									<input
+										v-model="autoUpdateEnabled"
+										type="checkbox"
+										:class="$style.safeModeCheckbox"
+										data-testid="auto-update-kill-switch"
+										:disabled="isSavingAutoUpdateSettings">
+									<span>{{ t('app_versions', 'Enable automatic updates') }}</span>
+								</label>
+								<label :class="$style.filterField" for="auto-update-window">
+									<span :class="$style.filterFieldLabel">{{ t('app_versions', 'Update window (HH:MM-HH:MM, server time)') }}</span>
+									<input
+										id="auto-update-window"
+										v-model="autoUpdateWindowInput"
+										type="text"
+										data-testid="auto-update-window"
+										placeholder="01:00-05:00"
+										:class="$style.appFilterInput"
+										:disabled="isSavingAutoUpdateSettings">
+								</label>
+								<p v-if="autoUpdateWindowInput.trim() !== '' && !isAutoUpdateWindowValid" :class="$style.autoUpdateWindowError" data-testid="auto-update-window-error">
+									{{ t('app_versions', 'Use the HH:MM-HH:MM format, e.g. 01:00-05:00.') }}
+								</p>
+								<p v-if="autoUpdateSettingsError" :class="$style.autoUpdateWindowError">
+									{{ autoUpdateSettingsError }}
+								</p>
+								<p v-if="autoUpdateSettingsNotice" :class="$style.autoUpdateSettingsNotice">
+									{{ autoUpdateSettingsNotice }}
+								</p>
+								<NcButton
+									type="primary"
+									data-testid="auto-update-settings-save"
+									:disabled="isSavingAutoUpdateSettings || !isAutoUpdateSettingsDirty || !isAutoUpdateWindowValid"
+									@click="saveAutoUpdateSettings">
+									{{ t('app_versions', 'Save') }}
+								</NcButton>
 							</div>
 						</div>
 						<div :class="[$style.contentRow, { [$style.contentRowSplit]: hasSplitLayout }]">
@@ -967,8 +1606,7 @@ watch(debugModeEnabled, () => {
 										<button
 											type="button"
 											:class="$style.filterToggleButton"
-											@click="showFilters = !showFilters"
-										>
+											@click="showFilters = !showFilters">
 											{{ showFilters ? 'Hide filters' : 'Show filters' }}
 										</button>
 									</div>
@@ -983,253 +1621,425 @@ watch(debugModeEnabled, () => {
 									</div>
 									<input
 										id="app-filter"
-									v-model="appFilter"
-									type="text"
-									placeholder="Search apps"
-									:class="$style.appFilterInput"
+										v-model="appFilter"
+										type="text"
+										placeholder="Search apps"
+										:class="$style.appFilterInput"
 										:disabled="!hasSidebarSelect || isLoading || apps.length === 0 || isCheckingVersions || isInstallingVersion"
-										:aria-label="sidebarLabel"
-									/>
+										:aria-label="sidebarLabel">
 									<div
 										v-if="!selectedApp"
-										:class="[$style.appCardList, { [$style.appCardListSplit]: hasSplitLayout }]"
-									>
+										:class="[$style.appCardList, { [$style.appCardListSplit]: hasSplitLayout }]">
 										<article
 											v-for="app in filteredApps"
 											:key="app.id"
-										:class="[$style.appCard, { [$style.appCardSelected]: selectedApp === app.id, [$style.appCardCore]: app.isCore }]"
-										>
+											:class="[$style.appCard, { [$style.appCardSelected]: selectedApp === app.id, [$style.appCardCore]: app.isCore }]">
 											<div :class="$style.appCardBody">
 												<div :class="$style.appCardHeader">
 													<div :class="$style.appCardTitleBlock">
 														<div :class="$style.appCardTitleRow">
-															<p :class="$style.appCardTitle">{{ app.label }}</p>
+															<p :class="$style.appCardTitle">
+																{{ app.label }}
+															</p>
 															<span v-if="app.isCore" :class="$style.appCardCoreFlag">CORE</span>
+															<span
+																v-if="pinFor(app.id)"
+																:class="$style.pinBadge"
+																data-testid="pin-badge"
+																:title="pinTooltip(pinFor(app.id))">
+																📌 {{ t('app_versions', 'Pinned {version}', { version: pinFor(app.id)?.version ?? '' }) }}
+															</span>
+															<span
+																v-if="advisoryFor(app.id)?.state && advisoryFor(app.id)?.state !== 'none'"
+																:class="[$style.advisoryBadge, { [$style.advisoryBadgeVulnerable]: advisoryFor(app.id)?.state === 'pinned-to-vulnerable' }]"
+																:title="advisoryFor(app.id)?.advisories?.[0]?.summary ?? ''">
+																⚠ {{ advisoryBadgeLabel(advisoryFor(app.id)?.state ?? 'none') }}
+															</span>
 														</div>
-														<p :class="$style.appCardMeta">{{ app.id }}</p>
+														<p :class="$style.appCardMeta">
+															{{ app.id }}
+														</p>
+														<p
+															v-if="advisoryFor(app.id)?.state === 'pinned-to-vulnerable'"
+															:class="$style.advisoryDetail">
+															{{ advisoryFor(app.id)?.advisories?.[0]?.id ?? '' }}
+															<template v-if="advisoryFor(app.id)?.recommendedVersion">
+																· {{ t('app_versions', 'safe version: {version}', { version: advisoryFor(app.id)?.recommendedVersion ?? '' }) }}
+															</template>
+														</p>
 													</div>
 													<div :class="$style.appCardMedia">
 														<img
 															v-if="app.preview"
 															:src="app.preview"
 															:alt="`${app.label} icon`"
-															:class="$style.appCardIcon"
-														/>
+															:class="$style.appCardIcon">
 														<div v-else :class="$style.appCardFallbackIcon" aria-hidden="true">
 															{{ appCardFallback(app) }}
 														</div>
 													</div>
 												</div>
-												<p :class="$style.appCardDescription">{{ appCardDescription(app) }}</p>
+												<p :class="$style.appCardDescription">
+													{{ appCardDescription(app) }}
+												</p>
+												<p
+													v-if="app.warning"
+													:class="[$style.appCardWarning, { [$style.appCardWarningBlocking]: app.manageable === false }]">
+													⚠ {{ app.warning }}
+												</p>
+												<PolicySelector
+													v-if="!app.isCore"
+													:app-id="app.id"
+													:level="policyLevelFor(app.id)"
+													:auto-update-enabled="autoUpdateEnabled"
+													:disabled="isSavingPolicy"
+													@change="onPolicyChange" />
 											</div>
 											<button
-											v-if="!app.isCore"
-											type="button"
-											:class="$style.appCardButton"
-											:disabled="isCheckingVersions || isInstallingVersion"
-											@click="onPickApp(app.id)"
-										>
-											{{ selectedApp === app.id && isCheckingVersions ? 'Loading…' : 'Choose app' }}
-										</button>
+												v-if="!app.isCore"
+												type="button"
+												:class="$style.appCardButton"
+												:disabled="isCheckingVersions || isInstallingVersion"
+												@click="onPickApp(app.id)">
+												{{ selectedApp === app.id && isCheckingVersions ? 'Loading…' : 'Choose app' }}
+											</button>
+											<button
+												v-if="!app.isCore && app.lkg && shouldOfferLkgRollback(app)"
+												type="button"
+												:class="$style.appCardButton"
+												:disabled="isCheckingVersions || isInstallingVersion"
+												:title="t('app_versions', 'Roll back to the last version that finalized cleanly through App Versions')"
+												@click="rollbackToLastKnownGood(app.id, app.lkg.version)">
+												{{ t('app_versions', 'Roll back to {version}', { version: app.lkg.version }) }}
+											</button>
 										</article>
 									</div>
 									<p v-if="!selectedApp && filteredApps.length === 0" :class="$style.noFilterResult">
 										No apps match your filter.
 									</p>
 								</div>
-							<div
-								:class="[$style.infoPanel, { [$style.infoPanelOpen]: hasInfoPanel }]"
-							>
-								<div v-if="selectedApp || installedVersion" :class="$style.installed">
-									<div v-if="selectedApp" :class="$style.selectedApp">
-										<span :class="$style.installedLabel">Selected app</span>
-										<span :class="$style.installedValue">{{ selectedAppOption?.label || selectedApp }}</span>
-										<span v-if="selectedAppOption?.label && selectedAppOption.id !== selectedAppOption.label" :class="$style.installedSubvalue">{{ selectedApp }}</span>
-										<button
-											type="button"
-											:class="$style.changeAppButton"
-											:disabled="isCheckingVersions || isInstallingVersion"
-											@click="clearSelectedApp"
-										>
-											Choose another app
-										</button>
-									</div>
-									<div v-if="installedVersion" :class="$style.installedCurrent">
-										<span :class="$style.installedLabel">Current installed</span>
-										<span :class="$style.installedValue">{{ installedVersion }}</span>
-									</div>
-									<div v-if="selectedVersion" :class="$style.selectedVersion">
-										<span :class="$style.installedLabel">Selected version</span>
-										<span :class="$style.versionTransition">
-											<span :class="$style.versionChip">{{ installedVersion || '—' }}</span>
-											<span :class="$style.versionArrow">→</span>
-											<span :class="$style.versionChip">{{ selectedVersion }}</span>
-										</span>
-									</div>
-									<p
-										v-if="selectedVersionRange"
-										:class="$style.versionSummary"
-									>
-										{{ versionRangeText(selectedVersionRange) }}
-									</p>
-									<p
-										v-if="selectedVersionRange?.direction === 'degrade'"
-										:class="$style.versionDegradeSummary"
-									>
-										Downgrade path detected.
-									</p>
-								</div>
-								<div v-if="versions.length > 0" :class="$style.versionListContainer">
-									<input
-										v-if="!selectedVersion"
-										v-model="versionFilter"
-										type="text"
-										placeholder="Filter versions"
-										:class="$style.versionFilterInput"
-										:disabled="isInstallingVersion"
-									/>
-									<div :class="$style.versionListWrapper">
-										<transition-group
-											name="versionFade"
-											tag="ul"
-											:class="$style.versionList"
-										>
-											<li v-for="version in visibleVersions" :key="version.version" :class="$style.versionItem">
-												<div :class="$style.versionItemMain">
-													<span>{{ version.version }}</span>
-													<button
-														v-if="selectedVersion !== version.version"
-														type="button"
-														:class="$style.versionSelectButton"
-														:disabled="isInstallingVersion"
-														@click="onSelectVersion(version.version)"
-													>
-														Select
-													</button>
-													<span
-														v-else
-														:class="$style.selectedVersionFlag"
-													>
-														Selected
-													</span>
-												</div>
-												<div
-													v-if="selectedVersion === version.version && selectedVersion !== ''"
-													:class="$style.versionActionGroup"
-												>
-													<p
-														v-if="changeActionLabel === 'Degrade'"
-														:class="$style.versionDegradeWarning"
-													>
-														Warning! Downgrading can result in breaking the database if earlier updates or migrations added database columns. Only do this when u can fix the database or are sure no migrations have been executed since the version u downgrade to!
-													</p>
-													<div :class="$style.versionItemActions">
-														<button
-															v-if="changeActionLabel"
-															type="button"
-															:class="[$style.versionActionButton, changeActionLabel === 'Update' ? $style.versionActionUpdateButton : (changeActionLabel === 'Degrade' ? $style.versionActionDegradeButton : '')]"
-															:aria-busy="isInstallingVersion"
-															:disabled="isInstallingVersion"
-															@click="performInstall"
-														>
-															<span v-if="isInstallingVersion" :class="$style.spinner" aria-hidden="true" />
-															{{ isInstallingVersion ? 'Installing…' : changeActionLabel }}
-														</button>
-														<button
-															type="button"
-															:class="$style.versionDeselectButton"
-															:disabled="isInstallingVersion"
-															@click="selectedVersion = ''"
-														>
-															Pick other
-														</button>
-													</div>
-												</div>
-											</li>
-										</transition-group>
-										<p v-if="filteredVersions.length === 0" :class="$style.noFilterResult">
-											No versions match your filter.
-										</p>
-									</div>
-								</div>
-								<p v-if="availableSource" :class="$style.note">
-									Versions source: {{ availableSource }}
-								</p>
-								<p v-else-if="hasCheckedVersions" :class="$style.note">
-									No versions available for this app.
-								</p>
-								<p v-if="errorMessage" :class="$style.error">{{ errorMessage }}</p>
-							</div>
-						</div>
-							<div v-if="hasSplitLayout" :class="$style.rightColumn">
-							<div v-if="hasInstallResult && lastInstallResult" :class="$style.resultPanel">
-								<p :class="$style.versionSummary">Install result</p>
-								<p :class="[$style.resultStatus, $style[`resultStatus${installStatusTone.charAt(0).toUpperCase() + installStatusTone.slice(1)}`]]">
-									{{ installStatusLabel }}
-								</p>
-								<p :class="$style.resultMessage">{{ lastInstallResult.message }}</p>
-								<div :class="$style.resultGrid">
-									<div>
-										<span>App</span>
-										<strong>{{ lastInstallResult.appId || '-' }}</strong>
-									</div>
-									<div>
-										<span>Transition</span>
-										<strong>{{ lastInstallResult.fromVersion || 'N/A' }} → {{ lastInstallResult.toVersion }}</strong>
-									</div>
-									<div>
-										<span>Mode</span>
-										<strong>{{ lastInstallResult.installStatus === 'dry-run' ? 'Dry-run (no write)' : (lastInstallResult.dryRun ? 'Dry-run' : 'Live install') }}</strong>
-									</div>
-									<div>
-										<span>Result</span>
-										<strong>{{ lastInstallResult.installedVersion || lastInstallResult.toVersion }}</strong>
-									</div>
-								</div>
 								<div
-									v-if="debugModeEnabled && lastInstallDebug.length > 0"
-									:class="$style.debugPanel"
-								>
-									<p :class="$style.debugSubtitle">Install debug ({{ lastInstallDebug.length }} step(s))</p>
-									<div :class="$style.debugTimeline">
-										<article
-											v-for="(entry, entryIndex) in lastInstallDebug"
-											:key="`${entry.stage}-${entryIndex}`"
-											:class="$style.debugStep"
-										>
-											<p :class="$style.debugStepHeader">
-												<span :class="$style.debugStepIndex">{{ entryIndex + 1 }}</span>
-												<span :class="$style.debugStepStage">{{ entry.stage }}</span>
-											</p>
-											<p v-if="!debugHasData(entry.data)" :class="$style.debugNoData">No details</p>
-											<details v-else :class="$style.debugStepDetails" :open="entryIndex === 0">
-												<summary :class="$style.debugStepSummary">View details</summary>
-												<ul :class="$style.debugOutput">
-													<li
-														v-for="(line, lineIndex) in debugToTextLines(entry.data)"
-														:key="`${entry.stage}-line-${lineIndex}`"
-														:class="$style.debugOutputLine"
-													>
-														{{ line }}
+									:class="[$style.infoPanel, { [$style.infoPanelOpen]: hasInfoPanel }]">
+									<div v-if="selectedApp || installedVersion" :class="$style.installed">
+										<div v-if="selectedApp" :class="$style.selectedApp">
+											<span :class="$style.installedLabel">Selected app</span>
+											<span :class="$style.installedValue">{{ selectedAppOption?.label || selectedApp }}</span>
+											<span v-if="selectedAppOption?.label && selectedAppOption.id !== selectedAppOption.label" :class="$style.installedSubvalue">{{ selectedApp }}</span>
+											<button
+												type="button"
+												:class="$style.changeAppButton"
+												:disabled="isCheckingVersions || isInstallingVersion"
+												@click="clearSelectedApp">
+												Choose another app
+											</button>
+											<div :class="$style.appDetailTabs" role="tablist" :aria-label="t('app_versions', 'App detail sections')">
+												<button
+													type="button"
+													role="tab"
+													:aria-selected="appDetailTab === 'versions' ? 'true' : 'false'"
+													:class="[$style.appDetailTabButton, { [$style.appDetailTabButtonActive]: appDetailTab === 'versions' }]"
+													@click="appDetailTab = 'versions'">
+													{{ t('app_versions', 'Versions') }}
+												</button>
+												<button
+													type="button"
+													role="tab"
+													:aria-selected="appDetailTab === 'history' ? 'true' : 'false'"
+													:class="[$style.appDetailTabButton, { [$style.appDetailTabButtonActive]: appDetailTab === 'history' }]"
+													@click="appDetailTab = 'history'">
+													{{ t('app_versions', 'History') }}
+												</button>
+											</div>
+										</div>
+										<div v-if="installedVersion" :class="$style.installedCurrent">
+											<span :class="$style.installedLabel">Current installed</span>
+											<span :class="$style.installedValue">{{ installedVersion }}</span>
+											<span
+												v-if="pinFor(selectedApp)"
+												:class="$style.pinBadge"
+												data-testid="pin-badge-detail"
+												:title="pinTooltip(pinFor(selectedApp))">
+												📌 {{ t('app_versions', 'Pinned {version}', { version: pinFor(selectedApp)?.version ?? '' }) }}
+											</span>
+											<button
+												v-if="pinFor(selectedApp)"
+												type="button"
+												:class="$style.changeAppButton"
+												@click="unpinApp(selectedApp)">
+												{{ t('app_versions', 'Unpin') }}
+											</button>
+											<button
+												v-else
+												type="button"
+												:class="$style.changeAppButton"
+												@click="openPinDialog(selectedApp, installedVersion)">
+												{{ t('app_versions', 'Pin this version') }}
+											</button>
+										</div>
+										<PinDriftBanner
+											v-if="pinFor(selectedApp)?.driftedTo"
+											:app-id="selectedApp"
+											:pin="pinFor(selectedApp)!"
+											@update:pin="onPinDriftUpdated"
+											@repin-requested="onRepinRequested" />
+										<div v-if="selectedVersion" :class="$style.selectedVersion">
+											<span :class="$style.installedLabel">Selected version</span>
+											<span :class="$style.versionTransition">
+												<span :class="$style.versionChip">{{ installedVersion || '—' }}</span>
+												<span :class="$style.versionArrow">→</span>
+												<span :class="$style.versionChip">{{ selectedVersion }}</span>
+											</span>
+										</div>
+										<p
+											v-if="selectedVersionRange"
+											:class="$style.versionSummary">
+											{{ versionRangeText(selectedVersionRange) }}
+										</p>
+										<p
+											v-if="selectedVersionRange?.direction === 'degrade'"
+											:class="$style.versionDegradeSummary">
+											Downgrade path detected.
+										</p>
+										<ChangelogRangePanel :entries="changelogRange" />
+									</div>
+									<template v-if="appDetailTab === 'versions'">
+										<div v-if="versions.length > 0" :class="$style.versionListContainer">
+											<input
+												v-if="!selectedVersion"
+												v-model="versionFilter"
+												type="text"
+												placeholder="Filter versions"
+												:class="$style.versionFilterInput"
+												:disabled="isInstallingVersion">
+											<div :class="$style.versionListWrapper">
+												<transition-group
+													name="versionFade"
+													tag="ul"
+													:class="$style.versionList">
+													<li v-for="version in visibleVersions" :key="version.version" :class="$style.versionItem">
+														<div :class="$style.versionItemMain">
+															<span>{{ version.version }}</span>
+															<span
+																v-if="version.cachedOffline"
+																:class="$style.cachedOfflineBadge"
+																data-testid="cached-offline-badge"
+																:title="t('app_versions', 'A verified copy of this version is cached locally and can be used if the source becomes unreachable.')">
+																{{ t('app_versions', 'Available offline') }}
+															</span>
+															<span
+																v-if="version.recordedSha"
+																:class="$style.recordedShaBadge"
+																:title="version.recordedSha">
+																{{ recordedShaBadgeLabel(version.version) }}
+															</span>
+															<button
+																v-if="selectedVersion !== version.version"
+																type="button"
+																:class="$style.versionSelectButton"
+																:disabled="isInstallingVersion"
+																@click="onSelectVersion(version.version)">
+																Select
+															</button>
+															<span
+																v-else
+																:class="$style.selectedVersionFlag">
+																Selected
+															</span>
+														</div>
+														<VersionChangelog :version="version.version" :changelog="version.changelog ?? null" />
+														<div
+															v-if="selectedVersion === version.version && selectedVersion !== ''"
+															:class="$style.versionActionGroup">
+															<p
+																v-if="changeActionLabel === 'Degrade'"
+																:class="$style.versionDegradeWarning">
+																Warning! Downgrading can result in breaking the database if earlier updates or migrations added database columns. Only do this when u can fix the database or are sure no migrations have been executed since the version u downgrade to!
+															</p>
+															<div :class="$style.versionItemActions">
+																<button
+																	v-if="changeActionLabel"
+																	type="button"
+																	:class="[$style.versionActionButton, changeActionLabel === 'Update' ? $style.versionActionUpdateButton : (changeActionLabel === 'Degrade' ? $style.versionActionDegradeButton : '')]"
+																	:aria-busy="isInstallingVersion"
+																	:disabled="isInstallingVersion"
+																	@click="performInstall">
+																	<span v-if="isInstallingVersion" :class="$style.spinner" aria-hidden="true" />
+																	{{ isInstallingVersion ? 'Installing…' : changeActionLabel }}
+																</button>
+																<button
+																	type="button"
+																	:class="$style.versionDeselectButton"
+																	:disabled="isInstallingVersion"
+																	@click="selectedVersion = ''">
+																	Pick other
+																</button>
+															</div>
+														</div>
 													</li>
-												</ul>
-											</details>
-										</article>
+												</transition-group>
+												<p v-if="filteredVersions.length === 0" :class="$style.noFilterResult">
+													No versions match your filter.
+												</p>
+											</div>
+										</div>
+										<p v-if="isCheckingVersions"
+											:class="$style.checkingNote"
+											role="status"
+											aria-live="polite">
+											<NcLoadingIcon :size="20" />
+											<span>{{ t('app_versions', 'Fetching available versions from the source — this can take a few seconds…') }}</span>
+										</p>
+										<p v-if="availableSource" :class="$style.note">
+											Versions source: {{ availableSource }}
+										</p>
+										<p v-else-if="hasCheckedVersions" :class="$style.note">
+											No versions available for this app.
+										</p>
+										<p v-if="errorMessage" :class="$style.error">
+											{{ errorMessage }}
+										</p>
+									</template>
+									<HistoryPanel v-else-if="selectedApp" :key="selectedApp" :app-id="selectedApp" />
+								</div>
+							</div>
+							<div v-if="hasSplitLayout && appDetailTab === 'versions'" :class="$style.rightColumn">
+								<div v-if="hasInstallResult && lastInstallResult" :class="$style.resultPanel">
+									<p :class="$style.versionSummary">
+										Install result
+									</p>
+									<p :class="[$style.resultStatus, $style[`resultStatus${installStatusTone.charAt(0).toUpperCase() + installStatusTone.slice(1)}`]]">
+										{{ installStatusLabel }}
+									</p>
+									<p :class="$style.resultMessage">
+										{{ lastInstallResult.message }}
+									</p>
+									<p v-if="lastInstallResult.hint" :class="$style.resultHint">
+										{{ lastInstallResult.hint }}
+									</p>
+									<div :class="$style.resultGrid">
+										<div>
+											<span>App</span>
+											<strong>{{ lastInstallResult.appId || '-' }}</strong>
+										</div>
+										<div>
+											<span>Transition</span>
+											<strong>{{ lastInstallResult.fromVersion || 'N/A' }} → {{ lastInstallResult.toVersion }}</strong>
+										</div>
+										<div>
+											<span>Mode</span>
+											<strong>{{ lastInstallResult.installStatus === 'dry-run' ? 'Dry-run (no write)' : (lastInstallResult.dryRun ? 'Dry-run' : 'Live install') }}</strong>
+										</div>
+										<div>
+											<span>Result</span>
+											<strong>{{ lastInstallResult.installedVersion || lastInstallResult.toVersion }}</strong>
+										</div>
+										<div v-if="lastInstallResult.category">
+											<span>Failure category</span>
+											<strong>{{ lastInstallResult.category }}</strong>
+										</div>
+										<div v-if="lastInstallResult.stage">
+											<span>Failed at stage</span>
+											<strong>{{ lastInstallResult.stage }}</strong>
+										</div>
+									</div>
+									<div
+										v-if="debugModeEnabled && lastInstallDebug.length > 0"
+										:class="$style.debugPanel">
+										<p :class="$style.debugSubtitle">
+											Install debug ({{ lastInstallDebug.length }} step(s))
+										</p>
+										<div :class="$style.debugTimeline">
+											<article
+												v-for="(entry, entryIndex) in lastInstallDebug"
+												:key="`${entry.stage}-${entryIndex}`"
+												:class="$style.debugStep">
+												<p :class="$style.debugStepHeader">
+													<span :class="$style.debugStepIndex">{{ entryIndex + 1 }}</span>
+													<span :class="$style.debugStepStage">{{ entry.stage }}</span>
+												</p>
+												<p v-if="!debugHasData(entry.data)" :class="$style.debugNoData">
+													No details
+												</p>
+												<details v-else :class="$style.debugStepDetails" :open="entryIndex === 0">
+													<summary :class="$style.debugStepSummary">
+														View details
+													</summary>
+													<ul :class="$style.debugOutput">
+														<li
+															v-for="(line, lineIndex) in debugToTextLines(entry.data)"
+															:key="`${entry.stage}-line-${lineIndex}`"
+															:class="$style.debugOutputLine">
+															{{ line }}
+														</li>
+													</ul>
+												</details>
+											</article>
+										</div>
 									</div>
 								</div>
 							</div>
 						</div>
-					</div>
-				</main>
+					</main>
+				</div>
+				<HistoryPanel v-if="currentTab === 'history'"
+					id="history-panel"
+					role="tabpanel"
+					aria-labelledby="history-tab" />
+				<SourcesPanel v-show="currentTab === 'sources'"
+					id="sources-panel"
+					role="tabpanel"
+					aria-labelledby="sources-tab"
+					:apps="apps"
+					:prefill="sourcesPrefill"
+					@bound="onPanelBound" />
+				<TokensPanel v-show="currentTab === 'tokens'"
+					id="tokens-panel"
+					role="tabpanel"
+					aria-labelledby="tokens-tab" />
+				<TrustedSourcesPanel v-show="currentTab === 'trusted'"
+					id="trusted-panel"
+					role="tabpanel"
+					aria-labelledby="trusted-tab" />
+				<DiscoverPanel v-show="currentTab === 'discover'"
+					id="discover-panel"
+					role="tabpanel"
+					aria-labelledby="discover-tab"
+					@open-app="onDiscoverOpenApp"
+					@prefill-bind="onDiscoverPrefillBind"
+					@open-trusted="onDiscoverOpenTrusted" />
+				<CachePanel v-show="currentTab === 'cache'"
+					id="cache-panel"
+					role="tabpanel"
+					aria-labelledby="cache-tab" />
 			</div>
-		</NcAppContent>
-	</NcContent>
+		</div>
+	</div>
 </template>
 
 <style module>
+.section {
+	display: block;
+}
+
 .content {
-	height: 100%;
-	margin: 16px;
+	margin: 0;
+}
+
+.well {
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	background: var(--color-main-background);
+	padding: 16px;
+	margin-top: 8px;
+}
+
+.tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-bottom: 16px;
+	border-bottom: 1px solid var(--color-border);
+	padding-bottom: 12px;
 }
 
 .layout {
@@ -1244,8 +2054,6 @@ watch(debugModeEnabled, () => {
 
 .mainContent {
 	width: 100%;
-	padding-left: 16px;
-	padding-right: 16px;
 	box-sizing: border-box;
 }
 
@@ -1253,11 +2061,8 @@ watch(debugModeEnabled, () => {
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
-	margin-top: 8px;
-	padding: 12px;
-	border: 1px solid var(--color-border);
-	border-radius: 8px;
-	background: var(--color-main-background);
+	padding-bottom: 16px;
+	border-bottom: 1px solid var(--color-border);
 }
 
 .settingsToggles {
@@ -1265,6 +2070,36 @@ watch(debugModeEnabled, () => {
 	flex-direction: column;
 	align-items: flex-start;
 	gap: 12px;
+}
+
+.autoUpdateSettings {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 10px;
+	max-width: 420px;
+}
+
+.autoUpdateSettings h3 {
+	margin: 0;
+}
+
+.autoUpdateSettings .hint {
+	color: var(--color-text-maxcontrast);
+	font-size: 13px;
+	margin: 0;
+}
+
+.autoUpdateWindowError {
+	color: var(--color-error-text, #c9291b);
+	font-size: 13px;
+	margin: 0;
+}
+
+.autoUpdateSettingsNotice {
+	color: var(--color-success-text, #2d7d46);
+	font-size: 13px;
+	margin: 0;
 }
 
 .selectSection {
@@ -1457,11 +2292,64 @@ watch(debugModeEnabled, () => {
 	flex-shrink: 0;
 }
 
+.pinBadge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 8px;
+	border-radius: 9999px;
+	background: var(--color-primary-element-light, #e0e7ff);
+	color: var(--color-primary-element-text, var(--color-main-text));
+	border: 1px solid var(--color-primary-element);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	flex-shrink: 0;
+}
+
+.advisoryBadge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 8px;
+	border-radius: 9999px;
+	background: var(--color-warning, #f0a020);
+	color: var(--color-warning-text, #000);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	flex-shrink: 0;
+}
+
+.advisoryBadgeVulnerable {
+	background: var(--color-error, #d32f2f);
+	color: var(--color-primary-text, #fff);
+}
+
+.advisoryDetail {
+	margin: 2px 0 0;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--color-error-text, var(--color-error, #d32f2f));
+}
+
 .appCardDescription {
 	margin: 0;
 	font-size: 13px;
 	line-height: 1.35;
 	color: var(--color-text-maxcontrast);
+}
+
+.appCardWarning {
+	margin: 4px 0 0;
+	font-size: 12px;
+	line-height: 1.35;
+	color: var(--color-warning-text, var(--color-text-maxcontrast));
+}
+
+.appCardWarningBlocking {
+	color: var(--color-error-text, var(--color-error));
+	font-weight: 600;
 }
 
 .appCardButton {
@@ -1477,6 +2365,31 @@ watch(debugModeEnabled, () => {
 .changeAppButton {
 	align-self: flex-start;
 	margin-top: 8px;
+}
+
+.appDetailTabs {
+	display: flex;
+	gap: 4px;
+	margin-top: 10px;
+	border-bottom: 1px solid var(--color-border);
+}
+
+.appDetailTabButton {
+	appearance: none;
+	-webkit-appearance: none;
+	background: transparent;
+	border: none;
+	border-bottom: 2px solid transparent;
+	padding: 6px 10px;
+	font-size: 13px;
+	color: var(--color-text-maxcontrast);
+	cursor: pointer;
+}
+
+.appDetailTabButtonActive {
+	color: var(--color-main-text);
+	border-bottom-color: var(--color-primary-element);
+	font-weight: 600;
 }
 
 .contentRow {
@@ -1595,6 +2508,34 @@ watch(debugModeEnabled, () => {
 	width: 100%;
 }
 
+.recordedShaBadge {
+	display: inline-flex;
+	align-items: center;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--color-success-text, var(--color-success));
+	background: var(--color-success-hover, rgba(0, 158, 116, 0.1));
+	border: 1px solid var(--color-success);
+	border-radius: 9999px;
+	padding: 1px 8px;
+	line-height: 1.4;
+	white-space: nowrap;
+}
+
+.cachedOfflineBadge {
+	display: inline-flex;
+	align-items: center;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--color-text-maxcontrast);
+	background: var(--color-background-hover);
+	border: 1px solid var(--color-border);
+	border-radius: 9999px;
+	padding: 1px 8px;
+	line-height: 1.4;
+	white-space: nowrap;
+}
+
 .versionActionGroup {
 	flex-direction: column;
 	gap: 8px;
@@ -1627,6 +2568,22 @@ watch(debugModeEnabled, () => {
 	border-radius: 6px;
 	font-size: 12px;
 	line-height: 1.3;
+}
+
+.migrationDiff {
+	margin: 8px 0 0;
+	padding: 8px 10px;
+	border: 1px solid #fdba74;
+	background: #ffedd5;
+	color: #7c2d12;
+	border-radius: 6px;
+	font-size: 12px;
+	line-height: 1.3;
+}
+
+.migrationDiffList {
+	margin: 4px 0 0;
+	padding-left: 18px;
 }
 
 .versionItemActions {
@@ -1926,6 +2883,13 @@ watch(debugModeEnabled, () => {
 	font-weight: 600;
 }
 
+.resultHint {
+	margin: 4px 0 0;
+	font-size: 13px;
+	line-height: 1.4;
+	color: var(--color-text-maxcontrast);
+}
+
 .resultGrid {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2048,6 +3012,15 @@ watch(debugModeEnabled, () => {
 .note {
 	font-size: 12px;
 	margin: 2px 0 0;
+	color: var(--color-text-maxcontrast);
+}
+
+.checkingNote {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 8px 0 0;
+	font-size: 13px;
 	color: var(--color-text-maxcontrast);
 }
 

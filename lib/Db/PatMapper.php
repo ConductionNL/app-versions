@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 /**
- * @license AGPL-3.0-or-later
+ * @license EUPL-1.2
  * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
  */
 
 
@@ -15,6 +18,8 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
 /**
+ * @psalm-api
+ *
  * @extends QBMapper<Pat>
  */
 class PatMapper extends QBMapper {
@@ -37,6 +42,21 @@ class PatMapper extends QBMapper {
 	}
 
 	/**
+	 * Returns every stored PAT regardless of owner; see "PAT expiry warnings"
+	 * (the daily job must sweep all tokens, not just those visible to a uid).
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 * @return list<Pat>
+	 */
+	public function findAll(): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from($this->tableName);
+
+		return $this->findEntities($qb);
+	}
+
+	/**
 	 * @return list<Pat>
 	 */
 	public function findVisibleTo(string $uid): array {
@@ -48,18 +68,6 @@ class PatMapper extends QBMapper {
 				$qb->expr()->eq('shared_with_admins', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL))
 			))
 			->orderBy('created_at', 'DESC');
-
-		return $this->findEntities($qb);
-	}
-
-	/**
-	 * @return list<Pat>
-	 */
-	public function findOwnedBy(string $uid): array {
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')
-			->from($this->tableName)
-			->where($qb->expr()->eq('owner_uid', $qb->createNamedParameter($uid, IQueryBuilder::PARAM_STR)));
 
 		return $this->findEntities($qb);
 	}

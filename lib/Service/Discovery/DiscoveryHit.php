@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 /**
- * @license AGPL-3.0-or-later
+ * @license EUPL-1.2
  * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
  */
 
 
@@ -38,6 +41,7 @@ final class DiscoveryHit {
 	 * Serializes a discovery hit into the uniform result shape; see "Result aggregation".
 	 *
 	 * @spec openspec/specs/app-discovery/spec.md
+	 * @psalm-api
 	 * @return array<string, mixed>
 	 */
 	public function toArray(): array {

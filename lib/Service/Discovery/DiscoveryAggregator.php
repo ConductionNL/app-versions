@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 /**
- * @license AGPL-3.0-or-later
+ * @license EUPL-1.2
  * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
  */
 
 
@@ -25,6 +28,9 @@ class DiscoveryAggregator {
 	/** @var list<DiscoveryProviderInterface> */
 	private array $providers;
 
+	/**
+	 * @psalm-api
+	 */
 	public function __construct(
 		private IAppManager $appManager,
 		AppStoreDiscovery $appStore,
@@ -124,7 +130,7 @@ class DiscoveryAggregator {
 				return $bInstalled - $aInstalled;
 			}
 
-			return strcmp($a['name'], $b['name']);
+			return strcmp((string)$a['name'], (string)$b['name']);
 		});
 
 		return [
@@ -156,7 +162,7 @@ class DiscoveryAggregator {
 	 */
 	private function snapshotInstalled(): array {
 		$installed = [];
-		foreach ($this->appManager->getInstalledApps() as $appId) {
+		foreach ($this->appManager->getEnabledApps() as $appId) {
 			try {
 				$installed[$appId] = $this->appManager->getAppVersion($appId);
 			} catch (Exception) {

@@ -1,0 +1,8 @@
+[
+  {
+    "slug": "app-discovery",
+    "title": "App Discovery",
+    "summary": "A multi-source search aggregator that lets admins find Nextcloud apps to install across the App Store, their PAT-visible private GitHub repos, and (opt-in) public GitHub topic search — via a single API endpoint with a uniform result shape.",
+    "docsUrl": "openspec/specs/app-discovery/spec.md"
+  }
+]

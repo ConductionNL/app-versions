@@ -11,7 +11,7 @@ from a breaking change in a minor release.
 > **Status: in development.** This documentation site is up so the
 > brand surface and the eventual journeydoc tutorials have a stable
 > home. Step-by-step walkthroughs and screenshots land as the admin UI
-> matures. Follow the [GitHub repository](https://github.com/ConductionNL/app-versions)
+> matures. Follow the [Codeberg repository](https://codeberg.org/Conduction/app-versions)
 > for milestones.
 
 ## What does it do?
@@ -27,18 +27,26 @@ installed app, with three things working together:
   installed one. That works in both directions: roll back to a
   known-good release after an update breaks production, or pin to a
   newer release candidate to test compatibility before the rest of the
-  fleet catches up.
+  fleet catches up. A pin is **enforced inside App Versions and
+  monitored elsewhere**: App Versions' own install path refuses to
+  overwrite a pinned app without an explicit override, but Nextcloud
+  core exposes no hook to veto its own updater — so if the regular
+  Apps page (or `occ app:update`) updates a pinned app anyway, admins
+  are notified immediately and offered a one-click re-pin. The UI says
+  this plainly; a pin is a guardrail App Versions controls, not a lock
+  on the whole instance.
 - **Audit-trailed.** Every install, downgrade, or pin is logged with
   who, what, and when — so a Friday-evening rollback by an on-call
   admin is visible Monday morning without digging through server logs.
 
-The app is built around four specs (see the openspec tracker on
-GitHub):
+The app is built around several specs (see the openspec tracker on
+Codeberg):
 
-- [`version-management`](https://github.com/ConductionNL/app-versions/tree/development/openspec/specs/version-management) — list installed apps, pick a version, install.
-- [`external-sources`](https://github.com/ConductionNL/app-versions/tree/development/openspec/specs/external-sources) — GitHub releases as a source alongside the App Store.
-- [`pat-management`](https://github.com/ConductionNL/app-versions/tree/development/openspec/specs/pat-management) — encrypted PAT storage for private GitHub repos.
-- [`app-discovery`](https://github.com/ConductionNL/app-versions/tree/development/openspec/specs/app-discovery) — a single search aggregator over the App Store, your PAT-visible repos, and (opt-in) public GitHub topic search.
+- [`version-management`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/version-management) — list installed apps, pick a version, install.
+- [`external-sources`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/external-sources) — GitHub releases as a source alongside the App Store.
+- [`pat-management`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/pat-management) — encrypted PAT storage for private GitHub repos.
+- [`app-discovery`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/app-discovery) — a single search aggregator over the App Store, your PAT-visible repos, and (opt-in) public GitHub topic search.
+- [`version-pinning`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/version-pinning) — pin an app to a version, self-enforced on App Versions' own install path, with drift detection and notification for changes made elsewhere.
 
 ## Getting started
 
@@ -52,5 +60,5 @@ clearly as such.
 - Curious how it works at the API level? The specs linked above are
   the source of truth while the user-facing documentation catches up.
 
-Free and open source under the AGPL-3.0-or-later license. For support,
+Free and open source under the EUPL-1.2 license. For support,
 contact support@conduction.nl.

@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 /**
- * @license AGPL-3.0-or-later
+ * @license EUPL-1.2
  * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
  */
 
 
@@ -15,6 +18,8 @@ namespace OCA\AppVersions\Service\Source;
  * installation is delegated to either `SelectedReleaseInstallerService`
  * (for the App Store path with full code-signing) or
  * `ExternalReleaseInstallerService` (for unsigned / external sources).
+ *
+ * @psalm-api
  */
 interface SourceInterface {
 	public const INSTALLER_SIGNED = 'signed';
@@ -32,8 +37,15 @@ interface SourceInterface {
 	 * populated `error` field in the result envelope so the caller can
 	 * surface the message to the admin.
 	 *
+	 * Each entry carries a nullable `changelog` — the release notes for that
+	 * version when the source provides them (App Store release translation,
+	 * forge release body), `null` otherwise. Changelog extraction MUST be
+	 * fail-soft: a mapping failure for one release yields `null` for that
+	 * entry, never a failed listing.
+	 *
 	 * @spec openspec/specs/external-sources/spec.md
-	 * @return array{versions: list<array{version: string}>, error: ?string}
+	 * @spec openspec/specs/changelog-visibility/spec.md
+	 * @return array{versions: list<array{version: string, changelog: ?string}>, error: ?string}
 	 */
 	public function listVersions(string $appId, SourceBinding $binding): array;
 

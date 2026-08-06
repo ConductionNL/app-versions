@@ -7,17 +7,37 @@
 		failOnRisky="true"
 		xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.4/phpunit.xsd">
 	<testsuite name="App Versions Unit Tests (no Nextcloud bootstrap)">
-		<directory suffix="Test.php">unit/Service/Source</directory>
-		<directory suffix="Test.php">unit/Service/Pat</directory>
-		<directory suffix="Test.php">unit/Service/Discovery</directory>
+		<!--
+			Every subdirectory below is verified to run clean against mocked OCP
+			interfaces under bootstrap-unit-only.php (no live Nextcloud server
+			needed) — confirmed 2026-07 when add-version-pinning discovered that
+			unit/Service (root-level InstallerService*/Installer* files),
+			unit/Sections, and unit/Settings were fully green but had been left
+			out of this curated list.
+		-->
+		<directory suffix="Test.php">unit/Service</directory>
 		<directory suffix="Test.php">unit/Controller</directory>
+		<directory suffix="Test.php">unit/Db</directory>
+		<directory suffix="Test.php">unit/BackgroundJob</directory>
+		<directory suffix="Test.php">unit/Notification</directory>
+		<directory suffix="Test.php">unit/Listener</directory>
+		<directory suffix="Test.php">unit/Cron</directory>
+		<directory suffix="Test.php">unit/Sections</directory>
+		<directory suffix="Test.php">unit/Settings</directory>
+		<directory suffix="Test.php">unit/Command</directory>
 	</testsuite>
 	<source>
 		<include>
-			<directory suffix=".php">../lib/Service/Source</directory>
-			<directory suffix=".php">../lib/Service/Pat</directory>
-			<directory suffix=".php">../lib/Service/Discovery</directory>
+			<directory suffix=".php">../lib/Service</directory>
 			<directory suffix=".php">../lib/Controller</directory>
+			<directory suffix=".php">../lib/Db</directory>
+			<directory suffix=".php">../lib/BackgroundJob</directory>
+			<directory suffix=".php">../lib/Notification</directory>
+			<directory suffix=".php">../lib/Listener</directory>
+			<directory suffix=".php">../lib/Cron</directory>
+			<directory suffix=".php">../lib/Sections</directory>
+			<directory suffix=".php">../lib/Settings</directory>
+			<directory suffix=".php">../lib/Command</directory>
 		</include>
 	</source>
 </phpunit>

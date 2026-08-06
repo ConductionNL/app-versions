@@ -8,5 +8,10 @@ jobs:
   release:
     uses: ConductionNL/.github/.github/workflows/release-stable.yml@main
     with:
-      app-name: app-versions
+      # app_versions, with an underscore. It must match <id> in
+      # appinfo/info.xml, because the packaged directory is named after it
+      # and Nextcloud refuses an app whose folder does not match its id.
+      app-name: app_versions
+      # Vite 7, engines.node ^24. The shared default of Node 18 fails.
+      node-version: "24"
     secrets: inherit

@@ -54,7 +54,7 @@ final class DiscoveryAggregatorTest extends TestCase {
 		$gs->method('search')->willReturn($githubSearch ?? DiscoveryResult::empty());
 
 		$appManager = $this->createMock(IAppManager::class);
-		$appManager->method('getInstalledApps')->willReturn(array_keys($installedApps));
+		$appManager->method('getEnabledApps')->willReturn(array_keys($installedApps));
 		$appManager->method('getAppVersion')->willReturnCallback(
 			static fn (string $appId): string => $installedApps[$appId] ?? ''
 		);

@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 /**
- * @license AGPL-3.0-or-later
+ * @license EUPL-1.2
  * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
  */
 
 
@@ -25,6 +28,8 @@ use OCP\Security\ICrypto;
  * No method on this class returns plaintext, no plaintext is stored on a
  * property, and `useToken()` discards its decrypted variable in `finally{}`
  * before returning.
+ *
+ * @psalm-api
  */
 class PatManager {
 	public function __construct(
@@ -49,11 +54,13 @@ class PatManager {
 		array $scopes,
 		array $warnings,
 		?string $expiresAt,
+		string $forge = 'github',
 	): Pat {
 		$pat = new Pat();
 		$pat->setOwnerUid($ownerUid);
 		$pat->setLabel($label);
 		$pat->setKind($kind);
+		$pat->setForge($forge);
 		$pat->setTargetPattern($targetPattern);
 		$pat->setEncryptedToken($this->crypto->encrypt($plaintextToken));
 		$pat->setTokenHint(self::buildHint($plaintextToken));
@@ -108,14 +115,21 @@ class PatManager {
 	/**
 	 * Persists mutations to a PAT (label / share flag); see "PAT management API".
 	 *
+	 * Clears the expiry-warning ledger whenever `expiresAt` was changed on the
+	 * entity before this call, so a renewed token gets fresh warnings; see
+	 * "PAT expiry warnings".
+	 *
 	 * @spec openspec/specs/pat-management/spec.md
 	 */
 	public function update(Pat $pat): Pat {
+		$this->resetLedgerIfExpiryChanged($pat);
+
 		return $this->mapper->update($pat);
 	}
 
 	/**
-	 * Re-probes and refreshes a PAT's stored scopes/expiry; see "PAT validation on upload".
+	 * Re-probes and refreshes a PAT's stored scopes/expiry; see "PAT validation on upload"
+	 * and "PAT expiry warnings" (ledger reset on expiry change).
 	 *
 	 * @spec openspec/specs/pat-management/spec.md
 	 */
@@ -128,8 +142,22 @@ class PatManager {
 		if ($result->expiresAt !== null) {
 			$pat->setExpiresAt($result->expiresAt);
 		}
+		$this->resetLedgerIfExpiryChanged($pat);
 
 		return $this->mapper->update($pat);
+	}
+
+	/**
+	 * Resets the expiry-warning ledger when `expiresAt` is among the entity's
+	 * updated fields, i.e. it changed since the entity was loaded; see
+	 * "PAT expiry warnings".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
+	private function resetLedgerIfExpiryChanged(Pat $pat): void {
+		if (array_key_exists('expiresAt', $pat->getUpdatedFields())) {
+			$pat->clearWarnedThresholds();
+		}
 	}
 
 	/**

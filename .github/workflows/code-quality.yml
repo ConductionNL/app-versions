@@ -15,13 +15,86 @@ jobs:
       php-version: "8.3"
       php-test-versions: '["8.3", "8.4"]'
       nextcloud-test-refs: '["stable31", "stable32", "stable33"]'
+      # This repo's PHP toolchain is the upstream Nextcloud app-template one:
+      # php-cs-fixer + psalm (+ rector, phpunit). It has no phpcs.xml, no
+      # phpmd.xml and no phpstan.neon, and correspondingly no `phpcs`, `phpmd`,
+      # `phpstan` or `phpmetrics` composer script.
+      #
+      # Those four legs were nevertheless switched on, so quality.yml ran
+      # `composer <tool>` and got `Command "<tool>" is not defined.` — i.e. the
+      # phpmd / phpstan / phpmetrics jobs have been failing on every run for
+      # months for the absence of a tool, not for a finding, and the phpcs job
+      # passed VACUOUSLY (quality.yml maps composer's exit 1 to "warnings only →
+      # pass"). Turning them off makes CI say what is true. Adopting them for
+      # real is tracked as a follow-up issue; flip these back when the configs
+      # and scripts land.
       enable-psalm: true
-      enable-phpstan: true
-      enable-phpmetrics: true
+      enable-phpstan: false
+      enable-phpcs: false
+      enable-phpmd: false
+      enable-phpmetrics: false
       enable-frontend: true
       enable-eslint: true
       enable-phpunit: true
-      enable-newman: true
+
+      # ── Integration tests: OFF, and this is a correction ──────────────────
+      # This was `true`, but there is no `tests/integration/` directory in this
+      # repository and no *.postman_collection.json anywhere in it. The shared
+      # workflow's "Validate Newman collections" step hard-fails on exactly
+      # that ("collection directory 'tests/integration' does not exist"), so
+      # the input could only ever have produced a guaranteed red that measures
+      # nothing. It has never actually surfaced, because the Newman job also
+      # carries `needs.security.result != 'failure'` and Security (npm) has
+      # been failing here — so a broken input has been hiding behind an
+      # unrelated failure.
+      # This is not a gate being switched off because it failed. It is a gate
+      # being switched off because the repository has nothing for it to run.
+      # Flip it back to `true` in the same commit that adds a collection.
+      enable-newman: false
+
       # additional-apps: '[]'  # Add app dependencies here if needed, e.g.:
       # additional-apps: '[{"repo":"ConductionNL/openregister","app":"openregister","ref":"main"}]'
       enable-sbom: true
+
+      # ── E2E browser tests ────────────────────────────────────────────────
+      # `enable-playwright` defaults to FALSE and this caller never set it, so
+      # the 15 spec files under tests/e2e had never run in CI while the job
+      # reported `skipped`.
+      # No CI-scoped config is needed here, unlike most of the fleet: this
+      # repo's ROOT playwright.config.ts declares only `setup` and `chromium`
+      # — no `docs-capture` project (which would re-shoot documentation
+      # screenshots on every PR) and no `visual` project (whose committed PNG
+      # baselines are host-font/GPU specific and cannot byte-match a CI
+      # runner). The run step's fallback to the root config is therefore the
+      # correct behaviour here rather than an accident.
+      # Honest expectation: this job will keep reporting `skipped` until
+      # Security (npm) goes green, because the playwright job carries
+      # `needs.security.result != 'failure'`. Enabling the input removes the
+      # first of the two reasons it was dark; the second is a real failure in
+      # this repo that this change does not touch.
+      enable-playwright: true
+
+      # ── Hydra mechanical gates ───────────────────────────────────────────
+      # `enable-hydra-gates` defaults to FALSE, so this tier has never executed
+      # here — the job reported `skipped`, which the Quality Report renders
+      # identically to a pass. Unlike the two jobs above, this one is NOT gated
+      # on the security job, so it reaches a verdict on this PR.
+      #
+      # No `hydra-gates-ref` here on purpose. The shared workflow defaults it
+      # to @main, and this workflow is itself consumed at @main, so the two
+      # sides move together and a gate fix reaches this repo without a commit
+      # in this repo. A pin is a silent expiry date: 22 repos sat on v1.0.1 and
+      # 16 gates were dead fleet-wide while every one reported PASS (.github#159),
+      # and a default flipped at @main later reached those old runners and made
+      # them red on gates they had no subject matter for (.github#173).
+      # To hold this repo still for a specific reason, set the input explicitly
+      # and say why — it is still honoured. To roll back for everyone, revert on
+      # ConductionNL/.github main.
+      #
+      # Whole-tree debt on this repo (inherited, not created here): gates 38
+      # skip-link, 40 form-label-association, 43 table-headers and 45
+      # prefers-reduced-motion fail on the full tree. Diff scoping keeps them
+      # out of unrelated PRs.
+      # `enable-axe` deliberately NOT set: a vanilla Nextcloud 34 already carries
+      # serious/critical violations from core's own UI.
+      enable-hydra-gates: true

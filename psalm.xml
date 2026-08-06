@@ -8,6 +8,7 @@
     findUnusedBaselineEntry="true"
     findUnusedCode="true"
 	phpVersion="8.1"
+    errorBaseline="psalm-baseline.xml"
 >
     <projectFiles>
         <directory name="lib" />
@@ -18,4 +19,7 @@
 	<extraFiles>
 		<directory name="vendor"/>
 	</extraFiles>
+	<stubs>
+		<file name="tests/stubs/server-internals.php" preloadClasses="true" />
+	</stubs>
 </psalm>

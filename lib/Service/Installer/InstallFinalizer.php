@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 /**
- * @license AGPL-3.0-or-later
+ * @license EUPL-1.2
  * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
  */
 
 
@@ -13,9 +16,13 @@ use Exception;
 use OC\AppFramework\Bootstrap\Coordinator;
 use OC\DB\Connection;
 use OC\DB\MigrationService;
+use OCA\AppVersions\Service\Lkg\Lkg;
+use OCA\AppVersions\Service\Lkg\LkgStore;
 use OCP\App\IAppManager;
+use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\BackgroundJob\IJob;
 use OCP\BackgroundJob\IJobList;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use OCP\Migration\IOutput;
 use OCP\Server;
 use Psr\Log\LoggerInterface;
@@ -29,81 +36,132 @@ use Psr\Log\LoggerInterface;
  * `ExternalReleaseInstallerService` (unsigned GitHub-release path) so the two
  * installers cannot drift on the migration semantics that determine whether an
  * upgrade actually completes.
+ *
+ * @psalm-api
  */
 class InstallFinalizer {
 	public function __construct(
-		private IConfig $config,
+		private IAppConfig $appConfig,
 		private IAppManager $appManager,
 		private IJobList $jobList,
 		private LoggerInterface $logger,
+		private LkgStore $lkgStore,
+		private ITimeFactory $timeFactory,
 	) {
 	}
 
 	/**
 	 * Runs migrations, repair steps, job + route registration, and version/enabled writes after extraction;
-	 * see "Install Specific Version" ("any database migrations for the new version MUST be triggered").
+	 * see "Install Specific Version" ("any database migrations for the new version MUST be triggered") and
+	 * "Last-known-good version record" (the last statement here — reached only on success — is the single
+	 * choke point that writes `lkg.{appId}` for both installers).
 	 *
 	 * @spec openspec/specs/version-management/spec.md
+	 * @spec openspec/specs/migration-safety/spec.md
 	 * @param array<string, mixed> $info Parsed `appinfo/info.xml` for the just-extracted version.
+	 * @param string $sourceId The source binding id (e.g. `appstore`, `github:owner/repo`) this version was
+	 *                         installed from, recorded alongside the last-known-good version.
 	 * @throws Exception
 	 */
-	public function finalize(string $appPath, array $info, string $enabled, ?IOutput $output = null): string {
+	public function finalize(string $appPath, array $info, string $enabled, ?IOutput $output = null, string $sourceId = 'appstore'): string {
+		$appId = (string)($info['id'] ?? '');
+
 		// Lazy registration must run before autoload + migrations so app-registered
 		// event listeners are wired up when migrations dispatch events.
 		$coordinator = Server::get(Coordinator::class);
-		$coordinator->runLazyRegistration($info['id']);
+		$coordinator->runLazyRegistration($appId);
 
-		\OC_App::registerAutoloading($info['id'], $appPath);
+		\OC_App::registerAutoloading($appId, $appPath);
 
-		$previousVersion = $this->config->getAppValue($info['id'], 'installed_version', '');
-		$migrationService = new MigrationService($info['id'], Server::get(Connection::class));
+		$previousVersion = $this->appConfig->getValueString($appId, 'installed_version', '');
+		$migrationService = new MigrationService($appId, Server::get(Connection::class));
 		if ($output instanceof IOutput) {
 			$migrationService->setOutput($output);
 		}
 
-		if ($previousVersion !== '' && isset($info['repair-steps']['pre-migration'])) {
-			\OC_App::executeRepairSteps($info['id'], $info['repair-steps']['pre-migration']);
+		$repairSteps = (array)($info['repair-steps'] ?? []);
+
+		$preMigration = (array)($repairSteps['pre-migration'] ?? []);
+		if ($previousVersion !== '' && $preMigration !== []) {
+			\OC_App::executeRepairSteps($appId, $preMigration);
 		}
 
 		$migrationService->migrate('latest', $previousVersion === '');
 
-		if ($previousVersion !== '' && isset($info['repair-steps']['post-migration'])) {
-			\OC_App::executeRepairSteps($info['id'], $info['repair-steps']['post-migration']);
+		$postMigration = (array)($repairSteps['post-migration'] ?? []);
+		if ($previousVersion !== '' && $postMigration !== []) {
+			\OC_App::executeRepairSteps($appId, $postMigration);
 		}
 
-		foreach (($info['background-jobs'] ?? []) as $job) {
+		/** @var list<string> $backgroundJobs */
+		$backgroundJobs = (array)($info['background-jobs'] ?? []);
+		foreach ($backgroundJobs as $job) {
+			/** @var class-string<IJob> $job */
 			$this->jobList->add($job);
 		}
 
 		$appInstallScriptPath = $appPath . '/appinfo/install.php';
 		if (file_exists($appInstallScriptPath)) {
 			$this->logger->warning('Using an appinfo/install.php file is deprecated. Application "{app}" still uses one.', [
-				'app' => $info['id'],
+				'app' => $appId,
 			]);
 			self::includeAppScript($appInstallScriptPath);
 		}
 
-		if (isset($info['repair-steps']['install'])) {
-			\OC_App::executeRepairSteps($info['id'], $info['repair-steps']['install']);
+		$installStep = (array)($repairSteps['install'] ?? []);
+		if ($installStep !== []) {
+			\OC_App::executeRepairSteps($appId, $installStep);
 		}
 
-		$installedVersion = is_string($info['version'] ?? null) && $info['version'] !== ''
-			? $info['version']
-			: $this->appManager->getAppVersion($info['id'], false);
-		$this->config->setAppValue($info['id'], 'installed_version', $installedVersion);
-		$this->config->setAppValue($info['id'], 'enabled', $enabled);
+		$infoVersion = (string)($info['version'] ?? '');
+		$installedVersion = $infoVersion !== ''
+			? $infoVersion
+			: $this->appManager->getAppVersion($appId, false);
+		$this->appConfig->setValueString($appId, 'installed_version', $installedVersion);
+		$this->appConfig->setValueString($appId, 'enabled', $enabled);
 
-		foreach (($info['remote'] ?? []) as $name => $path) {
-			$this->config->setAppValue('core', 'remote_' . $name, $info['id'] . '/' . $path);
+		/** @var array<string, string> $remote */
+		$remote = (array)($info['remote'] ?? []);
+		foreach ($remote as $name => $path) {
+			$this->appConfig->setValueString('core', 'remote_' . $name, $appId . '/' . $path);
 		}
-		foreach (($info['public'] ?? []) as $name => $path) {
-			$this->config->setAppValue('core', 'public_' . $name, $info['id'] . '/' . $path);
+		/** @var array<string, string> $public */
+		$public = (array)($info['public'] ?? []);
+		foreach ($public as $name => $path) {
+			$this->appConfig->setValueString('core', 'public_' . $name, $appId . '/' . $path);
 		}
 
-		\OC_App::setAppTypes($info['id']);
+		$this->persistAppTypes($appId);
 		$this->appManager->clearAppsCache();
 
-		return $info['id'];
+		// Reached only on success: every earlier step throws on failure and
+		// aborts before this line, so a failed or reverted install never
+		// touches the record — see "Last-known-good version record".
+		$this->lkgStore->set($appId, new Lkg(
+			$installedVersion,
+			$this->timeFactory->getDateTime('now', new \DateTimeZone('UTC'))->format(\DateTimeInterface::ATOM),
+			$sourceId,
+		));
+
+		return $appId;
+	}
+
+	/**
+	 * Stores the app's declared `<types>` as the comma-joined `types` app-config
+	 * value that `AppManager` reads (`AppManager::getAppTypes()` loads the
+	 * `types` config key across all apps). This replicates the removed
+	 * `OC_App::setAppTypes()` — gone from Nextcloud 34 — using public API. Without
+	 * it, an app declaring e.g. `<types>filesystem</types>` is not recognised as
+	 * that type after an install through this app, and the finalize phase would
+	 * fatal on the missing static method (which every install path shares).
+	 */
+	private function persistAppTypes(string $appId): void {
+		$appInfo = $this->appManager->getAppInfo($appId);
+		$types = '';
+		if (is_array($appInfo) && isset($appInfo['types']) && is_array($appInfo['types'])) {
+			$types = implode(',', array_map('strval', $appInfo['types']));
+		}
+		$this->appConfig->setValueString($appId, 'types', $types);
 	}
 
 	private static function includeAppScript(string $script): void {
