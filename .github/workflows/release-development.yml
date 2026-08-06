@@ -1,18 +1,14 @@
 # Publishes an installable build of the development branch.
 #
-# Beta and stable reach people through the Nextcloud app store. Development
-# reached nobody: releases only fire on a push to beta or main, so the
-# newest installable build was months behind the branch and trying out
-# unreleased work meant building it yourself.
+# App Versions is the app that installs other apps, so it has a bootstrap
+# problem of its own: until there is a downloadable artifact, it cannot be
+# put on an instance, and until it is on an instance nothing else can be
+# installed with it.
 #
 # This publishes a GitHub prerelease with a .tar.gz on every push to
-# development. The App Versions app reads a repository's releases from the
-# forge API and installs from that asset, and it already trusts
-# github:ConductionNL/* by default, so nothing needs configuring on the
-# Nextcloud side.
-#
-# Deliberately never uploaded to the app store: the shared workflow skips
-# that step for this channel. A dev build is for people who asked for one.
+# development. It is not a substitute for the app store, which is still
+# where this app should eventually come from, but it is enough to sideload
+# onto a test instance.
 name: Development Release
 
 on:
@@ -20,9 +16,6 @@ on:
     branches: [development]
   workflow_dispatch:
 
-# A push during a running build supersedes it. Without this, a busy morning
-# produces a queue of releases that are obsolete before they finish, and
-# the tag each one cuts sticks around.
 concurrency:
   group: development-release
   cancel-in-progress: true
@@ -31,6 +24,12 @@ jobs:
   release:
     uses: ConductionNL/.github/.github/workflows/release-beta.yml@main
     with:
+      # app_versions, with an underscore, to match <id> in info.xml. The
+      # packaged directory takes this name and Nextcloud refuses an app
+      # whose folder does not match its id.
       app-name: app_versions
       channel: dev
+      # Vite 7, engines.node ^24. The shared default of Node 18 fails the
+      # frontend build, which is why this app had no releases at all.
+      node-version: "24"
     secrets: inherit
