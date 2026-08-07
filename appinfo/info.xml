@@ -15,7 +15,7 @@ App Versions gives Nextcloud administrators the ability to roll back apps to pre
 	<bugs>https://codeberg.org/Conduction/app-versions/issues</bugs>
 	<repository>https://codeberg.org/Conduction/app-versions</repository>
 	<dependencies>
-		<nextcloud min-version="32" max-version="34"/>
+		<nextcloud min-version="31" max-version="34"/>
 	</dependencies>
 	<background-jobs>
 		<job>OCA\AppVersions\BackgroundJob\AdvisoryRefreshJob</job>
