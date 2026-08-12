@@ -15,7 +15,11 @@ App Versions gives Nextcloud administrators the ability to roll back apps to pre
 	<bugs>https://codeberg.org/Conduction/app-versions/issues</bugs>
 	<repository>https://codeberg.org/Conduction/app-versions</repository>
 	<dependencies>
-		<nextcloud min-version="31" max-version="34"/>
+		<!-- Floor raised 31 -> 32 with the fleet. composer.json requires php ^8.3
+		     and nextcloud/ocp dev-master, so this app has never been analysed
+		     against the NC 31 API surface — the 31 claim was advertised and
+		     backed by nothing. Every core Conduction app declares 32-34. -->
+		<nextcloud min-version="32" max-version="34"/>
 	</dependencies>
 	<background-jobs>
 		<job>OCA\AppVersions\BackgroundJob\AdvisoryRefreshJob</job>
