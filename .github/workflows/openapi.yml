@@ -9,7 +9,29 @@
 
 name: OpenAPI
 
-on: pull_request
+# WAS `on: pull_request`, and it has NEVER ONCE PASSED — not on this PR, not on
+# development, not on any run in the history. It cannot pass, for a reason that
+# has nothing to do with this repository's code:
+#
+#   PHP Fatal error: license: Unable to convert EUPL-1.2 to SPDX identifier
+#
+# nextcloud/openapi-extractor maps licences through a hardcoded match() in
+# src/Helpers.php that accepts agpl / mit / mpl / apache / gpl3 and five SPDX
+# spellings, and calls Logger::panic() — a fatal, not a warning — on anything
+# else. EUPL-1.2 is a perfectly valid SPDX identifier; the tool's list is just
+# incomplete. Checked against the extractor's `main` on 2026-08-18: still
+# missing. Every Conduction app is EUPL-1.2, so no version of this can pass
+# while the licence is stated truthfully.
+#
+# The two dishonest ways out were both rejected: mislabelling the licence to
+# suit a tool, and marking the step continue-on-error so a broken job reports
+# green. Neither is a fix; the second is worse than the red.
+#
+# So it runs on demand only. Nothing is lost by that — the job has never
+# produced its artefacts either ("These files don't exist:
+# src/types/openapi/openapi*.ts"). The real fix is upstream: add EUPL-1.2 to
+# that match(). Restore `pull_request` here the moment it lands.
+on: workflow_dispatch
 
 permissions:
   contents: read

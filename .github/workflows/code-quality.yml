@@ -11,7 +11,19 @@ jobs:
   quality:
     uses: ConductionNL/.github/.github/workflows/quality.yml@main
     with:
-      app-name: app-versions
+      # app_versions with an UNDERSCORE, matching <id>app_versions</id> in
+      # appinfo/info.xml — NOT the repository name, which is hyphenated.
+      #
+      # Nextcloud requires the app DIRECTORY name to equal the app id. Checked
+      # out as `apps/app-versions`, `occ app:enable` fails with
+      #
+      #   App "app-versions" cannot be installed because appinfo file cannot be read.
+      #
+      # which reads like a malformed or missing info.xml and is nothing of the
+      # sort — the file is valid and simply not where that id says to look. All
+      # six PHPUnit legs and the E2E job died on this at the install step, so
+      # not one of them ever ran a test.
+      app-name: app_versions
       php-version: "8.3"
       php-test-versions: '["8.3", "8.4"]'
       # THE LIST IS THE WHOLE DECLARED RANGE. appinfo/info.xml declares
