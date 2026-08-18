@@ -142,17 +142,21 @@ class InstallFinalizer {
 		 * enable, which is most of the point of the app. Config we own stays
 		 * on the typed API; only core's keys use core's semantics.
 		 */
+		/** @psalm-suppress DeprecatedMethod Deliberate — see the block comment above. */
 		$this->config->setAppValue($appId, 'installed_version', $installedVersion);
+		/** @psalm-suppress DeprecatedMethod Deliberate — see the block comment above. */
 		$this->config->setAppValue($appId, 'enabled', $enabled);
 
 		/** @var array<string, string> $remote */
 		$remote = (array)($info['remote'] ?? []);
 		foreach ($remote as $name => $path) {
+			/** @psalm-suppress DeprecatedMethod Deliberate — see the block comment above. */
 			$this->config->setAppValue('core', 'remote_' . $name, $appId . '/' . $path);
 		}
 		/** @var array<string, string> $public */
 		$public = (array)($info['public'] ?? []);
 		foreach ($public as $name => $path) {
+			/** @psalm-suppress DeprecatedMethod Deliberate — see the block comment above. */
 			$this->config->setAppValue('core', 'public_' . $name, $appId . '/' . $path);
 		}
 
@@ -188,6 +192,7 @@ class InstallFinalizer {
 		}
 		// Core-owned key as well: OC_App writes app types untyped, so a typed
 		// row here would collide the same way installed_version did.
+		/** @psalm-suppress DeprecatedMethod Deliberate — core owns this key and writes it untyped. */
 		$this->config->setAppValue($appId, 'types', $types);
 	}
 

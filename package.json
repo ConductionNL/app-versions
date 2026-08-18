@@ -25,14 +25,14 @@
     "@nextcloud/browserslist-config": "^3.1.2",
     "@nextcloud/eslint-config": "^8.4.2",
     "@nextcloud/stylelint-config": "^3.1.1",
-    "@nextcloud/vite-config": "^2.5.2",
+    "@nextcloud/vite-config": "^2.5.4",
     "@playwright/test": "^1.61.1",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vue/test-utils": "^2.4.11",
     "@vue/tsconfig": "^0.8.1",
     "jsdom": "^29.1.1",
     "typescript": "^5.9.3",
-    "vite": "^8.2.1",
+    "vite": "^7.1.10",
     "vitest": "^4.1.10"
   },
   "engines": {
