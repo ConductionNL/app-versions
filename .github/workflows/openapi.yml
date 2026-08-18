@@ -9,29 +9,33 @@
 
 name: OpenAPI
 
-# WAS `on: pull_request`, and it has NEVER ONCE PASSED — not on this PR, not on
-# development, not on any run in the history. It cannot pass, for a reason that
-# has nothing to do with this repository's code:
+# This job had NEVER ONCE PASSED, for a reason that had nothing to do with this
+# repository's code:
 #
 #   PHP Fatal error: license: Unable to convert EUPL-1.2 to SPDX identifier
 #
 # nextcloud/openapi-extractor maps licences through a hardcoded match() in
 # src/Helpers.php that accepts agpl / mit / mpl / apache / gpl3 and five SPDX
 # spellings, and calls Logger::panic() — a fatal, not a warning — on anything
-# else. EUPL-1.2 is a perfectly valid SPDX identifier; the tool's list is just
-# incomplete. Checked against the extractor's `main` on 2026-08-18: still
-# missing. Every Conduction app is EUPL-1.2, so no version of this can pass
-# while the licence is stated truthfully.
+# else. EUPL-1.2 is a valid SPDX identifier and is what every Conduction app
+# ships under, so the tool could not run against any of them. Upstream `main`
+# still had the same list on 2026-08-18.
 #
-# The two dishonest ways out were both rejected: mislabelling the licence to
-# suit a tool, and marking the step continue-on-error so a broken job reports
-# green. Neither is a fix; the second is worse than the red.
+# We do not get to wait on an upstream fix, and we do not get to disable a
+# check to hide it. So the tool is PATCHED at install time — see
+# vendor-bin/openapi-extractor/patches/ and the composer-patches wiring beside
+# it. The patch is pinned to the exact version this repo already pinned
+# (v1.8.7); if that pin moves and the patch stops applying, composer fails
+# LOUDLY rather than silently reverting to the broken behaviour.
 #
-# So it runs on demand only. Nothing is lost by that — the job has never
-# produced its artefacts either ("These files don't exist:
-# src/types/openapi/openapi*.ts"). The real fix is upstream: add EUPL-1.2 to
-# that match(). Restore `pull_request` here the moment it lands.
-on: workflow_dispatch
+# Two dishonest routes were rejected on the way: mislabelling the licence to
+# suit the tool, and marking the step continue-on-error so a broken job
+# reports green. The second is worse than the red.
+#
+# With the fatal gone the extractor reaches this app's controllers for the
+# first time and reports real findings about them. Those are ours, and the
+# trigger is back on so they stay visible.
+on: pull_request
 
 permissions:
   contents: read
