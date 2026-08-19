@@ -36,6 +36,8 @@
     "bamarni/composer-bin-plugin": "^1.8"
   },
   "require-dev": {
+    "conduction/coding-standard": "^1.0",
+    "conduction/hydra-gates": "^1.0",
     "cyclonedx/cyclonedx-php-composer": "^6.2",
     "nextcloud/ocp": "dev-master",
     "roave/security-advisories": "dev-latest",

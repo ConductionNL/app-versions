@@ -7,7 +7,7 @@
     "build": "vite build",
     "dev": "vite --mode development build",
     "lint": "eslint src",
-    "stylelint": "stylelint src/**/*.vue src/**/*.scss src/**/*.css",
+    "stylelint": "stylelint \"src/**/*.{vue,scss,css}\"",
     "watch": "vite --mode development build --watch",
     "test": "vitest run",
     "test:e2e": "playwright test",

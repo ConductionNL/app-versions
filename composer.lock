@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "6d3d1044014d8cff695ea625eb2a6492",
+    "content-hash": "e440a992fc8e2b91e6d1de36d8d64b8e",
     "packages": [
         {
             "name": "bamarni/composer-bin-plugin",
@@ -140,6 +140,115 @@
                 }
             ],
             "time": "2026-04-08T20:18:39+00:00"
+        },
+        {
+            "name": "conduction/coding-standard",
+            "version": "v1.0.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/ConductionNL/coding-standard.git",
+                "reference": "a1854f13cb735e46ecd010767593b4d7bc90d974"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/ConductionNL/coding-standard/zipball/a1854f13cb735e46ecd010767593b4d7bc90d974",
+                "reference": "a1854f13cb735e46ecd010767593b4d7bc90d974",
+                "shasum": ""
+            },
+            "require": {
+                "nextcloud/coding-standard": "^1.4",
+                "php": "^8.1"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Conduction\\CodingStandard\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "EUPL-1.2"
+            ],
+            "authors": [
+                {
+                    "name": "Conduction",
+                    "homepage": "https://conduction.nl"
+                }
+            ],
+            "description": "Conduction coding standards for the PHP CS Fixer. Extends nextcloud/coding-standard — adds rules, never overrides them.",
+            "homepage": "https://github.com/ConductionNL/coding-standard",
+            "keywords": [
+                "coding-standard",
+                "conduction",
+                "dev",
+                "nextcloud",
+                "php-cs-fixer"
+            ],
+            "support": {
+                "docs": "https://docs.conduction.nl/WayOfWork/ci-cd/",
+                "issues": "https://github.com/ConductionNL/coding-standard/issues",
+                "source": "https://github.com/ConductionNL/coding-standard/tree/v1.0.0"
+            },
+            "time": "2026-08-12T08:27:21+00:00"
+        },
+        {
+            "name": "conduction/hydra-gates",
+            "version": "v1.8.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/ConductionNL/.github.git",
+                "reference": "9fc64ab93f7a20b69f6b5912745ef9fc456c1cee"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/ConductionNL/.github/zipball/9fc64ab93f7a20b69f6b5912745ef9fc456c1cee",
+                "reference": "9fc64ab93f7a20b69f6b5912745ef9fc456c1cee",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=8.1"
+            },
+            "bin": [
+                "hydra-gates/bin/hydra-gates"
+            ],
+            "type": "library",
+            "extra": {
+                "hydra-gates": {
+                    "runner": "hydra-gates/scripts/run-hydra-gates.sh",
+                    "helpers": "hydra-gates/scripts/lib",
+                    "schemas": "hydra-gates/scripts/schemas"
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "OCA\\OpenRegister\\Contract\\": "hydra-gates/contracts/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "EUPL-1.2"
+            ],
+            "authors": [
+                {
+                    "name": "Conduction",
+                    "homepage": "https://conduction.nl"
+                }
+            ],
+            "description": "Hydra's mechanical quality gates, packaged so any repo can run them against its own diff. The exit code is the failure COUNT.",
+            "homepage": "https://github.com/ConductionNL/.github/tree/main/hydra-gates",
+            "keywords": [
+                "conduction",
+                "gates",
+                "nextcloud",
+                "quality",
+                "static-analysis"
+            ],
+            "support": {
+                "docs": "https://github.com/ConductionNL/.github/blob/main/hydra-gates/README.md",
+                "issues": "https://github.com/ConductionNL/.github/issues",
+                "source": "https://github.com/ConductionNL/.github/tree/v1.8.0"
+            },
+            "time": "2026-08-15T06:24:48+00:00"
         },
         {
             "name": "cyclonedx/cyclonedx-library",
@@ -313,6 +422,103 @@
                 }
             ],
             "time": "2026-02-17T13:23:10+00:00"
+        },
+        {
+            "name": "kubawerlos/php-cs-fixer-custom-fixers",
+            "version": "v3.37.2",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/kubawerlos/php-cs-fixer-custom-fixers.git",
+                "reference": "678df979ce743466b42ddb6eea46b3f4c9a7bade"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/kubawerlos/php-cs-fixer-custom-fixers/zipball/678df979ce743466b42ddb6eea46b3f4c9a7bade",
+                "reference": "678df979ce743466b42ddb6eea46b3f4c9a7bade",
+                "shasum": ""
+            },
+            "require": {
+                "ext-filter": "*",
+                "ext-tokenizer": "*",
+                "friendsofphp/php-cs-fixer": "^3.87",
+                "php": "^7.4 || ^8.0"
+            },
+            "require-dev": {
+                "phpunit/phpunit": "^9.6.34 || ^10.5.63 || ^11.5.55"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "PhpCsFixerCustomFixers\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Kuba Werłos",
+                    "email": "werlos@gmail.com"
+                }
+            ],
+            "description": "A set of custom fixers for PHP CS Fixer",
+            "support": {
+                "issues": "https://github.com/kubawerlos/php-cs-fixer-custom-fixers/issues",
+                "source": "https://github.com/kubawerlos/php-cs-fixer-custom-fixers/tree/v3.37.2"
+            },
+            "funding": [
+                {
+                    "url": "https://github.com/kubawerlos",
+                    "type": "github"
+                }
+            ],
+            "time": "2026-05-12T16:22:19+00:00"
+        },
+        {
+            "name": "nextcloud/coding-standard",
+            "version": "v1.5.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/nextcloud/coding-standard.git",
+                "reference": "80547a93236fbb9c783e05f0f0899043851b0dba"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/nextcloud/coding-standard/zipball/80547a93236fbb9c783e05f0f0899043851b0dba",
+                "reference": "80547a93236fbb9c783e05f0f0899043851b0dba",
+                "shasum": ""
+            },
+            "require": {
+                "kubawerlos/php-cs-fixer-custom-fixers": "^3.22",
+                "php": "^8.0",
+                "php-cs-fixer/shim": "^3.17"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Nextcloud\\CodingStandard\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Christoph Wurst",
+                    "email": "christoph@winzerhof-wurst.at"
+                }
+            ],
+            "description": "Nextcloud coding standards for the php cs fixer",
+            "keywords": [
+                "dev"
+            ],
+            "support": {
+                "issues": "https://github.com/nextcloud/coding-standard/issues",
+                "source": "https://github.com/nextcloud/coding-standard/tree/v1.5.0"
+            },
+            "time": "2026-05-19T18:30:09+00:00"
         },
         {
             "name": "nextcloud/ocp",
@@ -619,6 +825,58 @@
                 }
             ],
             "time": "2024-02-05T11:20:07+00:00"
+        },
+        {
+            "name": "php-cs-fixer/shim",
+            "version": "v3.95.19",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/PHP-CS-Fixer/shim.git",
+                "reference": "bd697e5e3bb17b83d4690a7238f2c7b5a131bb12"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/PHP-CS-Fixer/shim/zipball/bd697e5e3bb17b83d4690a7238f2c7b5a131bb12",
+                "reference": "bd697e5e3bb17b83d4690a7238f2c7b5a131bb12",
+                "shasum": ""
+            },
+            "require": {
+                "ext-json": "*",
+                "ext-tokenizer": "*",
+                "php": "^7.4 || ^8.0"
+            },
+            "replace": {
+                "friendsofphp/php-cs-fixer": "self.version"
+            },
+            "suggest": {
+                "ext-dom": "For handling output formats in XML",
+                "ext-mbstring": "For handling non-UTF8 characters."
+            },
+            "bin": [
+                "php-cs-fixer",
+                "php-cs-fixer.phar"
+            ],
+            "type": "application",
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Fabien Potencier",
+                    "email": "fabien@symfony.com"
+                },
+                {
+                    "name": "Dariusz Rumiński",
+                    "email": "dariusz.ruminski@gmail.com"
+                }
+            ],
+            "description": "A tool to automatically fix PHP code style",
+            "support": {
+                "issues": "https://github.com/PHP-CS-Fixer/shim/issues",
+                "source": "https://github.com/PHP-CS-Fixer/shim/tree/v3.95.19"
+            },
+            "time": "2026-08-17T16:24:34+00:00"
         },
         {
             "name": "psr/clock",
@@ -2054,16 +2312,16 @@
         },
         {
             "name": "symfony/console",
-            "version": "v6.4.42",
+            "version": "v6.4.43",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/console.git",
-                "reference": "9ef84af84a7b66396da483634227650506428639"
+                "reference": "3b643aa587acbc42f967a429af088a56ed8f046d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/console/zipball/9ef84af84a7b66396da483634227650506428639",
-                "reference": "9ef84af84a7b66396da483634227650506428639",
+                "url": "https://api.github.com/repos/symfony/console/zipball/3b643aa587acbc42f967a429af088a56ed8f046d",
+                "reference": "3b643aa587acbc42f967a429af088a56ed8f046d",
                 "shasum": ""
             },
             "require": {
@@ -2128,7 +2386,7 @@
                 "terminal"
             ],
             "support": {
-                "source": "https://github.com/symfony/console/tree/v6.4.42"
+                "source": "https://github.com/symfony/console/tree/v6.4.43"
             },
             "funding": [
                 {
@@ -2148,7 +2406,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-06-15T05:35:29+00:00"
+            "time": "2026-07-26T14:44:19+00:00"
         },
         {
             "name": "symfony/deprecation-contracts",
@@ -2306,16 +2564,16 @@
         },
         {
             "name": "symfony/polyfill-intl-grapheme",
-            "version": "v1.38.1",
+            "version": "v1.41.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/polyfill-intl-grapheme.git",
-                "reference": "e9247d281d694a5120554d9afaf54e070e88a603"
+                "reference": "bb899c1db0aa8127dc3afe8cda4a67eb24915f8d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/polyfill-intl-grapheme/zipball/e9247d281d694a5120554d9afaf54e070e88a603",
-                "reference": "e9247d281d694a5120554d9afaf54e070e88a603",
+                "url": "https://api.github.com/repos/symfony/polyfill-intl-grapheme/zipball/bb899c1db0aa8127dc3afe8cda4a67eb24915f8d",
+                "reference": "bb899c1db0aa8127dc3afe8cda4a67eb24915f8d",
                 "shasum": ""
             },
             "require": {
@@ -2364,7 +2622,7 @@
                 "shim"
             ],
             "support": {
-                "source": "https://github.com/symfony/polyfill-intl-grapheme/tree/v1.38.1"
+                "source": "https://github.com/symfony/polyfill-intl-grapheme/tree/v1.41.0"
             },
             "funding": [
                 {
@@ -2384,7 +2642,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-05-26T05:58:03+00:00"
+            "time": "2026-07-28T08:25:59+00:00"
         },
         {
             "name": "symfony/polyfill-intl-normalizer",
@@ -2645,16 +2903,16 @@
         },
         {
             "name": "symfony/string",
-            "version": "v7.4.13",
+            "version": "v7.4.15",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/string.git",
-                "reference": "961683010db3b27ec6ebcd7308e6e1ee8fa7ffde"
+                "reference": "e394af32256bf9e7bf80849d95e589167c10097b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/string/zipball/961683010db3b27ec6ebcd7308e6e1ee8fa7ffde",
-                "reference": "961683010db3b27ec6ebcd7308e6e1ee8fa7ffde",
+                "url": "https://api.github.com/repos/symfony/string/zipball/e394af32256bf9e7bf80849d95e589167c10097b",
+                "reference": "e394af32256bf9e7bf80849d95e589167c10097b",
                 "shasum": ""
             },
             "require": {
@@ -2712,7 +2970,7 @@
                 "utf8"
             ],
             "support": {
-                "source": "https://github.com/symfony/string/tree/v7.4.13"
+                "source": "https://github.com/symfony/string/tree/v7.4.15"
             },
             "funding": [
                 {
@@ -2732,7 +2990,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-05-23T15:23:29+00:00"
+            "time": "2026-07-28T07:33:02+00:00"
         }
     ],
     "aliases": [],

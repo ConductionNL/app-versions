@@ -750,7 +750,16 @@ class ApiController extends OCSController {
 		// The null default is load-bearing, as it was with getParam() and no
 		// default: an omitted `enabled` must leave the kill switch untouched,
 		// which is a different thing from `enabled=0` turning it off.
-		$enabledParam = $enabled;
+		//
+		// AN EMPTY STRING IS AN EXPLICIT FALSE, not "unspecified". A declared
+		// string parameter means Nextcloud casts what arrives, and PHP casts a
+		// JSON `false` to "" rather than "0". readBinaryBool() answers an
+		// unrecognised string with its default — the CURRENT stored value — so
+		// without this normalisation, switching the kill switch off returned
+		// 200 and changed nothing. The caller now sends '1'/'0', and this is
+		// the belt to that braces: any client that sends a bare `false` still
+		// gets the behaviour it asked for.
+		$enabledParam = ($enabled === '') ? '0' : $enabled;
 		$windowParam = $this->stringParam('window', '');
 
 		if ($windowParam !== '' && !AutoUpdateWindow::isValid($windowParam)) {

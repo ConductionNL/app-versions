@@ -611,7 +611,19 @@ const saveAutoUpdateSettings = async (): Promise<void> => {
 		})), {
 			method: 'PUT',
 			headers: { ...ocsHeaders, Accept: 'application/json', 'Content-Type': 'application/json' },
-			body: JSON.stringify({ enabled: autoUpdateEnabled.value, window }),
+			// '1'/'0', NOT a JSON boolean — and this is load-bearing.
+			//
+			// `enabled` is a declared string parameter on the controller, so
+			// Nextcloud casts whatever arrives to string. PHP casts `false` to
+			// the EMPTY STRING, not to "0", and readBinaryBool() answers an
+			// unrecognised string with its DEFAULT — which here is the current
+			// stored value. Sending a real `false` therefore asked the server
+			// to keep whatever it already had: switching the kill switch OFF
+			// silently did nothing, while the request returned 200.
+			//
+			// The query string above already sends '1'/'0'; this makes the body
+			// agree with it so the value cannot depend on which one wins.
+			body: JSON.stringify({ enabled: autoUpdateEnabled.value ? '1' : '0', window }),
 		})
 		const payload = await unwrapOcsResponse<{ autoUpdateEnabled?: boolean, autoUpdateWindow?: string }>(response)
 		autoUpdateEnabled.value = Boolean(payload.autoUpdateEnabled)
@@ -1447,7 +1459,26 @@ watch(dryRunEnabled, () => {
 
 <template>
 	<div :class="$style.section">
-		<div :class="$style.content">
+		<!--
+			SKIP LINK (WCAG 2.2 AA 2.4.1 Bypass Blocks).
+
+			This page is long — app list, version list, history, sources, tokens,
+			policies — and every one of those panels sits between the top of the
+			document and the content a keyboard user usually wants. Without a
+			bypass they tab through all of it on every visit.
+
+			Not <NcContent>: that is the shell for a full app with its own
+			navigation sidebar, and this view is rendered inside Nextcloud's
+			settings page, which already provides one. Wrapping in NcContent here
+			would nest a second app shell inside the first.
+
+			Visible only on focus, so it costs sighted mouse users nothing and
+			appears exactly when a keyboard user reaches it.
+		-->
+		<a :class="$style.skipLink" href="#app-versions-main">
+			{{ t('app_versions', 'Skip to main content') }}
+		</a>
+		<div id="app-versions-main" :class="$style.content">
 			<NcDialog
 				:open="isDowngradeConfirmOpen"
 				name="Confirm downgrade"
@@ -1804,10 +1835,17 @@ watch(dryRunEnabled, () => {
 									</div>
 									<template v-if="appDetailTab === 'versions'">
 										<div v-if="versions.length > 0" :class="$style.versionListContainer">
+											<!-- aria-label, not a placeholder. A placeholder is not an
+											     accessible name: it is announced inconsistently and
+											     DISAPPEARS the moment the field has content, so a
+											     screen-reader user reviewing a filled form is told
+											     nothing about what the field is (WCAG 2.2 AA 3.3.2
+											     Labels or Instructions, 4.1.2 Name, Role, Value). -->
 											<input
 												v-if="!selectedVersion"
 												v-model="versionFilter"
 												type="text"
+												:aria-label="t('app_versions', 'Filter versions')"
 												placeholder="Filter versions"
 												:class="$style.versionFilterInput"
 												:disabled="isInstallingVersion">
@@ -2019,6 +2057,30 @@ watch(dryRunEnabled, () => {
 <style module>
 .section {
 	display: block;
+}
+
+/*
+ * Off-screen until focused, then placed over the content.
+ *
+ * `position: absolute; left: -9999px` and NOT `display: none` or
+ * `visibility: hidden`: both of those remove the element from the tab order
+ * entirely, which would make the skip link unreachable by the only users it
+ * exists for — a bypass affordance nobody can focus is decoration.
+ */
+.skipLink {
+	position: absolute;
+	left: -9999px;
+	z-index: 100;
+	padding: 8px 16px;
+	border-radius: var(--border-radius);
+	background: var(--color-main-background);
+	color: var(--color-main-text);
+}
+
+.skipLink:focus {
+	left: 8px;
+	top: 8px;
+	outline: 2px solid var(--color-primary-element);
 }
 
 .content {
@@ -2267,7 +2329,11 @@ watch(dryRunEnabled, () => {
 .appCardTitle {
 	font-weight: 700;
 	color: var(--color-main-text);
-	word-break: break-word;
+	/* `word-break: break-word` is deprecated; `overflow-wrap: anywhere` is its
+	   behavioural equivalent. It breaks an otherwise-unbreakable run — a long
+	   app id with no spaces — without breaking ordinary words mid-character
+	   the way `word-break: break-all` would. */
+	overflow-wrap: anywhere;
 }
 
 .appCardMeta {
@@ -2609,7 +2675,13 @@ watch(dryRunEnabled, () => {
 	font-size: 12px;
 }
 
-.versionItem:hover .versionSelectButton,
+/* ORDER MATTERS HERE, and it is not cosmetic. `.versionItem:hover
+   .versionSelectButton` (0,2,0) outranks the single-class pseudo rules below
+   it, so with those written first the descending order let the hover-descendant
+   rule win ties and a keyboard user's :focus-visible reveal could be overridden
+   by whatever the mouse state happened to be. Ascending specificity keeps the
+   keyboard affordance reachable — stylelint's no-descending-specificity is
+   pointing at a real accessibility bug, not at tidiness. */
 .versionSelectButton:focus-visible {
 	visibility: visible;
 	opacity: 1;
@@ -2617,6 +2689,11 @@ watch(dryRunEnabled, () => {
 
 .versionSelectButton:hover {
 	filter: brightness(1.05);
+}
+
+.versionItem:hover .versionSelectButton {
+	visibility: visible;
+	opacity: 1;
 }
 
 .selectedVersionFlag {
@@ -3030,4 +3107,28 @@ watch(dryRunEnabled, () => {
 	font-size: 13px;
 }
 
+/*
+ * REDUCED-MOTION FALLBACK (WCAG 2.2 AA 2.3.3 Animation from Interactions).
+ *
+ * This stylesheet drives eight transitions/animations — the version-list fade,
+ * the select-button reveal, the spinner. `prefers-reduced-motion: reduce` is
+ * set by people for whom vestibular motion causes actual symptoms, and it is an
+ * OS-level setting, not a preference toggle in this app. Honouring it is not
+ * optional politeness.
+ *
+ * Near-zero rather than `none`: a 0.01ms duration still FIRES transitionend and
+ * animationend, so any handler waiting on one of those keeps working. Setting
+ * `animation: none` silently strips those events and hangs whatever was
+ * listening — a fix that trades a motion problem for a dead UI.
+ */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}
 </style>
