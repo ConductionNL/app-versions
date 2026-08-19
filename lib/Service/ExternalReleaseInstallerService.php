@@ -590,6 +590,10 @@ class ExternalReleaseInstallerService {
 		// every external install fail at the last moment. The legacy static
 		// takes the same arguments, and the dependency check on the next line
 		// already comes from the same class.
+		// \OC_App is private API and carries no OCP stub, so psalm cannot resolve
+		// the static. The call is deliberate for the reason above; suppressed
+		// here rather than baselined so it stays attached to that reason.
+		/** @psalm-suppress UndefinedMethod */
 		if (!\OC_App::isAppCompatible($serverVersion, $info, $ignoreMax)) {
 			$appName = isset($info['name']) && is_string($info['name']) ? $info['name'] : $expectedAppId;
 			throw new Exception(sprintf(

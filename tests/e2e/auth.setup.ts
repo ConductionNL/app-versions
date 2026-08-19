@@ -33,7 +33,15 @@ setup('authenticate as admin', async ({ page }) => {
 
 	// Landing anywhere authenticated is enough; go straight to our settings page
 	// so a broken login fails here rather than in every functional spec.
-	await page.goto('/index.php/settings/admin/app_versions')
+	//
+	// `domcontentloaded` for the same reason as helpers.ts::openSettings — the
+	// default `load` waits for sub-resources a Nextcloud settings page keeps in
+	// flight, so the navigation runs to the timeout and is reported as
+	// `net::ERR_ABORTED`. This one is the more dangerous of the two: it runs in
+	// SETUP, so a stall here does not fail one spec, it fails the suite.
+	await page.goto('/index.php/settings/admin/app_versions', {
+		waitUntil: 'domcontentloaded',
+	})
 
 	// Nextcloud's first-run wizard is a modal that covers the page and swallows
 	// clicks and focus. Instances used for e2e should have `firstrunwizard`

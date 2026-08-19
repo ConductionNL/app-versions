@@ -87,7 +87,11 @@ const toggle = (): void => {
 .text {
 	margin: 0;
 	white-space: pre-wrap;
-	word-break: break-word;
+	/* `word-break: break-word` is deprecated. `overflow-wrap: anywhere` is its
+	   behavioural equivalent: it breaks an otherwise-unbreakable run (a long
+	   URL or commit hash in a changelog line) without breaking ordinary words
+	   mid-character the way `word-break: break-all` would. */
+	overflow-wrap: anywhere;
 	font-size: 12px;
 	line-height: 1.4;
 }

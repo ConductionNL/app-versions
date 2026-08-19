@@ -121,7 +121,6 @@
     </MixedAssignment>
     <MixedMethodCall>
       <code><![CDATA[setDefault]]></code>
-      <code><![CDATA[setNotnull]]></code>
     </MixedMethodCall>
     <UndefinedMethod>
       <code><![CDATA[getColumn]]></code>

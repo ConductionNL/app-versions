@@ -127,15 +127,21 @@ const isEmpty = computed(() => hasLoadedOnce.value && !isLoading.value && entrie
 			<table data-testid="history-table" :class="$style.table">
 				<thead>
 					<tr>
-						<th>{{ t('app_versions', 'When') }}</th>
-						<th>{{ t('app_versions', 'Who') }}</th>
-						<th v-if="!appId">
+						<!-- scope="col" on every header. Without it a screen reader has
+						     to GUESS whether a <th> heads its column or its row, and in a
+						     table this wide it guesses wrong — every cell is then
+						     announced against the wrong header, which is worse than
+						     silence because it is confidently mislabelled (WCAG 2.2 AA
+						     1.3.1 Info and Relationships). -->
+						<th scope="col">{{ t('app_versions', 'When') }}</th>
+						<th scope="col">{{ t('app_versions', 'Who') }}</th>
+						<th v-if="!appId" scope="col">
 							{{ t('app_versions', 'App') }}
 						</th>
-						<th>{{ t('app_versions', 'Operation') }}</th>
-						<th>{{ t('app_versions', 'From → to') }}</th>
-						<th>{{ t('app_versions', 'Source') }}</th>
-						<th>{{ t('app_versions', 'Status') }}</th>
+						<th scope="col">{{ t('app_versions', 'Operation') }}</th>
+						<th scope="col">{{ t('app_versions', 'From → to') }}</th>
+						<th scope="col">{{ t('app_versions', 'Source') }}</th>
+						<th scope="col">{{ t('app_versions', 'Status') }}</th>
 					</tr>
 				</thead>
 				<tbody>

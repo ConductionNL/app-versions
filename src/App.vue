@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import NcButton from '@nextcloud/vue/components/NcButton'
-import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { t } from '@nextcloud/l10n'
@@ -14,13 +13,14 @@ import SourcesPanel from './components/SourcesPanel.vue'
 import TokensPanel from './components/TokensPanel.vue'
 import TrustedSourcesPanel from './components/TrustedSourcesPanel.vue'
 import VersionChangelog from './components/VersionChangelog.vue'
+import DowngradeConfirmDialog from './dialogs/DowngradeConfirmDialog.vue'
 import PinDialog from './dialogs/PinDialog.vue'
 import type { PinRecord } from './dialogs/PinDialog.vue'
 import PinOverrideDialog from './dialogs/PinOverrideDialog.vue'
 import ShaMismatchDialog from './dialogs/ShaMismatchDialog.vue'
 import { AUTO_UPDATE_WINDOW_DEFAULT, isValidAutoUpdateWindow } from './utils/autoUpdateWindow'
 import { buildChangelogRange } from './utils/changelog'
-import { orphanedMigrationsSummary, shouldOfferLkgRollback, type LkgRecord } from './utils/migrationSafety'
+import { shouldOfferLkgRollback, type LkgRecord } from './utils/migrationSafety'
 import { compareVersions, parseVersionCore } from './utils/versionCompare'
 
 type AppOption = {
@@ -611,7 +611,19 @@ const saveAutoUpdateSettings = async (): Promise<void> => {
 		})), {
 			method: 'PUT',
 			headers: { ...ocsHeaders, Accept: 'application/json', 'Content-Type': 'application/json' },
-			body: JSON.stringify({ enabled: autoUpdateEnabled.value, window }),
+			// '1'/'0', NOT a JSON boolean — and this is load-bearing.
+			//
+			// `enabled` is a declared string parameter on the controller, so
+			// Nextcloud casts whatever arrives to string. PHP casts `false` to
+			// the EMPTY STRING, not to "0", and readBinaryBool() answers an
+			// unrecognised string with its DEFAULT — which here is the current
+			// stored value. Sending a real `false` therefore asked the server
+			// to keep whatever it already had: switching the kill switch OFF
+			// silently did nothing, while the request returned 200.
+			//
+			// The query string above already sends '1'/'0'; this makes the body
+			// agree with it so the value cannot depend on which one wins.
+			body: JSON.stringify({ enabled: autoUpdateEnabled.value ? '1' : '0', window }),
 		})
 		const payload = await unwrapOcsResponse<{ autoUpdateEnabled?: boolean, autoUpdateWindow?: string }>(response)
 		autoUpdateEnabled.value = Boolean(payload.autoUpdateEnabled)
@@ -1020,29 +1032,6 @@ const versionRangeText = (summary: VersionRangeInfo | null): string => {
 	return `${summary.direction === 'upgrade' ? 'Upgrade' : 'Downgrade'} crosses ${summary.major} major and ${summary.minor} minor version step${summary.minor === 1 ? '' : 's'}.`
 }
 
-const downgradeConfirmButtons = computed(() => [
-	{
-		label: 'Cancel',
-		type: 'tertiary',
-		disabled: isInstallingVersion.value,
-		callback: () => {
-			isDowngradeConfirmOpen.value = false
-			downgradeResolve?.(false)
-			downgradeResolve = null
-		},
-	},
-	{
-		label: 'Downgrade',
-		variant: 'error',
-		disabled: isInstallingVersion.value,
-		callback: () => {
-			isDowngradeConfirmOpen.value = false
-			downgradeResolve?.(true)
-			downgradeResolve = null
-		},
-	},
-])
-
 // Previews the migration diff for a downgrade via a dry-run install request
 // before the confirmation dialog opens, so the dialog can name the exact
 // migrations the target lacks instead of only warning generically; see
@@ -1076,15 +1065,13 @@ const confirmDowngrade = async (appId: string, fromVersion: string, toVersion: s
 	})
 }
 
-const onDowngradeDialogClose = (open: boolean) => {
-	if (open) {
-		return
-	}
-
-	if (downgradeResolve) {
-		downgradeResolve(false)
-		downgradeResolve = null
-	}
+// The single exit from the confirmation dialog. Cancel, the Downgrade button
+// and dismissing all arrive here, so the awaiting promise is always settled —
+// a dismissed dialog can never leave the install flow hanging.
+const onDowngradeResolved = (accept: boolean): void => {
+	isDowngradeConfirmOpen.value = false
+	downgradeResolve?.(accept)
+	downgradeResolve = null
 }
 
 const onSelectVersion = (version: string): void => {
@@ -1447,38 +1434,36 @@ watch(dryRunEnabled, () => {
 
 <template>
 	<div :class="$style.section">
-		<div :class="$style.content">
-			<NcDialog
+		<!--
+			SKIP LINK (WCAG 2.2 AA 2.4.1 Bypass Blocks).
+
+			This page is long — app list, version list, history, sources, tokens,
+			policies — and every one of those panels sits between the top of the
+			document and the content a keyboard user usually wants. Without a
+			bypass they tab through all of it on every visit.
+
+			Not <NcContent>: that is the shell for a full app with its own
+			navigation sidebar, and this view is rendered inside Nextcloud's
+			settings page, which already provides one. Wrapping in NcContent here
+			would nest a second app shell inside the first.
+
+			Visible only on focus, so it costs sighted mouse users nothing and
+			appears exactly when a keyboard user reaches it.
+		-->
+		<a :class="$style.skipLink" href="#app-versions-main">
+			{{ t('app_versions', 'Skip to main content') }}
+		</a>
+		<div id="app-versions-main" :class="$style.content">
+			<DowngradeConfirmDialog
 				:open="isDowngradeConfirmOpen"
-				name="Confirm downgrade"
-				:buttons="downgradeConfirmButtons"
-				@update:open="onDowngradeDialogClose">
-				<p class="$style.downgradeConfirmText">
-					<strong>{{ downgradeConfirmApp }}</strong>
-				</p>
-				<p class="$style.versionTransitionRow">
-					<span :class="$style.versionChip">{{ downgradeConfirmFromVersion || '—' }}</span>
-					<span :class="$style.versionArrow">→</span>
-					<span :class="$style.versionChip">{{ downgradeConfirmToVersion }}</span>
-				</p>
-				<p v-if="downgradeVersionRange" :class="$style.versionRangeSummary">
-					<strong>Downgrade info:</strong> {{ versionRangeText(downgradeVersionRange) }}
-				</p>
-				<p :class="$style.versionItemDegradeMessage">
-					{{ t('app_versions', 'Downgrading files cannot undo database migrations already applied by the installed version.') }}
-				</p>
-				<div v-if="downgradeOrphanedMigrations && downgradeOrphanedMigrations.length > 0" :class="$style.migrationDiff">
-					<p><strong>{{ t('app_versions', 'Database migrations only present in the installed version:') }}</strong></p>
-					<ul :class="$style.migrationDiffList">
-						<li v-for="migration in downgradeOrphanedMigrations" :key="migration">
-							{{ migration }}
-						</li>
-					</ul>
-				</div>
-				<p v-else :class="$style.versionItemDegradeMessage">
-					{{ orphanedMigrationsSummary(downgradeOrphanedMigrations) }}
-				</p>
-			</NcDialog>
+				:app-id="downgradeConfirmApp"
+				:from-version="downgradeConfirmFromVersion"
+				:to-version="downgradeConfirmToVersion"
+				:range-text="downgradeVersionRange ? versionRangeText(downgradeVersionRange) : ''"
+				:orphaned-migrations="downgradeOrphanedMigrations"
+				:busy="isInstallingVersion"
+				@update:open="isDowngradeConfirmOpen = $event"
+				@resolve="onDowngradeResolved" />
 			<PinDialog
 				:open="isPinDialogOpen"
 				:app-id="pinDialogAppId"
@@ -1804,10 +1789,17 @@ watch(dryRunEnabled, () => {
 									</div>
 									<template v-if="appDetailTab === 'versions'">
 										<div v-if="versions.length > 0" :class="$style.versionListContainer">
+											<!-- aria-label, not a placeholder. A placeholder is not an
+											     accessible name: it is announced inconsistently and
+											     DISAPPEARS the moment the field has content, so a
+											     screen-reader user reviewing a filled form is told
+											     nothing about what the field is (WCAG 2.2 AA 3.3.2
+											     Labels or Instructions, 4.1.2 Name, Role, Value). -->
 											<input
 												v-if="!selectedVersion"
 												v-model="versionFilter"
 												type="text"
+												:aria-label="t('app_versions', 'Filter versions')"
 												placeholder="Filter versions"
 												:class="$style.versionFilterInput"
 												:disabled="isInstallingVersion">
@@ -2019,6 +2011,30 @@ watch(dryRunEnabled, () => {
 <style module>
 .section {
 	display: block;
+}
+
+/*
+ * Off-screen until focused, then placed over the content.
+ *
+ * `position: absolute; left: -9999px` and NOT `display: none` or
+ * `visibility: hidden`: both of those remove the element from the tab order
+ * entirely, which would make the skip link unreachable by the only users it
+ * exists for — a bypass affordance nobody can focus is decoration.
+ */
+.skipLink {
+	position: absolute;
+	left: -9999px;
+	z-index: 100;
+	padding: 8px 16px;
+	border-radius: var(--border-radius);
+	background: var(--color-main-background);
+	color: var(--color-main-text);
+}
+
+.skipLink:focus {
+	left: 8px;
+	top: 8px;
+	outline: 2px solid var(--color-primary-element);
 }
 
 .content {
@@ -2267,7 +2283,11 @@ watch(dryRunEnabled, () => {
 .appCardTitle {
 	font-weight: 700;
 	color: var(--color-main-text);
-	word-break: break-word;
+	/* `word-break: break-word` is deprecated; `overflow-wrap: anywhere` is its
+	   behavioural equivalent. It breaks an otherwise-unbreakable run — a long
+	   app id with no spaces — without breaking ordinary words mid-character
+	   the way `word-break: break-all` would. */
+	overflow-wrap: anywhere;
 }
 
 .appCardMeta {
@@ -2554,38 +2574,6 @@ watch(dryRunEnabled, () => {
 	line-height: 1.3;
 }
 
-.downgradeConfirmText {
-	font-size: 14px;
-	line-height: 1.4;
-}
-
-.versionItemDegradeMessage {
-	margin: 8px 0 0;
-	padding: 8px 10px;
-	border: 1px solid #fdba74;
-	background: #ffedd5;
-	color: #7c2d12;
-	border-radius: 6px;
-	font-size: 12px;
-	line-height: 1.3;
-}
-
-.migrationDiff {
-	margin: 8px 0 0;
-	padding: 8px 10px;
-	border: 1px solid #fdba74;
-	background: #ffedd5;
-	color: #7c2d12;
-	border-radius: 6px;
-	font-size: 12px;
-	line-height: 1.3;
-}
-
-.migrationDiffList {
-	margin: 4px 0 0;
-	padding-left: 18px;
-}
-
 .versionItemActions {
 	margin-top: 8px;
 	display: flex;
@@ -2609,7 +2597,13 @@ watch(dryRunEnabled, () => {
 	font-size: 12px;
 }
 
-.versionItem:hover .versionSelectButton,
+/* ORDER MATTERS HERE, and it is not cosmetic. `.versionItem:hover
+   .versionSelectButton` (0,2,0) outranks the single-class pseudo rules below
+   it, so with those written first the descending order let the hover-descendant
+   rule win ties and a keyboard user's :focus-visible reveal could be overridden
+   by whatever the mouse state happened to be. Ascending specificity keeps the
+   keyboard affordance reachable — stylelint's no-descending-specificity is
+   pointing at a real accessibility bug, not at tidiness. */
 .versionSelectButton:focus-visible {
 	visibility: visible;
 	opacity: 1;
@@ -2617,6 +2611,11 @@ watch(dryRunEnabled, () => {
 
 .versionSelectButton:hover {
 	filter: brightness(1.05);
+}
+
+.versionItem:hover .versionSelectButton {
+	visibility: visible;
+	opacity: 1;
 }
 
 .selectedVersionFlag {
@@ -2797,14 +2796,6 @@ watch(dryRunEnabled, () => {
 	font-size: 14px;
 }
 
-.versionTransitionRow {
-	margin: 0;
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	font-size: 14px;
-}
-
 .versionChip {
 	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 	font-weight: 600;
@@ -2822,8 +2813,7 @@ watch(dryRunEnabled, () => {
 	color: var(--color-text-light);
 }
 
-.versionSummary,
-.versionRangeSummary {
+.versionSummary {
 	margin: 0;
 	font-size: 12px;
 	color: var(--color-text-light);
@@ -3030,4 +3020,28 @@ watch(dryRunEnabled, () => {
 	font-size: 13px;
 }
 
+/*
+ * REDUCED-MOTION FALLBACK (WCAG 2.2 AA 2.3.3 Animation from Interactions).
+ *
+ * This stylesheet drives eight transitions/animations — the version-list fade,
+ * the select-button reveal, the spinner. `prefers-reduced-motion: reduce` is
+ * set by people for whom vestibular motion causes actual symptoms, and it is an
+ * OS-level setting, not a preference toggle in this app. Honouring it is not
+ * optional politeness.
+ *
+ * Near-zero rather than `none`: a 0.01ms duration still FIRES transitionend and
+ * animationend, so any handler waiting on one of those keeps working. Setting
+ * `animation: none` silently strips those events and hangs whatever was
+ * listening — a fix that trades a motion problem for a dead UI.
+ */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}
 </style>

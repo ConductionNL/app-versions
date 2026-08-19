@@ -75,7 +75,11 @@ class ApiController extends OCSController {
 	}
 
 	/**
-	 * Reports whether the current user is an admin so the frontend can gate the UI.
+	 * Reports whether the current user is an admin so the frontend can gate the UI
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array{isAdmin: bool}, array{}>
+	 *
+	 * 200: Admin status returned
 	 *
 	 * @spec openspec/specs/version-management/spec.md
 	 */
@@ -85,7 +89,12 @@ class ApiController extends OCSController {
 	}
 
 	/**
-	 * Lists installed apps (admin-only); see "List Installed Apps".
+	 * Lists installed apps (admin-only); see "List Installed Apps"
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array{apps: list<array<string, mixed>>}, array{}>|DataResponse<Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: Installed apps returned
+	 * 403: Caller is not an administrator
 	 *
 	 * @spec openspec/specs/version-management/spec.md
 	 */
@@ -102,7 +111,12 @@ class ApiController extends OCSController {
 	 * Correlates each installed app's version against known security advisories
 	 * (admin-only, read-only). Returns a per-app map of advisory state
 	 * (`none` | `advisory-available` | `pinned-to-vulnerable`), the matching
-	 * advisories, and the recommended safe version. Never changes a version.
+	 * advisories, and the recommended safe version. Never changes a version
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array{advisories: array<string, mixed>}, array{}>|DataResponse<Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: Advisory correlation returned
+	 * 403: Caller is not an administrator
 	 *
 	 * @spec openspec/specs/security-advisory-correlation/spec.md
 	 */
@@ -116,7 +130,12 @@ class ApiController extends OCSController {
 	}
 
 	/**
-	 * Returns the server update channel so versions can be filtered; see "Respect update channel".
+	 * Returns the server update channel so versions can be filtered; see "Respect update channel"
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array{updateChannel: string}, array{}>|DataResponse<Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: Update channel returned
+	 * 403: Caller is not an administrator
 	 *
 	 * @spec openspec/specs/version-management/spec.md
 	 */
@@ -132,7 +151,12 @@ class ApiController extends OCSController {
 	}
 
 	/**
-	 * Lists registered sources and trusted-source globs; see "Source management API".
+	 * Lists registered sources and trusted-source globs; see "Source management API"
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array{sources: list<array<string, mixed>>, trustedPatterns: list<string>}, array{}>|DataResponse<Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: Sources and trusted patterns returned
+	 * 403: Caller is not an administrator
 	 *
 	 * @spec openspec/specs/external-sources/spec.md
 	 */
@@ -151,7 +175,14 @@ class ApiController extends OCSController {
 	/**
 	 * Returns the active source binding for an app, including any recorded
 	 * SHA-256 digests (not secrets); see "Source binding" and "Recorded
-	 * digests are binding-scoped and surfaced".
+	 * digests are binding-scoped and surfaced"
+	 *
+	 * @param string $appId The app to read the binding for
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array{appId: string, binding: array<string, mixed>|null, sourceId: string}, array{}>|DataResponse<Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: Binding returned; `binding` is null when the app has none
+	 * 403: Caller is not an administrator
 	 *
 	 * @spec openspec/specs/external-sources/spec.md
 	 */
@@ -171,7 +202,15 @@ class ApiController extends OCSController {
 	}
 
 	/**
-	 * Binds a source to an app after allowlist validation; see "Source management API".
+	 * Binds a source to an app after allowlist validation; see "Source management API"
+	 *
+	 * @param string $appId The app to bind a source to
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array{appId: string, sourceId: string, binding: array<string, mixed>}, array{}>|DataResponse<Http::STATUS_BAD_REQUEST|Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: Source bound; the persisted binding is returned
+	 * 400: The requested source kind or its arguments are invalid
+	 * 403: Caller is not an administrator, or the source is not allowlisted
 	 *
 	 * @spec openspec/specs/external-sources/spec.md
 	 */
@@ -233,20 +272,31 @@ class ApiController extends OCSController {
 	 * plain ISettings — adopting it would also opt this endpoint into admin
 	 * delegation semantics, a product change to make deliberately.
 	 *
+	 * @param string|null $repo Restrict the pattern to a single repository; omit or leave blank to trust the whole owner
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array{trustedPatterns: list<string>}, array{}>|DataResponse<Http::STATUS_FORBIDDEN|Http::STATUS_UNPROCESSABLE_ENTITY, array{message: string}, array{}>
+	 *
+	 * 200: The full trusted-pattern list after the addition
+	 * 403: Caller is not an administrator
+	 * 422: The pattern is not forge-qualified or is otherwise unacceptable
+	 *
 	 * @spec openspec/specs/external-sources/spec.md
 	 */
 	#[PasswordConfirmationRequired(strict: false)]
 	#[ApiRoute(verb: 'POST', url: '/api/trusted-sources')]
-	public function addTrustedSource(): DataResponse {
+	public function addTrustedSource(?string $repo = null): DataResponse {
 		if (!$this->isAdmin()) {
 			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
 		}
 
 		$forge = $this->stringParam('forge', '');
 		$owner = $this->stringParam('owner', '');
-		/** @var mixed $repoRaw */
-		$repoRaw = $this->request->getParam('repo');
-		$repo = is_string($repoRaw) && trim($repoRaw) !== '' ? trim($repoRaw) : null;
+		// Declared as a method parameter rather than read via getParam(): the
+		// two resolve from the same merged request parameters, but only a
+		// declared parameter can carry a type and a description into the
+		// generated OpenAPI spec. The null-vs-empty distinction below is
+		// unchanged — an omitted `repo` and a blank one both mean "no repo".
+		$repo = ($repo !== null && trim($repo) !== '') ? trim($repo) : null;
 
 		try {
 			$patterns = $this->installerService->addTrustedPattern($forge, $owner, $repo);
@@ -262,6 +312,12 @@ class ApiController extends OCSController {
 	 * query parameter (not a path segment) because patterns contain `/`, and
 	 * Apache rejects encoded slashes in the path (`AllowEncodedSlashes Off`) with
 	 * a 404 before the request reaches Nextcloud; query strings carry `%2F` fine.
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array{trustedPatterns: list<string>}, array{}>|DataResponse<Http::STATUS_BAD_REQUEST|Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: The full trusted-pattern list after the removal
+	 * 400: No `pattern` query parameter was supplied
+	 * 403: Caller is not an administrator
 	 *
 	 * @spec openspec/specs/external-sources/spec.md
 	 */
@@ -284,25 +340,44 @@ class ApiController extends OCSController {
 
 	/**
 	 * Fetches available versions from the bound (or overridden) source; see "Fetch Available Versions"
-	 * and "Version listings carry release notes".
+	 * and "Version listings carry release notes"
+	 *
+	 * @param string $appId The app to list versions for
+	 * @param string|null $source Override the bound source for this lookup only; omit to use the app's binding
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>|DataResponse<Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: Version listing from the bound source. The status is whatever the
+	 *      source reported, mapped through toHttpStatus()
+	 * 403: Caller is not an administrator
+	 *
+	 * The @return above is the DOCUMENTED contract — the two outcomes a caller
+	 * designs against. The runtime status is a passthrough: toHttpStatus()
+	 * returns any code on its whitelist, so psalm widens the inferred type to
+	 * all ~60 of them and cannot reconcile it with 200|403. Widening the
+	 * annotation to match would make the generated OpenAPI spec describe sixty
+	 * responses and document nothing, so the mismatch is suppressed here, at
+	 * the one method where it is true, rather than the annotation being made
+	 * useless.
+	 *
+	 * @psalm-suppress InvalidReturnType
 	 *
 	 * @spec openspec/specs/version-management/spec.md
 	 * @spec openspec/specs/changelog-visibility/spec.md
 	 */
 	#[ApiRoute(verb: 'GET', url: '/api/app/{appId}/versions')]
-	public function appVersions(string $appId): DataResponse {
+	public function appVersions(string $appId, ?string $source = null): DataResponse {
 		if (!$this->isAdmin()) {
 			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
 		}
 
-		/** @var mixed $source */
-		$source = $this->request->getParam('source');
-		$sourceOverride = is_string($source) && trim($source) !== '' ? trim($source) : null;
+		$sourceOverride = ($source !== null && trim($source) !== '') ? trim($source) : null;
 
 		$result = $this->installerService->getAppVersions($appId, $sourceOverride);
 		$statusCode = $result['statusCode'] ?? Http::STATUS_OK;
 		unset($result['statusCode'], $result['hasError']);
 
+		/** @psalm-suppress InvalidReturnStatement Dynamic status passthrough — see the docblock. */
 		return new DataResponse($result, $this->toHttpStatus($statusCode, Http::STATUS_OK));
 	}
 
@@ -321,6 +396,28 @@ class ApiController extends OCSController {
 	 * still implies a dry run (deprecated back-compat) and the response
 	 * carries a `deprecationNotice`.
 	 *
+	 * @param string $appId The app to install a version of
+	 * @param string $version The target version, overridable by a `targetVersion` or `version` body parameter
+	 * @param string|null $source Override the bound source for this install only
+	 * @param string $debug `1` to include debug output; on its own it still implies a dry run (deprecated)
+	 * @param string|null $dryRun `1` to simulate, `0` to install for real. OMITTED is distinct from `0`: only when omitted does `debug=1` still imply a dry run
+	 * @param string $pin `1` to pin the app to this version after installing
+	 * @param string $acceptNewSha `1` to accept a changed SHA-256 once and replace the recorded digest
+	 * @param string $allowDowngrade `1` to permit installing a version older than the installed one
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>|DataResponse<Http::STATUS_FORBIDDEN|Http::STATUS_INTERNAL_SERVER_ERROR, array<string, mixed>, array{}>
+	 *
+	 * 200: The installer's own payload. The status is whatever the installer
+	 *      reported, mapped through toHttpStatus() — a refused downgrade is a
+	 *      409 and a SHA-256 mismatch a 4xx, both carried in that payload
+	 * 403: Caller is not an administrator
+	 * 500: The installer reported no usable status code
+	 *
+	 * As with appVersions(), the @return above is the documented contract; the
+	 * runtime status is a toHttpStatus() passthrough psalm cannot narrow.
+	 *
+	 * @psalm-suppress InvalidReturnType
+	 *
 	 * @spec openspec/specs/version-management/spec.md
 	 * @spec openspec/specs/version-pinning/spec.md
 	 * @spec openspec/specs/external-sources/spec.md
@@ -329,7 +426,16 @@ class ApiController extends OCSController {
 	 */
 	#[PasswordConfirmationRequired(strict: false)]
 	#[ApiRoute(verb: 'POST', url: '/api/app/{appId}/versions/{version}/install')]
-	public function installVersion(string $appId, string $version): DataResponse {
+	public function installVersion(
+		string $appId,
+		string $version,
+		?string $source = null,
+		string $debug = '0',
+		?string $dryRun = null,
+		string $pin = '0',
+		string $acceptNewSha = '0',
+		string $allowDowngrade = '0',
+	): DataResponse {
 		if (!$this->isAdmin()) {
 			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
 		}
@@ -342,27 +448,27 @@ class ApiController extends OCSController {
 			$requestedVersion = $version;
 		}
 
-		/** @var mixed $source */
-		$source = $this->request->getParam('source');
-		$sourceOverride = is_string($source) && trim($source) !== '' ? trim($source) : null;
+		$sourceOverride = ($source !== null && trim($source) !== '') ? trim($source) : null;
 
-		$includeDebug = $this->readBinaryBool($this->request->getParam('debug', '0'), false);
+		$includeDebug = $this->readBinaryBool($debug, false);
 
 		// `dryRun` is independent of `debug` — see MODIFIED "Debug Mode".
-		// `getParam()` without a default returns null when the caller omitted
-		// the parameter entirely, which is how we distinguish "not supplied"
-		// (legacy `debug`-implies-dry-run fallback still applies) from an
-		// explicit `dryRun=0` (a real install regardless of `debug`).
-		/** @var mixed $dryRunParam */
-		$dryRunParam = $this->request->getParam('dryRun');
-		$dryRunSupplied = $dryRunParam !== null;
-		$dryRun = $dryRunSupplied ? $this->readBinaryBool($dryRunParam, false) : null;
+		// THE NULL DEFAULT IS LOAD-BEARING. A `?string` defaulting to null is
+		// still null when the caller omitted the parameter entirely, which is
+		// how we distinguish "not supplied" (legacy `debug`-implies-dry-run
+		// fallback still applies) from an explicit `dryRun=0` (a real install
+		// regardless of `debug`). This is exactly what `getParam('dryRun')`
+		// with no default used to give us; declaring it as a typed parameter
+		// changes the spelling, not the semantics. Give it a '0' default and
+		// the legacy fallback silently dies.
+		$dryRunSupplied = $dryRun !== null;
+		$dryRunFlag = $dryRunSupplied ? $this->readBinaryBool($dryRun, false) : null;
 
 		$overridePinRaw = $this->stringParam('overridePin', '');
 		$overridePin = $overridePinRaw === '' ? null : $overridePinRaw;
-		$pinRequested = $this->readBinaryBool($this->request->getParam('pin', '0'), false);
-		$acceptNewSha = $this->readBinaryBool($this->request->getParam('acceptNewSha', '0'), false);
-		$allowDowngrade = $this->readBinaryBool($this->request->getParam('allowDowngrade', '0'), false);
+		$pinRequested = $this->readBinaryBool($pin, false);
+		$acceptNewShaFlag = $this->readBinaryBool($acceptNewSha, false);
+		$allowDowngradeFlag = $this->readBinaryBool($allowDowngrade, false);
 
 		$result = $this->installerService->installAppVersion(
 			$appId,
@@ -371,9 +477,9 @@ class ApiController extends OCSController {
 			$sourceOverride,
 			$overridePin,
 			$pinRequested,
-			$acceptNewSha,
-			$allowDowngrade,
-			$dryRun,
+			$acceptNewShaFlag,
+			$allowDowngradeFlag,
+			$dryRunFlag,
 		);
 		$result['payload']['requestedVersion'] = $requestedVersion;
 		$result['payload']['routeVersion'] = $version;
@@ -383,6 +489,7 @@ class ApiController extends OCSController {
 			$result['payload']['deprecationNotice'] = 'debug=1 implying a dry run is deprecated; pass dryRun=1 explicitly instead.';
 		}
 
+		/** @psalm-suppress InvalidReturnStatement Dynamic status passthrough — see the docblock. */
 		return new DataResponse(
 			$result['payload'] ?? [],
 			$this->toHttpStatus($result['statusCode'] ?? Http::STATUS_INTERNAL_SERVER_ERROR, Http::STATUS_INTERNAL_SERVER_ERROR)
@@ -391,7 +498,12 @@ class ApiController extends OCSController {
 
 	/**
 	 * Lists all pins joined with the live installed version and current
-	 * drift status; see "Honest pin presentation".
+	 * drift status; see "Honest pin presentation"
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array{pins: list<array<string, mixed>>}, array{}>|DataResponse<Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: Pins returned, each joined with its live installed version
+	 * 403: Caller is not an administrator
 	 *
 	 * @spec openspec/specs/version-pinning/spec.md
 	 */
@@ -422,7 +534,15 @@ class ApiController extends OCSController {
 	/**
 	 * Pins an app to its currently installed version (password-confirmed);
 	 * rejects a `version` other than the installed one; see "Pin an
-	 * installed app to its current version".
+	 * installed app to its current version"
+	 *
+	 * @param string $appId The app to pin
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array{appId: string, pin: array<string, mixed>}, array{}>|DataResponse<Http::STATUS_BAD_REQUEST|Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: The stored pin
+	 * 400: The app is not installed, or a `version` other than the installed one was supplied
+	 * 403: Caller is not an administrator
 	 *
 	 * @spec openspec/specs/version-pinning/spec.md
 	 */
@@ -478,7 +598,14 @@ class ApiController extends OCSController {
 
 	/**
 	 * Removes an app's pin (password-confirmed); the installed version is
-	 * unaffected; see "Unpin".
+	 * unaffected; see "Unpin"
+	 *
+	 * @param string $appId The app to unpin
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array{appId: string, unpinned: bool}, array{}>|DataResponse<Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: The pin was removed, or there was none to remove
+	 * 403: Caller is not an administrator
 	 *
 	 * @spec openspec/specs/version-pinning/spec.md
 	 */
@@ -502,7 +629,12 @@ class ApiController extends OCSController {
 	/**
 	 * Lists every persisted per-app auto-update policy plus the global
 	 * kill switch / window; see "Per-app update policy" and "Global kill
-	 * switch and window".
+	 * switch and window"
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>|DataResponse<Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: Per-app policies plus the global kill switch and window
+	 * 403: Caller is not an administrator
 	 *
 	 * @spec openspec/specs/auto-update-policies/spec.md
 	 */
@@ -526,7 +658,15 @@ class ApiController extends OCSController {
 
 	/**
 	 * Sets an app's auto-update policy level (password-confirmed); rejects an
-	 * unknown level with 400; see "Per-app update policy".
+	 * unknown level with 400; see "Per-app update policy"
+	 *
+	 * @param string $appId The app to set a policy for
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array{appId: string, policy: array<string, mixed>}, array{}>|DataResponse<Http::STATUS_BAD_REQUEST|Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: The stored policy
+	 * 400: The requested policy level is not recognised
+	 * 403: Caller is not an administrator
 	 *
 	 * @spec openspec/specs/auto-update-policies/spec.md
 	 */
@@ -562,7 +702,14 @@ class ApiController extends OCSController {
 
 	/**
 	 * Clears an app's auto-update policy (password-confirmed); a no-op when
-	 * none exists; see "Per-app update policy".
+	 * none exists; see "Per-app update policy"
+	 *
+	 * @param string $appId The app to clear the policy for
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array{appId: string, cleared: bool}, array{}>|DataResponse<Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: The policy was cleared, or there was none to clear
+	 * 403: Caller is not an administrator
 	 *
 	 * @spec openspec/specs/auto-update-policies/spec.md
 	 */
@@ -581,19 +728,38 @@ class ApiController extends OCSController {
 	/**
 	 * Updates the global auto-update kill switch and/or maintenance window
 	 * (password-confirmed); rejects a malformed window with 400; see "Global
-	 * kill switch and window".
+	 * kill switch and window"
+	 *
+	 * @param string|null $enabled `1`/`0` to set the global kill switch; OMIT to leave it untouched
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>|DataResponse<Http::STATUS_BAD_REQUEST|Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: The stored global settings
+	 * 400: The maintenance window is malformed
+	 * 403: Caller is not an administrator
 	 *
 	 * @spec openspec/specs/auto-update-policies/spec.md
 	 */
 	#[PasswordConfirmationRequired(strict: false)]
 	#[ApiRoute(verb: 'PUT', url: '/api/auto-update/settings')]
-	public function updateAutoUpdateSettings(): DataResponse {
+	public function updateAutoUpdateSettings(?string $enabled = null): DataResponse {
 		if (!$this->isAdmin()) {
 			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
 		}
 
-		/** @var mixed $enabledParam */
-		$enabledParam = $this->request->getParam('enabled');
+		// The null default is load-bearing, as it was with getParam() and no
+		// default: an omitted `enabled` must leave the kill switch untouched,
+		// which is a different thing from `enabled=0` turning it off.
+		//
+		// AN EMPTY STRING IS AN EXPLICIT FALSE, not "unspecified". A declared
+		// string parameter means Nextcloud casts what arrives, and PHP casts a
+		// JSON `false` to "" rather than "0". readBinaryBool() answers an
+		// unrecognised string with its default — the CURRENT stored value — so
+		// without this normalisation, switching the kill switch off returned
+		// 200 and changed nothing. The caller now sends '1'/'0', and this is
+		// the belt to that braces: any client that sends a bare `false` still
+		// gets the behaviour it asked for.
+		$enabledParam = ($enabled === '') ? '0' : $enabled;
 		$windowParam = $this->stringParam('window', '');
 
 		if ($windowParam !== '' && !AutoUpdateWindow::isValid($windowParam)) {
@@ -619,7 +785,12 @@ class ApiController extends OCSController {
 	/**
 	 * Lists PATs visible to the current admin, redacted, with derived
 	 * `expiryState`/`daysRemaining`; see "PAT management API" and
-	 * "Expiry state in the PAT API and UI".
+	 * "Expiry state in the PAT API and UI"
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array{pats: list<array<string, mixed>>}, array{}>|DataResponse<Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: Redacted PATs with derived expiryState and daysRemaining
+	 * 403: Caller is not an administrator
 	 *
 	 * @spec openspec/specs/pat-management/spec.md
 	 */
@@ -660,7 +831,13 @@ class ApiController extends OCSController {
 	}
 
 	/**
-	 * Validates and creates an encrypted PAT; see "PAT validation on upload" and "PAT storage".
+	 * Validates and creates an encrypted PAT; see "PAT validation on upload" and "PAT storage"
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array{pat: array<string, mixed>, warnings: list<string>}, array{}>|DataResponse<Http::STATUS_BAD_REQUEST|Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: The redacted stored PAT plus any non-fatal validation warnings
+	 * 400: The token failed validation against its forge
+	 * 403: Caller is not an administrator
 	 *
 	 * @spec openspec/specs/pat-management/spec.md
 	 */
@@ -713,13 +890,23 @@ class ApiController extends OCSController {
 	}
 
 	/**
-	 * Updates a PAT's label / share flag, owner-only; see "PAT management API" and "PAT storage".
+	 * Updates a PAT's label / share flag, owner-only; see "PAT management API" and "PAT storage"
+	 *
+	 * @param int $id The PAT to update
+	 * @param string|null $label New label; omit to leave it unchanged
+	 * @param string|null $sharedWithAdmins `1`/`0` to change admin sharing; omit to leave it unchanged
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array{pat: array<string, mixed>}, array{}>|DataResponse<Http::STATUS_FORBIDDEN|Http::STATUS_NOT_FOUND, array{message: string}, array{}>
+	 *
+	 * 200: The updated, redacted PAT
+	 * 403: Caller is not an administrator, or is not the PAT's owner
+	 * 404: No PAT with that id
 	 *
 	 * @spec openspec/specs/pat-management/spec.md
 	 */
 	#[PasswordConfirmationRequired(strict: false)]
 	#[ApiRoute(verb: 'PATCH', url: '/api/pats/{id}')]
-	public function patchPat(int $id): DataResponse {
+	public function patchPat(int $id, ?string $label = null, ?string $sharedWithAdmins = null): DataResponse {
 		if (!$this->isAdmin()) {
 			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
 		}
@@ -739,24 +926,31 @@ class ApiController extends OCSController {
 			return new DataResponse(['message' => 'Only the PAT owner can update it.'], Http::STATUS_FORBIDDEN);
 		}
 
-		/** @var mixed $label */
-		$label = $this->request->getParam('label');
-		/** @var mixed $shared */
-		$shared = $this->request->getParam('sharedWithAdmins');
-		if (is_string($label) && trim($label) !== '') {
+		// Both are nullable so an omitted field leaves that attribute alone —
+		// this endpoint is a PATCH, not a replace. Declaring `sharedWithAdmins`
+		// as ?string rather than reading it raw drops the former is_bool()
+		// branch: Nextcloud coerces a JSON `true` to "1" on the way in, and
+		// readBinaryBool() reads "1" as true, so the outcome is unchanged.
+		if ($label !== null && trim($label) !== '') {
 			$pat->setLabel(trim($label));
 		}
-		if (is_bool($shared)) {
-			$pat->setSharedWithAdmins($shared);
-		} elseif (is_string($shared)) {
-			$pat->setSharedWithAdmins($this->readBinaryBool($shared, $pat->getSharedWithAdmins()));
+		if ($sharedWithAdmins !== null) {
+			$pat->setSharedWithAdmins($this->readBinaryBool($sharedWithAdmins, $pat->getSharedWithAdmins()));
 		}
 
 		return new DataResponse(['pat' => $this->serializePat($this->patManager->update($pat))]);
 	}
 
 	/**
-	 * Deletes a PAT, restricted to its owner; see "PAT management API" ("Delete restricted to owner").
+	 * Deletes a PAT, restricted to its owner; see "PAT management API" ("Delete restricted to owner")
+	 *
+	 * @param int $id The PAT to delete
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array{deleted: int}, array{}>|DataResponse<Http::STATUS_FORBIDDEN|Http::STATUS_NOT_FOUND, array{message: string}, array{}>
+	 *
+	 * 200: The PAT was deleted
+	 * 403: Caller is not an administrator, or is not the PAT's owner
+	 * 404: No PAT with that id
 	 *
 	 * @spec openspec/specs/pat-management/spec.md
 	 */
@@ -788,12 +982,20 @@ class ApiController extends OCSController {
 	}
 
 	/**
-	 * Multi-source app search with query-length + filter handling; see "Discovery API".
+	 * Multi-source app search with query-length + filter handling; see "Discovery API"
+	 *
+	 * @param string $installedOnly `1` to restrict results to apps already installed on this server
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>|DataResponse<Http::STATUS_BAD_REQUEST|Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: Aggregated results across the enabled discovery sources
+	 * 400: The query is too short, or a filter is not recognised
+	 * 403: Caller is not an administrator
 	 *
 	 * @spec openspec/specs/app-discovery/spec.md
 	 */
 	#[ApiRoute(verb: 'GET', url: '/api/discover')]
-	public function discover(): DataResponse {
+	public function discover(string $installedOnly = '0'): DataResponse {
 		if (!$this->isAdmin()) {
 			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
 		}
@@ -818,15 +1020,23 @@ class ApiController extends OCSController {
 			$sourceIds = array_values(array_filter(array_map('trim', explode(',', $sourcesParam))));
 		}
 
-		$installedOnly = $this->readBinaryBool($this->request->getParam('installedOnly', '0'), false);
+		// The PARAMETER NAME is the wire contract — it must stay `installedOnly`,
+		// which is what the frontend sends; only the local flag is renamed.
+		$installedOnlyFlag = $this->readBinaryBool($installedOnly, false);
 
-		$result = $this->discoveryAggregator->search($query, $sourceIds, $installedOnly);
+		$result = $this->discoveryAggregator->search($query, $sourceIds, $installedOnlyFlag);
 
 		return new DataResponse($result);
 	}
 
 	/**
-	 * Returns a prefilled GitHub PAT-creation deeplink; see "PAT management API" (deeplink scenarios).
+	 * Returns a prefilled GitHub PAT-creation deeplink; see "PAT management API" (deeplink scenarios)
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>|DataResponse<Http::STATUS_BAD_REQUEST|Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: The prefilled deeplink for the requested token kind
+	 * 400: The requested token kind is not recognised
+	 * 403: Caller is not an administrator
 	 *
 	 * @spec openspec/specs/pat-management/spec.md
 	 */
@@ -855,6 +1065,11 @@ class ApiController extends OCSController {
 	 * No mutation endpoint exists for this resource — the retention prune job
 	 * is the only deletion path.
 	 *
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>|DataResponse<Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: A page of audit entries, newest first
+	 * 403: Caller is not an administrator
+	 *
 	 * @spec openspec/specs/audit-trail/spec.md
 	 */
 	#[ApiRoute(verb: 'GET', url: '/api/audit')]
@@ -879,7 +1094,12 @@ class ApiController extends OCSController {
 
 	/**
 	 * Cache summary: per-app cached versions + size, and the total cache size,
-	 * admin-only; see "Cache visibility and management".
+	 * admin-only; see "Cache visibility and management"
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>|DataResponse<Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: Per-app cached versions with sizes, plus the total cache size
+	 * 403: Caller is not an administrator
 	 *
 	 * @spec openspec/specs/artifact-cache/spec.md
 	 */
@@ -895,7 +1115,12 @@ class ApiController extends OCSController {
 	/**
 	 * Clears cached release artifacts — all apps, or a single app when
 	 * `appId` is supplied — password-confirmed; see "Cache visibility and
-	 * management" ("Clear cache").
+	 * management" ("Clear cache")
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array<string, mixed>, array{}>|DataResponse<Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: The cache summary as it stands after the clear
+	 * 403: Caller is not an administrator
 	 *
 	 * @spec openspec/specs/artifact-cache/spec.md
 	 */
