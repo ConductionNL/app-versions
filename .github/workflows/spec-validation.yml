@@ -32,7 +32,10 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # 20 shipped npm 10, which cannot read the npm-11 lockfile this repo
+          # now commits — it reports `Missing: picomatch@4.0.5 from lock file`
+          # for a package that IS in the lock. Matches package.json engines.
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies

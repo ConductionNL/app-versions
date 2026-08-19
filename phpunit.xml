@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    AT THE REPOSITORY ROOT, not under tests/, and that location is load-bearing.
+
+    The shared quality workflow looks for `phpunit.xml` or `phpunit-unit.xml`
+    at the app root and hard-fails when neither exists:
+
+      ::error::PHPUnit is enabled but no phpunit.xml or phpunit-unit.xml found.
+
+    There is no input to point it somewhere else. app-versions kept its config
+    at tests/phpunit.xml — the only app in the fleet that did — so all six
+    PHPUnit legs failed at "Validate test infrastructure" without running a
+    single test. Every other app already has this file here.
+
+    Paths below are therefore relative to the ROOT, not to tests/.
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         bootstrap="tests/bootstrap.php"
+         timeoutForSmallTests="900"
+         timeoutForMediumTests="900"
+         timeoutForLargeTests="900"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.4/phpunit.xsd"
+         cacheDirectory=".phpunit.cache">
+	<testsuite name="App Versions Tests">
+		<directory suffix="Test.php">tests</directory>
+	</testsuite>
+	<source>
+		<include>
+			<directory suffix=".php">appinfo</directory>
+			<directory suffix=".php">lib</directory>
+		</include>
+	</source>
+</phpunit>

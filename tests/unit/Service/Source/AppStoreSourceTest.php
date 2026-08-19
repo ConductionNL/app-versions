@@ -232,9 +232,19 @@ final class AppStoreSourceTest extends TestCase {
 		// is having an outage — here a 200 with an empty body, the exact episode
 		// observed against garm3. The listing must serve the stale copy rather
 		// than blank out; a flaky upstream is why the cache exists.
-		$body = json_encode([
-			'data' => [['id' => 'openregister', 'releases' => [['version' => '2.3.0']]]],
-		], JSON_THROW_ON_ERROR);
+		//
+		// THE CACHED SHAPE IS THE EXTRACTED APP PAYLOAD, NOT THE API ENVELOPE.
+		// `fetchAppPayload()` caches whatever `extractAppPayload()` returned —
+		// the inner `{id, releases}` object — so seeding the outer
+		// `{"data": [...]}` envelope here fixtured a shape this app never
+		// writes. `readCachedPayload()` handed the envelope straight back, the
+		// version mapping found no `releases` at the top level, and the
+		// assertion read null. The stale-if-error path in the code is correct;
+		// the fixture was describing a different cache.
+		$body = json_encode(
+			['id' => 'openregister', 'releases' => [['version' => '2.3.0']]],
+			JSON_THROW_ON_ERROR,
+		);
 
 		$response = $this->createMock(IResponse::class);
 		$response->method('getStatusCode')->willReturn(200);

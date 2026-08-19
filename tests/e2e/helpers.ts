@@ -16,9 +16,25 @@ export type TabName =
 	| 'Discover'
 	| 'Artifact cache'
 
-/** Opens the admin settings page and waits for the app shell to be interactive. */
+/**
+ * Opens the admin settings page and waits for the app shell to be interactive.
+ *
+ * `waitUntil: 'domcontentloaded'` is load-bearing. The default is `'load'`,
+ * which waits for every sub-resource — and a Nextcloud settings page keeps
+ * requests in flight, so `load` does not fire. The navigation then sat until
+ * the 60s test timeout killed it, and Playwright reported the kill as
+ *
+ *   page.goto: net::ERR_ABORTED; maybe frame was detached?
+ *
+ * which reads like the PAGE broke. It did not: nothing was ever waiting for
+ * the page, only for an event the platform does not emit (the same defect
+ * ADR-074 rule 4 names for `networkidle`).
+ *
+ * Nothing is lost by not waiting for `load`: the two assertions below are the
+ * real readiness signal, and they are what the callers actually depend on.
+ */
 export async function openSettings(page: Page): Promise<void> {
-	await page.goto(SETTINGS_URL)
+	await page.goto(SETTINGS_URL, { waitUntil: 'domcontentloaded' })
 	await expect(page.getByRole('heading', { name: 'App Versions', level: 2 })).toBeVisible()
 	await expect(page.getByRole('tablist', { name: 'App Versions sections' })).toBeVisible()
 }
