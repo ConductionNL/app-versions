@@ -40,7 +40,7 @@ test.describe('version listing and release notes', () => {
 
 		await page.getByRole('checkbox', { name: /Safe mode/ }).uncheck()
 		await expect
-			.poll(async () => page.getByTestId('changelog-toggle').count(), { timeout: 240_000 })
+			.poll(async () => page.getByTestId('changelog-toggle').count(), { timeout: 45_000 })
 			.toBeGreaterThan(before)
 
 		// Restore the safer default for subsequent specs.
@@ -53,7 +53,7 @@ test.describe('version listing and release notes', () => {
 		await versionsLoaded(page)
 		// Older releases are only listed with safe mode off.
 		await page.getByRole('checkbox', { name: /Safe mode/ }).uncheck()
-		await expect(page.getByTestId('changelog-toggle').first()).toBeVisible({ timeout: 240_000 })
+		await expect(page.getByTestId('changelog-toggle').first()).toBeVisible({ timeout: 45_000 })
 
 		const toggle = page.getByTestId('changelog-toggle').first()
 		await toggle.click()
