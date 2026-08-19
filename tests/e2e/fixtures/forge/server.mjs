@@ -20,6 +20,58 @@ const PORT = Number(process.env.PORT || 9099)
 // Advertised base the app downloads from — must match how the app reaches us.
 const PUBLIC_BASE = process.env.PUBLIC_BASE || `http://forge-fixture:${PORT}`
 
+// The App Store catalogue this fixture serves in place of garm3.nextcloud.com.
+//
+// Every id here is an app the CI instance ACTUALLY HAS INSTALLED, which is the
+// whole point: the specs assert that a discovery hit reports its
+// installedVersion, and only the server can supply that. Inventing ids would
+// make those assertions pass while proving nothing.
+//
+// `notes` carries several releases because versions.spec walks the list,
+// selects an older release and asserts the downgrade guard refuses it.
+const APPSTORE_CATALOG = [
+	{
+		id: 'notes',
+		name: { en: 'Notes' },
+		summary: { en: 'Take notes, sync them with your devices' },
+		website: 'https://github.com/nextcloud/notes',
+		releases: [
+			{ version: '4.13.0', isNightly: false },
+			{ version: '4.12.0', isNightly: false },
+			{ version: '4.11.0', isNightly: false },
+			{ version: '4.10.1', isNightly: false },
+		],
+	},
+	{
+		id: 'calendar',
+		name: { en: 'Calendar' },
+		summary: { en: 'A calendar app for Nextcloud' },
+		website: 'https://github.com/nextcloud/calendar',
+		releases: [{ version: '5.4.0', isNightly: false }, { version: '5.3.0', isNightly: false }],
+	},
+	{
+		id: 'notifications',
+		name: { en: 'Notifications' },
+		summary: { en: 'Central notifications for Nextcloud' },
+		website: 'https://github.com/nextcloud/notifications',
+		releases: [{ version: '4.2.0', isNightly: false }, { version: '4.1.0', isNightly: false }],
+	},
+	{
+		id: 'dashboard',
+		name: { en: 'Dashboard' },
+		summary: { en: 'A dashboard for Nextcloud' },
+		website: 'https://github.com/nextcloud/dashboard',
+		releases: [{ version: '7.12.0', isNightly: false }],
+	},
+	{
+		id: 'files',
+		name: { en: 'Files' },
+		summary: { en: 'File management for Nextcloud' },
+		website: 'https://github.com/nextcloud/server',
+		releases: [{ version: '2.4.0', isNightly: false }],
+	},
+]
+
 // The default release set for fixtureowner/fixtureapp. `asset` is the artifact
 // filename served for that tag; `sha` toggles whether a .sha256 sibling is
 // advertised.
@@ -165,6 +217,31 @@ const server = createServer(async (req, res) => {
 			} catch {
 				res.writeHead(404); return res.end('artifact not found')
 			}
+		}
+
+		// ── App Store double ─────────────────────────────────────────────────
+		//
+		// The real catalogue is ~12.4 MB from garm3.nextcloud.com, and reaching
+		// it from a CI runner is what left the discovery and version-listing
+		// specs timing out at 20s while every other endpoint answered in 60ms.
+		// A forge double already removes that dependency for forge sources;
+		// this does the same for the App Store, so the suite stops asserting on
+		// somebody else's uptime.
+		//
+		// The entries are REAL app ids that the CI instance actually has
+		// installed — files, dashboard, notifications, notes — because the
+		// specs assert that a hit reports its installedVersion, which only the
+		// server can supply. Inventing ids would make every such assertion
+		// vacuous.
+		if (path === '/appstore/api/v1/apps.json' || path.endsWith('/apps.json')) {
+			const filter = url.searchParams.get('filter')
+			const page = Number(url.searchParams.get('page') || 1)
+			// AppStoreSource pages until told otherwise; everything fits on one.
+			if (page > 1) return json(res, 200, { data: [], pages: { next: false } })
+			const catalog = filter
+				? APPSTORE_CATALOG.filter((a) => a.id === filter)
+				: APPSTORE_CATALOG
+			return json(res, 200, { data: catalog, pages: { next: false } })
 		}
 
 		if (path === '/health') return json(res, 200, { ok: true })

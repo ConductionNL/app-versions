@@ -143,6 +143,9 @@ test.describe('forge installs (fixture-backed)', () => {
 		await expect(page.getByText('Selected app')).toBeVisible()
 		// The picker (safe mode off to see all versions) marks cached versions.
 		await page.getByRole('checkbox', { name: /Safe mode/ }).uncheck().catch(() => undefined)
-		await expect(page.getByTestId('cached-offline-badge').first()).toBeVisible({ timeout: 60_000 })
+		// 45s, not 60s: a wait equal to the test bound leaves no room for the
+		// steps around it, so it expires as an unexplained test timeout rather
+		// than as this assertion failing.
+		await expect(page.getByTestId('cached-offline-badge').first()).toBeVisible({ timeout: 45_000 })
 	})
 })

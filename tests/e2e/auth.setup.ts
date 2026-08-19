@@ -69,9 +69,13 @@ setup('authenticate as admin', async ({ page }) => {
 		'/ocs/v2.php/apps/app_versions/api/app/notes/versions?format=json',
 		'/ocs/v2.php/apps/app_versions/api/discover?q=calendar&format=json',
 	]) {
+		// 45s, not 240s: the setup project inherits the 60s test bound, so a
+		// longer request timeout could never elapse — it would abort the whole
+		// setup with a timeout naming nothing. The warm-up now hits the local
+		// fixture catalogue rather than the ~12.4 MB store, so this is generous.
 		await page.request.get(url, {
 			headers: { 'OCS-APIRequest': 'true' },
-			timeout: 240_000,
+			timeout: 45_000,
 		}).catch(() => undefined)
 	}
 })
