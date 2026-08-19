@@ -90,7 +90,20 @@ jobs:
       # i.e. the app card was simply not in the list, because Notes is another
       # separate repo absent from a server git checkout. It has no stableXX
       # branches, so `main` is the only ref there is.
-      additional-apps: '[{"repo":"nextcloud/notifications","app":"notifications","ref":"stable34"},{"repo":"nextcloud/notes","app":"notes","ref":"main"}]'
+      # `notes` was here and is deliberately gone. It is a separate repo whose
+      # info.xml declares min-version="33", while this matrix includes
+      # stable32 — so on two of the six PHPUnit cells it could never enable:
+      #   App "Notes" cannot be installed because it is not compatible with
+      #   this version of the server.
+      # That looked harmless only because a failed enable is currently a
+      # ::warning:: and the job carries on; ConductionNL/.github#355 makes it
+      # fail, which is correct — a suite running without the app it was told to
+      # install reports the absence as this repository's own failures.
+      #
+      # It was added so versions.spec had an installed App Store app to walk.
+      # `dashboard` serves that purpose with no compatibility floor at all,
+      # because Nextcloud bundles it — see the note at the top of that spec.
+      additional-apps: '[{"repo":"nextcloud/notifications","app":"notifications","ref":"stable34"}]'
 
       enable-sbom: true
 

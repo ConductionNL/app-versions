@@ -61,7 +61,18 @@ const APPSTORE_CATALOG = [
 		name: { en: 'Dashboard' },
 		summary: { en: 'A dashboard for Nextcloud' },
 		website: 'https://github.com/nextcloud/dashboard',
-		releases: [{ version: '7.12.0', isNightly: false }],
+		// Deliberately BELOW whatever Nextcloud bundles, on every server version
+		// in the matrix. versions.spec asserts that safe mode hides every
+		// candidate (all downgrades) and that switching it off reveals them, so
+		// these must be unambiguously older than the installed build rather than
+		// merely older than one particular release. 1.x is never a real
+		// dashboard version, which is the point — no server ships it.
+		releases: [
+			{ version: '1.3.0', isNightly: false },
+			{ version: '1.2.0', isNightly: false },
+			{ version: '1.1.0', isNightly: false },
+			{ version: '1.0.0', isNightly: false },
+		],
 	},
 	{
 		id: 'files',
