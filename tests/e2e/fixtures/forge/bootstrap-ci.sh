@@ -118,6 +118,73 @@ occ config:app:set app_versions source.fixtureapp \
 # probe /health directly from the browser context, which says nothing about
 # whether PHP's own HTTP client is allowed to reach it — that is a separate
 # permission (allow_local_remote_servers) and its own failure mode.
+# ── The suite's own traffic was being throttled ───────────────────────────────
+#
+# Five specs failed on `apiRequestContext: Timeout 20000ms exceeded`, and one of
+# them is `unauthenticated callers cannot list tokens` — whose handler,
+# ApiController::listPats(), returns 403 on its first line and makes no outbound
+# call at all. A handler that cannot be slow, timing out, means the REQUEST was
+# delayed rather than the endpoint.
+#
+# That is Nextcloud's bruteforce protection doing its job: an e2e suite fires
+# many deliberately-unauthenticated and wrong-credential requests from ONE IP,
+# which is indistinguishable from an attack, so the responses get progressively
+# delayed. The same thing was diagnosed on portaliq, where our own e2e runs
+# tripped the throttle and the failures read as product defects.
+#
+# Disabling it is correct for a disposable CI instance and ONLY there: the
+# behaviour being suppressed is a response to this suite's own traffic, not
+# anything about the app under test. Nothing asserts on throttling.
+occ config:system:set auth.bruteforce.protection.enabled --value=false --type=boolean > /dev/null
+occ config:system:set ratelimit.protection.enabled --value=false --type=boolean > /dev/null
+
+# ── Warm the App Store catalogue before the clock starts ──────────────────────
+#
+# The discover specs search the real App Store. The FIRST call has to fetch and
+# parse the whole catalogue, which is what pushed `discover(calendar)` past 20s
+# — including the diagnostic request that was supposed to explain the failure.
+# Later calls hit the cached payload, which is why the same endpoint is fast
+# once anything has warmed it.
+#
+# Doing that here means the cost lands in setup, where it is allowed to be slow,
+# instead of inside a test's timeout. NOT fatal: if the App Store is unreachable
+# the discover specs still fail, and they should — this only stops a cold cache
+# from being mistaken for a broken endpoint.
+echo "Warming the App Store catalogue…"
+if ! timeout 180 php "${NC_ROOT}/occ" app_versions:versions dashboard > /dev/null 2>&1; then
+	echo "::warning::App Store warm-up did not complete in 180s; the discover specs may still time out."
+fi
+
+# ── Time the endpoints the suite times out on, from the runner ────────────────
+#
+# Disabling the bruteforce throttle did NOT clear the `Timeout 20000ms
+# exceeded` failures, so that hypothesis is dead and guessing again is not a
+# method. These curls measure the two endpoints directly, unauthenticated and
+# authenticated, and print the server's own timing.
+#
+# ⚠️ READ WHAT THIS MEASURES: the UNAUTHENTICATED path. Both endpoints check
+# authorization first, so these curls get a 401 in ~60ms without ever reaching
+# the App Store fetch that makes the authenticated path slow. Measured
+# 2026-08-19: pats 0.075s/0.062s, discover 0.061s/0.062s, all http=401.
+#
+# That is still worth keeping, because it settles one thing: the SERVER is not
+# slow, and `pat-management:104` — itself an unauthenticated test — times out
+# at 20s in Playwright against an endpoint curl answers in 60ms. So that
+# failure is the shared `page.request` context queueing behind an in-flight
+# browser request, not a slow handler.
+#
+# It is deliberately NOT extended with basic auth to measure the real path:
+# basic-auth curl pays a bcrypt hash on every request and inflates every
+# timing, which would turn this from a measurement into a misleading number.
+echo "Timing the endpoints the e2e suite times out on…"
+for ep in "ocs/v2.php/apps/app_versions/api/pats?format=json" "ocs/v2.php/apps/app_versions/api/discover?q=calendar&format=json"; do
+	for call in 1 2; do
+		t=$(curl -s -o /dev/null -m 60 -w '%{time_total} http=%{http_code}' \
+			-H 'OCS-APIRequest: true' "http://localhost:8080/${ep}" 2>/dev/null || echo "TIMEOUT")
+		printf '    call %s  %-58s %s\n' "${call}" "${ep:0:58}" "${t}"
+	done
+done
+
 echo "Verifying the app resolves versions through the fixture…"
 versions="$(occ app_versions:versions fixtureapp 2>&1 || true)"
 if ! printf '%s' "${versions}" | grep -q '1\.'; then
