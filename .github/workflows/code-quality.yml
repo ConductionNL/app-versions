@@ -84,7 +84,13 @@ jobs:
       # i.e. the app under test was blamed for the absence of an integration
       # that was never installed. Checking it out at the same stable branch the
       # server runs makes the assertion measure what it claims to.
-      additional-apps: '[{"repo":"nextcloud/notifications","app":"notifications","ref":"stable34"}]'
+      # `notes` is here for the same reason, found the same way. versions.spec
+      # picks it as a representative App Store app and failed with
+      #   waiting for locator('article').filter({ has: getByText('notes') })
+      # i.e. the app card was simply not in the list, because Notes is another
+      # separate repo absent from a server git checkout. It has no stableXX
+      # branches, so `main` is the only ref there is.
+      additional-apps: '[{"repo":"nextcloud/notifications","app":"notifications","ref":"stable34"},{"repo":"nextcloud/notes","app":"notes","ref":"main"}]'
 
       enable-sbom: true
 
