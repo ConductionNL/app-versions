@@ -162,12 +162,20 @@ fi
 # method. These curls measure the two endpoints directly, unauthenticated and
 # authenticated, and print the server's own timing.
 #
-# The point is to separate three explanations that look identical from a
-# Playwright timeout: a genuinely slow HANDLER, a slow first-hit COLD START
-# that a second call would not pay, and something outside PHP entirely. The
-# second call is the control — if call 2 is fast, the cost is cold start and
-# warming is the fix; if both are slow, the handler is slow and raising a
-# timeout would only hide it.
+# ⚠️ READ WHAT THIS MEASURES: the UNAUTHENTICATED path. Both endpoints check
+# authorization first, so these curls get a 401 in ~60ms without ever reaching
+# the App Store fetch that makes the authenticated path slow. Measured
+# 2026-08-19: pats 0.075s/0.062s, discover 0.061s/0.062s, all http=401.
+#
+# That is still worth keeping, because it settles one thing: the SERVER is not
+# slow, and `pat-management:104` — itself an unauthenticated test — times out
+# at 20s in Playwright against an endpoint curl answers in 60ms. So that
+# failure is the shared `page.request` context queueing behind an in-flight
+# browser request, not a slow handler.
+#
+# It is deliberately NOT extended with basic auth to measure the real path:
+# basic-auth curl pays a bcrypt hash on every request and inflates every
+# timing, which would turn this from a measurement into a misleading number.
 echo "Timing the endpoints the e2e suite times out on…"
 for ep in "ocs/v2.php/apps/app_versions/api/pats?format=json" "ocs/v2.php/apps/app_versions/api/discover?q=calendar&format=json"; do
 	for call in 1 2; do
