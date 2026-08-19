@@ -1,4 +1,6 @@
 import { execFile } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { expect, type Page } from '@playwright/test'
 
@@ -122,8 +124,116 @@ export async function fixtureControl(page: Page, path: string, body: unknown): P
 	}
 }
 
-/** The Nextcloud container the fixture app is installed into. */
-const NC_CONTAINER = process.env.NC_CONTAINER ?? 'av-e2e'
+/**
+ * How to reach the instance: a Docker container locally, or the runner's own
+ * filesystem in CI.
+ *
+ * ⚠️ EVERY `occ` AND `sql` HELPER USED TO SHELL OUT TO `docker exec av-e2e`,
+ * and both swallowed the failure into an empty string. In CI there is no such
+ * container — the shared quality.yml runs the PHP built-in server on the runner
+ * — so every one of those calls failed silently and the specs that depend on
+ * them failed on opaque assertions (`Expected: 0, Received: 1`) that named
+ * neither Docker nor the missing container.
+ *
+ * The mode is DETECTED rather than configured, so neither the developer setup
+ * nor the shared workflow needs a new environment variable: Playwright runs
+ * with cwd inside the app, which in CI sits at `<server>/apps/app_versions`, so
+ * walking up for an `occ` file finds the server root. A developer checkout is
+ * not inside a Nextcloud tree, finds nothing, and keeps the Docker behaviour.
+ * An explicit `NC_CONTAINER` or `NC_SERVER_ROOT` overrides the detection.
+ */
+type Instance =
+	| { mode: 'docker'; container: string }
+	| { mode: 'local'; root: string }
+
+function resolveInstance(): Instance {
+	if (process.env.NC_CONTAINER) {
+		return { mode: 'docker', container: process.env.NC_CONTAINER }
+	}
+	if (process.env.NC_SERVER_ROOT) {
+		return { mode: 'local', root: process.env.NC_SERVER_ROOT }
+	}
+
+	let dir = process.cwd()
+	for (let i = 0; i < 6; i++) {
+		if (existsSync(join(dir, 'occ'))) {
+			return { mode: 'local', root: dir }
+		}
+		const up = dirname(dir)
+		if (up === dir) break
+		dir = up
+	}
+
+	return { mode: 'docker', container: 'av-e2e' }
+}
+
+export const INSTANCE = resolveInstance()
+
+/**
+ * Runs a command against the instance, wherever it lives.
+ *
+ * Returns the exit code alongside the output instead of throwing, because
+ * several specs assert on a NON-ZERO exit (a refused downgrade, an integrity
+ * failure) — that is the behaviour under test, not an error. `stderr` is
+ * returned too: the previous helpers discarded it, which is how "docker: not
+ * found" became an empty string and then a confusing assertion.
+ */
+export async function execInInstance(
+	argv: string[],
+	opts: { asRoot?: boolean; env?: Record<string, string> } = {},
+): Promise<{ code: number; stdout: string; stderr: string }> {
+	let cmd: string
+	let args: string[]
+	let spawnOpts: Record<string, unknown>
+
+	if (INSTANCE.mode === 'docker') {
+		const envArgs = Object.entries(opts.env ?? {}).flatMap(([k, v]) => ['-e', `${k}=${v}`])
+		cmd = 'docker'
+		args = ['exec', ...envArgs, '-u', opts.asRoot ? 'root' : 'www-data', INSTANCE.container, ...argv]
+		spawnOpts = {}
+	} else {
+		// On a runner the tests own the tree, so `asRoot` has nothing to grant
+		// and is deliberately a no-op rather than a sudo escalation.
+		cmd = argv[0]
+		args = argv.slice(1)
+		spawnOpts = { cwd: INSTANCE.root, env: { ...process.env, ...(opts.env ?? {}) } }
+	}
+
+	try {
+		const { stdout, stderr } = await execFileAsync(cmd, args, {
+			maxBuffer: 8 * 1024 * 1024,
+			...spawnOpts,
+		})
+		return { code: 0, stdout, stderr }
+	} catch (err) {
+		const e = err as { code?: number; stdout?: string; stderr?: string; message?: string }
+		return {
+			code: typeof e.code === 'number' ? e.code : 1,
+			stdout: e.stdout ?? '',
+			stderr: e.stderr ?? e.message ?? '',
+		}
+	}
+}
+
+/**
+ * A `php -r` snippet that opens the instance's OWN database.
+ *
+ * The previous helpers hard-coded `sqlite:/var/www/html/data/nc.db.db`, which
+ * is right for the Docker image and wrong everywhere else — CI runs pgsql, so
+ * every query would have failed even once the container problem was fixed.
+ * Reading `config/config.php` means the helper follows the instance rather than
+ * a remembered layout.
+ */
+function dbPrelude(): string {
+	return [
+		'$CONFIG=[];require "config/config.php";$c=$CONFIG;',
+		'$t=$c["dbtype"]??"sqlite3";',
+		'if($t==="sqlite3"){$dsn="sqlite:".($c["datadirectory"]??"data")."/".($c["dbname"]??"owncloud").".db";$u=null;$w=null;}',
+		'elseif($t==="pgsql"){$dsn="pgsql:host=".$c["dbhost"].";dbname=".$c["dbname"];$u=$c["dbuser"];$w=$c["dbpassword"];}',
+		'else{$dsn="mysql:host=".$c["dbhost"].";dbname=".$c["dbname"];$u=$c["dbuser"];$w=$c["dbpassword"];}',
+		'$p=new PDO($dsn,$u,$w,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);',
+	].join('')
+}
 
 /**
  * Installs a version of the fixture app and returns the structured outcome.
@@ -143,19 +253,15 @@ export async function installFixture(
 	opts: { allowDowngrade?: boolean; acceptNewSha?: boolean } = {},
 ): Promise<{ status: number; body: any }> {
 	void page
-	const args = ['exec', '-u', 'www-data', NC_CONTAINER, 'php', 'occ', 'app_versions:install',
+	const args = ['php', 'occ', 'app_versions:install',
 		FIXTURE_APP, version, `--source=${FIXTURE_SOURCE}`, '--json']
 	if (opts.allowDowngrade) args.push('--allow-downgrade')
 	if (opts.acceptNewSha) args.push('--accept-new-sha')
-	try {
-		const { stdout } = await execFileAsync('docker', args, { maxBuffer: 8 * 1024 * 1024 })
-		return { status: 0, body: parseLastJson(stdout) }
-	} catch (err) {
-		// A non-zero exit (guard refused, integrity failure, …) still emits the
-		// structured outcome on stdout — surface it with the exit code.
-		const e = err as { code?: number; stdout?: string }
-		return { status: e.code ?? 1, body: parseLastJson(e.stdout ?? '') }
-	}
+
+	// A non-zero exit (guard refused, integrity failure, …) still emits the
+	// structured outcome on stdout — surface it with the exit code.
+	const { code, stdout } = await execInInstance(args)
+	return { status: code, body: parseLastJson(stdout) }
 }
 
 /** Extracts the last JSON object printed by an occ command (ignores warnings). */
@@ -165,30 +271,42 @@ function parseLastJson(out: string): any {
 	try { return JSON.parse(match[0]) } catch { return {} }
 }
 
-/** Runs an occ command in the Nextcloud container, returning stdout. */
+/**
+ * A `YYYY-MM-DD HH:MM:SS` timestamp offset from now.
+ *
+ * The specs used SQLite's `datetime('now','-1 day')` and
+ * `strftime('%Y-%m-%d %H:%M:%S','now')` inline. Those are not SQL — they are
+ * SQLite builtins, and on the pgsql instance CI runs they are simply unknown
+ * functions, so every statement carrying one fails. Computing the literal here
+ * keeps the statements portable across sqlite, pgsql and mysql alike.
+ *
+ * @param days Offset in days; negative for the past.
+ */
+export function tsOffset(days = 0): string {
+	return new Date(Date.now() + (days * 86_400_000)).toISOString().slice(0, 19).replace('T', ' ')
+}
+
+/** Runs an occ command against the instance, returning stdout. */
 export async function occ(...args: string[]): Promise<string> {
-	const { stdout } = await execFileAsync(
-		'docker', ['exec', '-u', 'www-data', NC_CONTAINER, 'php', 'occ', ...args],
-		{ maxBuffer: 8 * 1024 * 1024 },
-	).catch((e) => ({ stdout: (e as { stdout?: string }).stdout ?? '' }))
+	const { stdout } = await execInInstance(['php', 'occ', ...args])
 	return stdout
 }
 
-/** Runs a query against the instance's SQLite DB, returning stdout rows. */
+/** Runs a query against the instance's own database, returning stdout rows. */
 export async function sql(query: string): Promise<string> {
-	const { stdout } = await execFileAsync('docker', [
-		'exec', NC_CONTAINER, 'php', '-r',
-		`$p=new PDO("sqlite:/var/www/html/data/nc.db.db");$s=$p->query(${JSON.stringify(query)});foreach($s->fetchAll(PDO::FETCH_NUM) as $r){echo implode("\\t",array_map(fn($v)=>$v??"",$r)),"\\n";}`,
-	], { maxBuffer: 8 * 1024 * 1024 }).catch((e) => ({ stdout: (e as { stdout?: string }).stdout ?? '' }))
+	const { stdout } = await execInInstance([
+		'php', '-r',
+		`${dbPrelude()}$s=$p->query(${JSON.stringify(query)});foreach($s->fetchAll(PDO::FETCH_NUM) as $r){echo implode("\\t",array_map(fn($v)=>$v??"",$r)),"\\n";}`,
+	])
 	return stdout.trim()
 }
 
-/** Runs a mutating SQL statement against the instance's SQLite DB. */
+/** Runs a mutating SQL statement against the instance's own database. */
 export async function sqlExec(stmt: string): Promise<void> {
-	await execFileAsync('docker', [
-		'exec', NC_CONTAINER, 'php', '-r',
-		`$p=new PDO("sqlite:/var/www/html/data/nc.db.db");$p->exec(${JSON.stringify(stmt)});`,
-	]).catch(() => undefined)
+	await execInInstance([
+		'php', '-r',
+		`${dbPrelude()}$p->exec(${JSON.stringify(stmt)});`,
+	])
 }
 
 /** Force-executes an app background job by class-name substring, once. */

@@ -11,6 +11,7 @@ import {
 	runJob,
 	sql,
 	sqlExec,
+	tsOffset,
 } from './helpers'
 
 /**
@@ -112,7 +113,7 @@ test.describe('background jobs', () => {
 			data: { forge: 'codeberg', label: 'expiring', targetPattern: 'fixtureowner/*', token: 'codeberg-expiry-token' },
 		})
 		const id = (await sql("SELECT id FROM oc_app_versions_pats WHERE label='expiring' LIMIT 1")).split('\t')[0]
-		await sqlExec(`UPDATE oc_app_versions_pats SET expires_at = datetime('now','+10 days'), warned_thresholds='[]' WHERE id=${id}`)
+		await sqlExec(`UPDATE oc_app_versions_pats SET expires_at = '${tsOffset(10)}', warned_thresholds='[]' WHERE id=${id}`)
 
 		await runJob('PatExpiryWarningJob')
 		const warned = (await sql(`SELECT warned_thresholds FROM oc_app_versions_pats WHERE id=${id}`)).trim()
@@ -148,15 +149,15 @@ test.describe('background jobs', () => {
 	// --- audit retention prune job ----------------------------------------
 	test('the prune job removes entries older than the retention window', async ({ page }) => {
 		// Seed one clearly-old audit row and one recent row.
-		await sqlExec("INSERT INTO oc_app_versions_audit (actor_uid, app_id, operation, status, created_at) VALUES ('system','prunetest','install','success', strftime('%Y-%m-%d %H:%M:%S','now','-400 days'))")
-		await sqlExec("INSERT INTO oc_app_versions_audit (actor_uid, app_id, operation, status, created_at) VALUES ('system','prunetest','install','success', strftime('%Y-%m-%d %H:%M:%S','now'))")
+		await sqlExec(`INSERT INTO oc_app_versions_audit (actor_uid, app_id, operation, status, created_at) VALUES ('system','prunetest','install','success', '${tsOffset(-400)}')`)
+		await sqlExec(`INSERT INTO oc_app_versions_audit (actor_uid, app_id, operation, status, created_at) VALUES ('system','prunetest','install','success', '${tsOffset()}')`)
 		await occ('config:app:set', 'app_versions', 'audit_retention_days', '--value', '365')
 
-		const oldBefore = await sql("SELECT count(*) FROM oc_app_versions_audit WHERE app_id='prunetest' AND created_at < datetime('now','-365 days')")
+		const oldBefore = await sql(`SELECT count(*) FROM oc_app_versions_audit WHERE app_id='prunetest' AND created_at < '${tsOffset(-365)}'`)
 		expect(Number(oldBefore)).toBeGreaterThan(0)
 
 		await runJob('PruneAuditJob')
-		expect(Number(await sql("SELECT count(*) FROM oc_app_versions_audit WHERE app_id='prunetest' AND created_at < datetime('now','-365 days')"))).toBe(0)
+		expect(Number(await sql(`SELECT count(*) FROM oc_app_versions_audit WHERE app_id='prunetest' AND created_at < '${tsOffset(-365)}'`))).toBe(0)
 		// The recent row survives.
 		expect(Number(await sql("SELECT count(*) FROM oc_app_versions_audit WHERE app_id='prunetest'"))).toBeGreaterThan(0)
 

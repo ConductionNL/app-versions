@@ -1,26 +1,17 @@
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
 import { expect, test } from '@playwright/test'
-import { FIXTURE_APP, FIXTURE_SOURCE, fixtureAvailable, fixtureControl, resetFixtureApp } from './helpers'
-
-const execFileAsync = promisify(execFile)
-const NC_CONTAINER = process.env.NC_CONTAINER ?? 'av-e2e'
+import { execInInstance, FIXTURE_APP, FIXTURE_SOURCE, fixtureAvailable, fixtureControl, resetFixtureApp } from './helpers'
 
 /**
  * Runs an occ command, returning its exit code and stdout (never throws).
+ *
+ * This spec asserts on the EXIT CODE — a refused downgrade and an integrity
+ * failure are supposed to be non-zero — so it keeps its own thin wrapper rather
+ * than using `occ()`, which returns stdout alone.
  * @param {...any} args
  */
 async function occ(...args: string[]): Promise<{ code: number; stdout: string }> {
-	try {
-		const { stdout } = await execFileAsync(
-			'docker', ['exec', '-u', 'www-data', NC_CONTAINER, 'php', 'occ', ...args],
-			{ maxBuffer: 8 * 1024 * 1024 },
-		)
-		return { code: 0, stdout }
-	} catch (err) {
-		const e = err as { code?: number; stdout?: string }
-		return { code: e.code ?? 1, stdout: e.stdout ?? '' }
-	}
+	const { code, stdout } = await execInInstance(['php', 'occ', ...args])
+	return { code, stdout }
 }
 
 function lastJson(out: string): any {
