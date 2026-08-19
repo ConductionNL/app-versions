@@ -294,19 +294,52 @@ export async function occ(...args: string[]): Promise<string> {
 
 /** Runs a query against the instance's own database, returning stdout rows. */
 export async function sql(query: string): Promise<string> {
-	const { stdout } = await execInInstance([
+	const { code, stdout, stderr } = await execInInstance([
 		'php', '-r',
 		`${dbPrelude()}$s=$p->query(${JSON.stringify(query)});foreach($s->fetchAll(PDO::FETCH_NUM) as $r){echo implode("\\t",array_map(fn($v)=>$v??"",$r)),"\\n";}`,
 	])
+	reportDbFailure('sql', query, code, stderr)
 	return stdout.trim()
 }
 
 /** Runs a mutating SQL statement against the instance's own database. */
 export async function sqlExec(stmt: string): Promise<void> {
-	await execInInstance([
+	const { code, stderr } = await execInInstance([
 		'php', '-r',
 		`${dbPrelude()}$p->exec(${JSON.stringify(stmt)});`,
 	])
+	reportDbFailure('sqlExec', stmt, code, stderr)
+}
+
+/**
+ * Surfaces a failed database call instead of letting it become an empty string.
+ *
+ * ⚠️ AN EMPTY RESULT AND A FAILED QUERY LOOK IDENTICAL TO THE CALLER, and the
+ * callers all read the empty string as "zero rows". Measured 2026-08-19: a
+ * dozen specs failed with `expect(received).toBeGreaterThan(0) / Received: 0`
+ * — a message about the app's data, produced by a query that never ran.
+ *
+ * This deliberately does NOT throw. Several specs legitimately expect zero rows
+ * (a swept PAT, a pruned audit row), so turning every failure into an exception
+ * would replace one wrong answer with another. It writes the real cause to the
+ * Playwright output, where the next reader can see it next to the assertion it
+ * explains.
+ *
+ * @param helper Which helper failed.
+ * @param statement The SQL that was attempted.
+ * @param code The exit code from the instance.
+ * @param stderr Whatever PHP said about it.
+ */
+function reportDbFailure(helper: string, statement: string, code: number, stderr: string): void {
+	if (code === 0) {
+		return
+	}
+
+	console.error(
+		`[e2e] ${helper}() exited ${code} — the result below is NOT "zero rows", it is a failed query.\n`
+		+ `      statement: ${statement}\n`
+		+ `      stderr:    ${stderr.trim() || '(none)'}`,
+	)
 }
 
 /** Force-executes an app background job by class-name substring, once. */
