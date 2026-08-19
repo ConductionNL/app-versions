@@ -87,7 +87,14 @@ test.describe('PAT validation & lifecycle', () => {
 
 	test('a PAT owned by another admin is neither listed nor deletable', async ({ page }) => {
 		// Seed a PAT owned by a different admin, not shared.
-		await sqlExec(`INSERT INTO oc_app_versions_pats (owner_uid, label, target_pattern, kind, forge, encrypted_token, token_hint, shared_with_admins, warned_thresholds, created_at) VALUES ('otheradmin','theirs','x/*','forge-token','codeberg','enc','abcd...wxyz',0,'[]', '${tsOffset()}')`)
+		//
+		// `false`, not `0`, for shared_with_admins. SQLite takes either; pgsql
+		// types that column boolean and refuses the integer with
+		//   SQLSTATE[42804] column "shared_with_admins" is of type boolean
+		// The failed INSERT then made the id lookup below return an empty
+		// string, which the NEXT statement interpolated into `WHERE id=` — one
+		// type mismatch showing up as a syntax error two queries later.
+		await sqlExec(`INSERT INTO oc_app_versions_pats (owner_uid, label, target_pattern, kind, forge, encrypted_token, token_hint, shared_with_admins, warned_thresholds, created_at) VALUES ('otheradmin','theirs','x/*','forge-token','codeberg','enc','abcd...wxyz',false,'[]', '${tsOffset()}')`)
 		const id = (await sql("SELECT id FROM oc_app_versions_pats WHERE label='theirs'")).trim()
 
 		// admin does not see a non-shared PAT owned by someone else.
@@ -110,7 +117,7 @@ test.describe('PAT validation & lifecycle', () => {
 
 		await occ('user:delete', 'pat-sweep-user') // clean any prior run
 		await userAdd()
-		await sqlExec(`INSERT INTO oc_app_versions_pats (owner_uid, label, target_pattern, kind, forge, encrypted_token, token_hint, shared_with_admins, warned_thresholds, created_at) VALUES ('pat-sweep-user','swept','x/*','forge-token','codeberg','enc','abcd...wxyz',0,'[]', '${tsOffset()}')`)
+		await sqlExec(`INSERT INTO oc_app_versions_pats (owner_uid, label, target_pattern, kind, forge, encrypted_token, token_hint, shared_with_admins, warned_thresholds, created_at) VALUES ('pat-sweep-user','swept','x/*','forge-token','codeberg','enc','abcd...wxyz',false,'[]', '${tsOffset()}')`)
 		expect(Number(await sql("SELECT count(*) FROM oc_app_versions_pats WHERE owner_uid='pat-sweep-user'"))).toBe(1)
 
 		await occ('user:delete', 'pat-sweep-user')

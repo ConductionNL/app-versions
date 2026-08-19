@@ -71,8 +71,21 @@ jobs:
       # Flip it back to `true` in the same commit that adds a collection.
       enable-newman: false
 
-      # additional-apps: '[]'  # Add app dependencies here if needed, e.g.:
-      # additional-apps: '[{"repo":"ConductionNL/openregister","app":"openregister","ref":"main"}]'
+      # ── notifications, because four e2e specs assert on its table ─────────
+      #
+      # jobs.spec.ts reads and clears `oc_notifications` to prove the
+      # auto-update job tells the admin what it did. That table is created by
+      # the `notifications` app, which is bundled into Nextcloud RELEASES but
+      # is a separate repo and is NOT present in a server GIT checkout — which
+      # is what this workflow installs.
+      #
+      # So those assertions failed with
+      #   SQLSTATE[42P01] relation "oc_notifications" does not exist
+      # i.e. the app under test was blamed for the absence of an integration
+      # that was never installed. Checking it out at the same stable branch the
+      # server runs makes the assertion measure what it claims to.
+      additional-apps: '[{"repo":"nextcloud/notifications","app":"notifications","ref":"stable34"}]'
+
       enable-sbom: true
 
       # ── E2E browser tests ────────────────────────────────────────────────

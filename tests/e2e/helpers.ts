@@ -295,6 +295,40 @@ export function tsOffset(days = 0): string {
 	return new Date(Date.now() + (days * 86_400_000)).toISOString().slice(0, 19).replace('T', ' ')
 }
 
+/**
+ * What the discover API actually said, as an assertion message.
+ *
+ * The discover endpoint returns `{ results, providers, errors }`, and the specs
+ * read only `results`. So when a provider fails — the App Store unreachable, a
+ * forge refusing — the test reports `element(s) not found` or
+ * `expect(0).toBeGreaterThan(0)`, which describes the SYMPTOM and hides the one
+ * field that names the cause. The API is already telling us; nothing was
+ * listening.
+ *
+ * Passed as the assertion's message so a failure carries the provider errors
+ * beside it. It runs the same query the UI runs, so a search that works here
+ * and not in the browser is itself the finding.
+ *
+ * @param page The Playwright page (used for its request context).
+ * @param query The search term.
+ */
+export async function discoverDiagnostics(page: Page, query: string): Promise<string> {
+	try {
+		const res = await page.request.get(
+			`/ocs/v2.php/apps/app_versions/api/discover?q=${encodeURIComponent(query)}&format=json`,
+			{ headers: { 'OCS-APIRequest': 'true' } },
+		)
+		const data = (await res.json())?.ocs?.data ?? {}
+		const errors = data.errors ?? []
+		const providers = (data.providers ?? []).map((p: { id: string, enabled: boolean }) => `${p.id}=${p.enabled ? 'on' : 'off'}`)
+		return `discover(${query}) -> ${(data.results ?? []).length} result(s); `
+			+ `providers: ${providers.join(', ') || 'none'}; `
+			+ `errors: ${errors.length > 0 ? JSON.stringify(errors) : 'none'}`
+	} catch (err) {
+		return `discover(${query}) -> the diagnostic request itself failed: ${String(err)}`
+	}
+}
+
 /** Runs an occ command against the instance, returning stdout. */
 export async function occ(...args: string[]): Promise<string> {
 	const { stdout } = await execInInstance(['php', 'occ', ...args])
