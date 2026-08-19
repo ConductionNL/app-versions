@@ -93,6 +93,32 @@ jobs:
       # this repo that this change does not touch.
       enable-playwright: true
 
+      # ── The forge fixture, without which two thirds of the suite skips ────
+      #
+      # Ten spec files open with
+      #
+      #     test.skip(!(await fixtureAvailable(page)), 'forge fixture not running')
+      #
+      # and nothing in CI ever started it. On the first run in which this job
+      # executed at all (2026-08-19) the tally was
+      #
+      #     7 failed · 3 flaky · 66 skipped · 22 passed
+      #
+      # and "22 passed" is what a reader takes away. The 66 are the CLI
+      # commands, downgrade migration drift, the artifact cache, TOFU digest
+      # recording, install faults and rate-limited forges — most of what this
+      # app does. A skip whose reason has quietly stopped being true reads as a
+      # considered decision and is an unnoticed hole.
+      #
+      # `bootstrap.sh` cannot serve here: it assumes Nextcloud in a container
+      # named `av-e2e` joined to the fixture by a Docker network, and this job
+      # runs the PHP built-in server on the runner. `bootstrap-ci.sh` is the
+      # same wiring without Docker, and it EXITS NON-ZERO if the fixture does
+      # not come up — the seed step fails the job on that, which is the point.
+      # A fixture that silently fails to start would put those 66 tests back to
+      # skipping for a reason that is no longer true.
+      playwright-seed-command: "bash apps/app_versions/tests/e2e/fixtures/forge/bootstrap-ci.sh"
+
       # ── Hydra mechanical gates ───────────────────────────────────────────
       # `enable-hydra-gates` defaults to FALSE, so this tier has never executed
       # here — the job reported `skipped`, which the Quality Report renders
