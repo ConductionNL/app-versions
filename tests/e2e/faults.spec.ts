@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import {
+	execInInstance,
 	FIXTURE_APP,
 	FIXTURE_SOURCE,
 	fixtureAvailable,
@@ -101,12 +102,10 @@ test.describe('faults, diffs and cache integrity', () => {
 		const dir = (await occ('config:system:get', 'datadirectory')).trim() || '/var/www/html/data'
 		// Overwrite every cached 1.0.1 archive with garbage.
 		await occ('config:app:get', FIXTURE_APP, 'installed_version') // no-op keeps occ imported
-		const { execFile } = await import('node:child_process')
-		const { promisify } = await import('node:util')
-		const ct = process.env.NC_CONTAINER ?? 'av-e2e'
-		await promisify(execFile)('docker', ['exec', '-u', 'root', ct, 'bash', '-c',
+		await execInInstance([
+			'bash', '-c',
 			`find ${dir} -path '*artifact-cache*1.0.1*' -name '*.tar.gz' -exec sh -c 'echo tampered > "$1"' _ {} \\;`,
-		]).catch(() => undefined)
+		], { asRoot: true })
 		await fixtureControl(page, 'asset', { asset: 'fixtureapp-1.0.1.tar.gz', status: 404 })
 
 		const { status, body } = await installFixture(page, '1.0.1', { allowDowngrade: true })
