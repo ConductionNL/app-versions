@@ -67,10 +67,26 @@ export async function chooseApp(page: Page, appId: string): Promise<void> {
  * Waits for the version list of the selected app to finish loading.
  * Returns true when versions rendered, false when the source reported none
  * (offline / not on the App Store) so a spec can skip network-dependent asserts.
+ *
+ * 🔑 A WAIT LONGER THAN ITS TEST'S TIMEOUT CAN NEVER ELAPSE. This waited
+ * 240_000ms inside a test bounded at 60_000 (playwright.config.ts), so it could
+ * only ever use a quarter of its stated patience — and when loading did stall,
+ * the failure read `Test timeout of 60000ms exceeded` rather than naming the
+ * thing that never finished. Same arithmetic-opposition defect as a bounded
+ * apt retry inside a shorter job cap (ConductionNL/.github#510).
+ *
+ * 240s was calibrated for the real App Store (~12.4 MB from garm3). The fixture
+ * now serves that catalogue locally, so the budget belongs inside the test
+ * bound, where it can actually be spent. A spec that legitimately needs longer
+ * should raise its own timeout with `test.setTimeout()` — deliberately, and
+ * visibly, rather than inheriting a number that silently cannot apply.
  */
 export async function versionsLoaded(page: Page): Promise<boolean> {
 	const loading = page.getByText('Fetching available versions from the source')
-	await expect(loading).toBeHidden({ timeout: 240_000 })
+	await expect(
+		loading,
+		'the version list never finished loading — the source did not answer',
+	).toBeHidden({ timeout: 45_000 })
 	const rows = page.getByTestId('changelog-toggle')
 	return (await rows.count()) > 0
 }
