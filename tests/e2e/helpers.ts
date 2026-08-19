@@ -228,9 +228,18 @@ function dbPrelude(): string {
 	return [
 		'$CONFIG=[];require "config/config.php";$c=$CONFIG;',
 		'$t=$c["dbtype"]??"sqlite3";',
+		// `dbhost` IS NOT A HOSTNAME. Nextcloud stores host, host:port, or
+		// :/path/to/socket in that one key, and CI's config holds
+		// "127.0.0.1:5432" — pasted straight into `host=`, PDO reads the whole
+		// string as a name and fails with
+		//   SQLSTATE[08006] could not translate host name "127.0.0.1:5432"
+		// which every caller then saw as an empty result, i.e. "zero rows".
+		'$hraw=(string)($c["dbhost"]??"localhost");$hp="";$hs="";',
+		'if(str_starts_with($hraw,":")){$hs=substr($hraw,1);$hraw="localhost";}',
+		'elseif(str_contains($hraw,":")){[$hraw,$tail]=explode(":",$hraw,2);if(ctype_digit($tail)){$hp=$tail;}else{$hs=$tail;}}',
 		'if($t==="sqlite3"){$dsn="sqlite:".($c["datadirectory"]??"data")."/".($c["dbname"]??"owncloud").".db";$u=null;$w=null;}',
-		'elseif($t==="pgsql"){$dsn="pgsql:host=".$c["dbhost"].";dbname=".$c["dbname"];$u=$c["dbuser"];$w=$c["dbpassword"];}',
-		'else{$dsn="mysql:host=".$c["dbhost"].";dbname=".$c["dbname"];$u=$c["dbuser"];$w=$c["dbpassword"];}',
+		'elseif($t==="pgsql"){$dsn="pgsql:host=".$hraw.($hp!==""?";port=".$hp:"").";dbname=".$c["dbname"];$u=$c["dbuser"];$w=$c["dbpassword"];}',
+		'else{$dsn="mysql:".($hs!==""?"unix_socket=".$hs:"host=".$hraw.($hp!==""?";port=".$hp:"")).";dbname=".$c["dbname"];$u=$c["dbuser"];$w=$c["dbpassword"];}',
 		'$p=new PDO($dsn,$u,$w,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);',
 	].join('')
 }
