@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# Bootstraps the fixture forge for e2e IN CI, where there is no Docker.
+#
+# ── WHY A SECOND BOOTSTRAP ────────────────────────────────────────────────────
+#
+# `bootstrap.sh` assumes the developer layout: Nextcloud in a container named
+# `av-e2e`, the fixture in a second container, the two joined by a Docker
+# network, and the app pointed at `http://forge-fixture:9099`. None of that
+# exists in the shared quality.yml job — there Nextcloud is the PHP built-in
+# server running on the runner itself, and `occ` is a plain `php occ`.
+#
+# So the fixture never started in CI, `fixtureAvailable()` answered false, and
+# 66 specs across ten files skipped with "forge fixture not running". Measured
+# 2026-08-19 on the first run in which app-versions' E2E job executed at all:
+#
+#     7 failed · 3 flaky · 66 skipped · 22 passed
+#
+# 🔑 THOSE 66 ARE THE INTERESTING ONES. They cover the CLI commands, downgrade
+# migration drift, the artifact cache, TOFU digest recording, install faults and
+# rate-limited forges — i.e. most of what this app is for. A suite reporting 22
+# passed while two thirds of it never ran reads as a pass, and a skip whose
+# reason has stopped being true is worse than no skip because it looks
+# considered.
+#
+# Everything the fixture needs is already parameterised (`PORT`, `PUBLIC_BASE`,
+# `FORGE_FIXTURE_URL`), so CI needs no new fixture code — only a different way
+# to start it and to point the app at it.
+#
+# Invoked from .github/workflows/code-quality.yml as `playwright-seed-command`,
+# which runs with cwd at the Nextcloud server root and FAILS THE JOB on a
+# non-zero exit. That is deliberate: if the fixture cannot start, the honest
+# outcome is a red job, not 66 tests skipping for a reason that is no longer
+# true.
+#
+# SPDX-FileCopyrightText: 2026 Conduction B.V. <info@conduction.nl>
+# SPDX-License-Identifier: EUPL-1.2
+set -euo pipefail
+
+NC_ROOT="$(pwd)"
+APP_DIR="${NC_ROOT}/apps/app_versions"
+FX="${APP_DIR}/tests/e2e/fixtures/forge"
+PORT="${FORGE_FIXTURE_PORT:-9099}"
+BASE="http://localhost:${PORT}"
+LOG="${RUNNER_TEMP:-/tmp}/forge-fixture.log"
+
+# ASSERT THE LAYOUT BEFORE ACTING. If the app is not where this expects, every
+# path below silently addresses nothing and the script would still exit 0.
+[ -d "${FX}" ] || { echo "::error::forge fixture not found at ${FX} (cwd=${NC_ROOT})"; exit 1; }
+[ -f "${NC_ROOT}/occ" ] || { echo "::error::no occ at ${NC_ROOT}/occ — cwd is not a Nextcloud server root"; exit 1; }
+
+echo "Building fixture artifacts…"
+"${FX}/build-artifacts.sh" "${FX}/artifacts" > /dev/null
+
+# PUBLIC_BASE is what the fixture advertises in its release payloads, i.e. the
+# URL the APP will download from. In CI both the app and the fixture live on the
+# runner, so that is localhost — the container hostname the Docker bootstrap
+# uses would resolve to nothing here.
+echo "Starting fixture forge on ${BASE}…"
+PORT="${PORT}" PUBLIC_BASE="${BASE}" nohup node "${FX}/server.mjs" > "${LOG}" 2>&1 &
+FX_PID=$!
+
+ready=0
+for _ in $(seq 1 30); do
+	if curl -sf -m 2 "${BASE}/health" > /dev/null 2>&1; then
+		ready=1
+		break
+	fi
+
+	# A dead process will never become ready, so stop waiting for it and show
+	# why — a bare 30-second timeout hides a crash-on-boot behind a timeout.
+	if ! kill -0 "${FX_PID}" 2>/dev/null; then
+		echo "::error::fixture forge exited during startup"
+		cat "${LOG}" || true
+		exit 1
+	fi
+
+	sleep 1
+done
+
+if [ "${ready}" -ne 1 ]; then
+	echo "::error::fixture forge did not answer ${BASE}/health within 30s"
+	cat "${LOG}" || true
+	exit 1
+fi
+echo "Fixture forge ready (pid=${FX_PID})."
+
+occ() { php "${NC_ROOT}/occ" "$@"; }
+
+# Point both forge adapters at the fixture, and allow the fetch: Nextcloud
+# refuses requests to local addresses unless told otherwise, which would make
+# every fixture install fail as a network error rather than as a finding.
+occ config:app:set app_versions forge.codeberg.api_base --value="${BASE}/api/v1" > /dev/null
+occ config:app:set app_versions forge.codeberg.web_base --value="${BASE}" > /dev/null
+occ config:app:set app_versions forge.github.api_base --value="${BASE}" > /dev/null
+occ config:app:set app_versions forge.github.web_base --value="${BASE}" > /dev/null
+occ config:system:set allow_local_remote_servers --value=true --type=boolean > /dev/null
+occ config:app:set app_versions trusted_sources \
+	--value='["github:ConductionNL/*","codeberg:Conduction/*","codeberg:fixtureowner/*","github:fixtureowner/*"]' > /dev/null
+
+# Install the baseline fixture app (1.0.0) and bind it to the fixture source, so
+# the install/downgrade specs have a real app to move between versions.
+tmp="$(mktemp -d)"
+tar -C "${tmp}" -xzf "${FX}/artifacts/fixtureapp-1.0.0.tar.gz"
+rm -rf "${NC_ROOT}/apps/fixtureapp"
+cp -r "${tmp}/fixtureapp" "${NC_ROOT}/apps/fixtureapp"
+rm -rf "${tmp}"
+
+# Pin the STORED version to what the files carry. Without this, re-running after
+# an install-under-test leaves the app flagged as needing an upgrade, and every
+# later spec fails on maintenance state rather than on its subject.
+occ config:app:set fixtureapp installed_version --value=1.0.0 > /dev/null
+occ app:enable fixtureapp > /dev/null
+occ maintenance:mode --off > /dev/null 2>&1 || true
+occ config:app:set app_versions source.fixtureapp \
+	--value='{"kind":"github-release","forge":"codeberg","owner":"fixtureowner","repo":"fixtureapp","assetPattern":"*.tar.gz"}' > /dev/null
+
+# PROVE THE APP CAN SEE THE FIXTURE, not merely that both are running. The specs
+# probe /health directly from the browser context, which says nothing about
+# whether PHP's own HTTP client is allowed to reach it — that is a separate
+# permission (allow_local_remote_servers) and its own failure mode.
+echo "Verifying the app resolves versions through the fixture…"
+versions="$(occ app_versions:versions fixtureapp 2>&1 || true)"
+if ! printf '%s' "${versions}" | grep -q '1\.'; then
+	echo "::warning::the app listed no fixture versions; forge specs will fail rather than skip."
+	printf '%s\n' "${versions}"
+fi
+
+echo "Forge fixture bootstrapped: fixtureapp bound to codeberg:fixtureowner/fixtureapp at ${BASE}"
