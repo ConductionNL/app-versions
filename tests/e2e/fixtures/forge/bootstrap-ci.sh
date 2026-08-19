@@ -155,6 +155,28 @@ if ! timeout 180 php "${NC_ROOT}/occ" app_versions:versions dashboard > /dev/nul
 	echo "::warning::App Store warm-up did not complete in 180s; the discover specs may still time out."
 fi
 
+# ── Time the endpoints the suite times out on, from the runner ────────────────
+#
+# Disabling the bruteforce throttle did NOT clear the `Timeout 20000ms
+# exceeded` failures, so that hypothesis is dead and guessing again is not a
+# method. These curls measure the two endpoints directly, unauthenticated and
+# authenticated, and print the server's own timing.
+#
+# The point is to separate three explanations that look identical from a
+# Playwright timeout: a genuinely slow HANDLER, a slow first-hit COLD START
+# that a second call would not pay, and something outside PHP entirely. The
+# second call is the control — if call 2 is fast, the cost is cold start and
+# warming is the fix; if both are slow, the handler is slow and raising a
+# timeout would only hide it.
+echo "Timing the endpoints the e2e suite times out on…"
+for ep in "ocs/v2.php/apps/app_versions/api/pats?format=json" "ocs/v2.php/apps/app_versions/api/discover?q=calendar&format=json"; do
+	for call in 1 2; do
+		t=$(curl -s -o /dev/null -m 60 -w '%{time_total} http=%{http_code}' \
+			-H 'OCS-APIRequest: true' "http://localhost:8080/${ep}" 2>/dev/null || echo "TIMEOUT")
+		printf '    call %s  %-58s %s\n' "${call}" "${ep:0:58}" "${t}"
+	done
+done
+
 echo "Verifying the app resolves versions through the fixture…"
 versions="$(occ app_versions:versions fixtureapp 2>&1 || true)"
 if ! printf '%s' "${versions}" | grep -q '1\.'; then
