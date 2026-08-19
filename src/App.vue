@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import NcButton from '@nextcloud/vue/components/NcButton'
-import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { t } from '@nextcloud/l10n'
@@ -14,13 +13,14 @@ import SourcesPanel from './components/SourcesPanel.vue'
 import TokensPanel from './components/TokensPanel.vue'
 import TrustedSourcesPanel from './components/TrustedSourcesPanel.vue'
 import VersionChangelog from './components/VersionChangelog.vue'
+import DowngradeConfirmDialog from './dialogs/DowngradeConfirmDialog.vue'
 import PinDialog from './dialogs/PinDialog.vue'
 import type { PinRecord } from './dialogs/PinDialog.vue'
 import PinOverrideDialog from './dialogs/PinOverrideDialog.vue'
 import ShaMismatchDialog from './dialogs/ShaMismatchDialog.vue'
 import { AUTO_UPDATE_WINDOW_DEFAULT, isValidAutoUpdateWindow } from './utils/autoUpdateWindow'
 import { buildChangelogRange } from './utils/changelog'
-import { orphanedMigrationsSummary, shouldOfferLkgRollback, type LkgRecord } from './utils/migrationSafety'
+import { shouldOfferLkgRollback, type LkgRecord } from './utils/migrationSafety'
 import { compareVersions, parseVersionCore } from './utils/versionCompare'
 
 type AppOption = {
@@ -1032,29 +1032,6 @@ const versionRangeText = (summary: VersionRangeInfo | null): string => {
 	return `${summary.direction === 'upgrade' ? 'Upgrade' : 'Downgrade'} crosses ${summary.major} major and ${summary.minor} minor version step${summary.minor === 1 ? '' : 's'}.`
 }
 
-const downgradeConfirmButtons = computed(() => [
-	{
-		label: 'Cancel',
-		type: 'tertiary',
-		disabled: isInstallingVersion.value,
-		callback: () => {
-			isDowngradeConfirmOpen.value = false
-			downgradeResolve?.(false)
-			downgradeResolve = null
-		},
-	},
-	{
-		label: 'Downgrade',
-		variant: 'error',
-		disabled: isInstallingVersion.value,
-		callback: () => {
-			isDowngradeConfirmOpen.value = false
-			downgradeResolve?.(true)
-			downgradeResolve = null
-		},
-	},
-])
-
 // Previews the migration diff for a downgrade via a dry-run install request
 // before the confirmation dialog opens, so the dialog can name the exact
 // migrations the target lacks instead of only warning generically; see
@@ -1088,15 +1065,13 @@ const confirmDowngrade = async (appId: string, fromVersion: string, toVersion: s
 	})
 }
 
-const onDowngradeDialogClose = (open: boolean) => {
-	if (open) {
-		return
-	}
-
-	if (downgradeResolve) {
-		downgradeResolve(false)
-		downgradeResolve = null
-	}
+// The single exit from the confirmation dialog. Cancel, the Downgrade button
+// and dismissing all arrive here, so the awaiting promise is always settled —
+// a dismissed dialog can never leave the install flow hanging.
+const onDowngradeResolved = (accept: boolean): void => {
+	isDowngradeConfirmOpen.value = false
+	downgradeResolve?.(accept)
+	downgradeResolve = null
 }
 
 const onSelectVersion = (version: string): void => {
@@ -1479,37 +1454,16 @@ watch(dryRunEnabled, () => {
 			{{ t('app_versions', 'Skip to main content') }}
 		</a>
 		<div id="app-versions-main" :class="$style.content">
-			<NcDialog
+			<DowngradeConfirmDialog
 				:open="isDowngradeConfirmOpen"
-				name="Confirm downgrade"
-				:buttons="downgradeConfirmButtons"
-				@update:open="onDowngradeDialogClose">
-				<p class="$style.downgradeConfirmText">
-					<strong>{{ downgradeConfirmApp }}</strong>
-				</p>
-				<p class="$style.versionTransitionRow">
-					<span :class="$style.versionChip">{{ downgradeConfirmFromVersion || '—' }}</span>
-					<span :class="$style.versionArrow">→</span>
-					<span :class="$style.versionChip">{{ downgradeConfirmToVersion }}</span>
-				</p>
-				<p v-if="downgradeVersionRange" :class="$style.versionRangeSummary">
-					<strong>Downgrade info:</strong> {{ versionRangeText(downgradeVersionRange) }}
-				</p>
-				<p :class="$style.versionItemDegradeMessage">
-					{{ t('app_versions', 'Downgrading files cannot undo database migrations already applied by the installed version.') }}
-				</p>
-				<div v-if="downgradeOrphanedMigrations && downgradeOrphanedMigrations.length > 0" :class="$style.migrationDiff">
-					<p><strong>{{ t('app_versions', 'Database migrations only present in the installed version:') }}</strong></p>
-					<ul :class="$style.migrationDiffList">
-						<li v-for="migration in downgradeOrphanedMigrations" :key="migration">
-							{{ migration }}
-						</li>
-					</ul>
-				</div>
-				<p v-else :class="$style.versionItemDegradeMessage">
-					{{ orphanedMigrationsSummary(downgradeOrphanedMigrations) }}
-				</p>
-			</NcDialog>
+				:app-id="downgradeConfirmApp"
+				:from-version="downgradeConfirmFromVersion"
+				:to-version="downgradeConfirmToVersion"
+				:range-text="downgradeVersionRange ? versionRangeText(downgradeVersionRange) : ''"
+				:orphaned-migrations="downgradeOrphanedMigrations"
+				:busy="isInstallingVersion"
+				@update:open="isDowngradeConfirmOpen = $event"
+				@resolve="onDowngradeResolved" />
 			<PinDialog
 				:open="isPinDialogOpen"
 				:app-id="pinDialogAppId"
@@ -2620,38 +2574,6 @@ watch(dryRunEnabled, () => {
 	line-height: 1.3;
 }
 
-.downgradeConfirmText {
-	font-size: 14px;
-	line-height: 1.4;
-}
-
-.versionItemDegradeMessage {
-	margin: 8px 0 0;
-	padding: 8px 10px;
-	border: 1px solid #fdba74;
-	background: #ffedd5;
-	color: #7c2d12;
-	border-radius: 6px;
-	font-size: 12px;
-	line-height: 1.3;
-}
-
-.migrationDiff {
-	margin: 8px 0 0;
-	padding: 8px 10px;
-	border: 1px solid #fdba74;
-	background: #ffedd5;
-	color: #7c2d12;
-	border-radius: 6px;
-	font-size: 12px;
-	line-height: 1.3;
-}
-
-.migrationDiffList {
-	margin: 4px 0 0;
-	padding-left: 18px;
-}
-
 .versionItemActions {
 	margin-top: 8px;
 	display: flex;
@@ -2874,14 +2796,6 @@ watch(dryRunEnabled, () => {
 	font-size: 14px;
 }
 
-.versionTransitionRow {
-	margin: 0;
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	font-size: 14px;
-}
-
 .versionChip {
 	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 	font-weight: 600;
@@ -2899,8 +2813,7 @@ watch(dryRunEnabled, () => {
 	color: var(--color-text-light);
 }
 
-.versionSummary,
-.versionRangeSummary {
+.versionSummary {
 	margin: 0;
 	font-size: 12px;
 	color: var(--color-text-light);
