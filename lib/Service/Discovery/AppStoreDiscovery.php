@@ -30,7 +30,7 @@ class AppStoreDiscovery implements DiscoveryProviderInterface {
 	private const CACHE_KEY = 'cache.appstore_catalog';
 	private const CACHE_TS_KEY = 'cache.appstore_catalog_ts';
 	private const CACHE_TTL_SECONDS = 3600;
-	private const ENDPOINT = 'https://garm3.nextcloud.com/api/v1/apps.json';
+	private const DEFAULT_API_BASE = 'https://garm3.nextcloud.com/api/v1';
 
 	/**
 	 * How long to allow the catalogue download to take.
@@ -216,9 +216,34 @@ class AppStoreDiscovery implements DiscoveryProviderInterface {
 	/**
 	 * @return list<array<array-key, mixed>>|null
 	 */
+	/**
+	 * The App Store catalogue endpoint.
+	 *
+	 * Honours the SAME `appstore.api_base` override `AppStoreSource` reads.
+	 * This class hard-coded the public store, so the two halves of "talk to the
+	 * App Store" disagreed: an instance pointed at a mirror (or, in e2e, at a
+	 * fixture) got its VERSION LISTINGS from the mirror and its DISCOVERY from
+	 * garm3.nextcloud.com anyway. On an air-gapped or restricted network that
+	 * is not a visible misconfiguration — search just returns nothing, which is
+	 * indistinguishable from "no apps matched".
+	 *
+	 * One key should govern both paths, which is what the config's own
+	 * documentation already implies.
+	 */
+	private function endpoint(): string {
+		/** @var string|null $raw */
+		$raw = $this->config->getValueString(Application::APP_ID, 'appstore.api_base', '');
+		$override = trim((string)$raw);
+
+		return rtrim($override !== '' ? $override : self::DEFAULT_API_BASE, '/') . '/apps.json';
+	}
+
+	/**
+	 * @return list<array<array-key, mixed>>|null
+	 */
 	private function fetchCatalog(): ?array {
 		try {
-			$response = $this->clientService->newClient()->get(self::ENDPOINT, [
+			$response = $this->clientService->newClient()->get($this->endpoint(), [
 				'timeout' => self::FETCH_TIMEOUT_SECONDS,
 				'http_errors' => false,
 			]);
