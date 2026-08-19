@@ -30,7 +30,7 @@ test.describe('app discovery', () => {
 		await page.getByTestId('discover-search-input').fill('calendar')
 
 		const hits = page.getByTestId('discover-hit')
-		await expect(hits.first(), await discoverDiagnostics(page, 'calendar')).toBeVisible({ timeout: 90_000 })
+		await expect(hits.first(), await discoverDiagnostics(page, 'calendar')).toBeVisible({ timeout: 45_000 })
 		expect(await hits.count()).toBeGreaterThan(0)
 
 		// Every hit names the source it came from.
@@ -44,7 +44,7 @@ test.describe('app discovery', () => {
 		// `dashboard` ships with Nextcloud, so it is always installed.
 		await page.getByTestId('discover-search-input').fill('dashboard')
 		const hit = page.getByTestId('discover-hit').filter({ hasText: 'dashboard' }).first()
-		await expect(hit, await discoverDiagnostics(page, 'dashboard')).toBeVisible({ timeout: 90_000 })
+		await expect(hit, await discoverDiagnostics(page, 'dashboard')).toBeVisible({ timeout: 45_000 })
 		await expect(hit.getByTestId('discover-installed-version')).toBeVisible()
 
 		await hit.getByTestId('discover-open-app').click()
@@ -76,7 +76,7 @@ test.describe('app discovery', () => {
 		await openSettings(page)
 		await openTab(page, 'Discover')
 		await page.getByTestId('discover-search-input').fill('zznomatchapp-qxwv')
-		await expect(page.getByTestId('discover-empty')).toBeVisible({ timeout: 90_000 })
+		await expect(page.getByTestId('discover-empty')).toBeVisible({ timeout: 45_000 })
 		await expect(page.getByTestId('discover-hit')).toHaveCount(0)
 	})
 })

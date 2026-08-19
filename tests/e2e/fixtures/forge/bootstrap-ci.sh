@@ -94,6 +94,13 @@ occ config:app:set app_versions forge.codeberg.web_base --value="${BASE}" > /dev
 occ config:app:set app_versions forge.github.api_base --value="${BASE}" > /dev/null
 occ config:app:set app_versions forge.github.web_base --value="${BASE}" > /dev/null
 occ config:system:set allow_local_remote_servers --value=true --type=boolean > /dev/null
+
+# Point the App Store at the fixture too. Reaching the real catalogue
+# (~12.4 MB from garm3.nextcloud.com) is what left discovery and version
+# listing timing out at 20s while every other endpoint answered in 60ms — the
+# forge double already removed that dependency for forge sources, and this
+# removes the last one, so the suite stops asserting on somebody else's uptime.
+occ config:app:set app_versions appstore.api_base --value="${BASE}/appstore/api/v1" > /dev/null
 occ config:app:set app_versions trusted_sources \
 	--value='["github:ConductionNL/*","codeberg:Conduction/*","codeberg:fixtureowner/*","github:fixtureowner/*"]' > /dev/null
 
