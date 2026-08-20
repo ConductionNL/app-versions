@@ -512,6 +512,13 @@ const loadPins = async (): Promise<void> => {
 			map[pin.appId] = pin
 		}
 		pins.value = map
+		// TEMPORARY TRACE (issue #160) — remove once the cause is found.
+		// loadPins demonstrably completes without throwing, so `map` is what it
+		// is; printing its keys is the only way to tell "no pins returned" from
+		// "pins returned under a key the card does not use". Reasoning about it
+		// has been wrong twice.
+		// eslint-disable-next-line no-console
+		console.info('[app_versions][trace] loadPins keys:', JSON.stringify(Object.keys(map)))
 	} catch (error) {
 		// NOT a bare `catch {}`. A silent catch here is why this took seven
 		// eliminated hypotheses to chase: pins ends up `{}` and the app-card
