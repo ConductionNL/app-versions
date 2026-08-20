@@ -102,6 +102,15 @@ test.describe('version pinning', () => {
 		// list whose card was located above) was captured proves the instrument
 		// works before its silence is read as a finding.
 		const appVersionsCalls: string[] = []
+		// An ABORTED or failed request fires `requestfailed`, never `response`,
+		// so the response listener alone cannot tell "never requested" from
+		// "requested and died". Both render no badge; only one of them is the
+		// app's fault.
+		page.on('requestfailed', (req) => {
+			if (req.url().includes('app_versions')) {
+				appVersionsCalls.push(`FAILED(${req.failure()?.errorText ?? '?'}) ${req.url().replace(/^https?:\/\/[^/]+/, '')}`)
+			}
+		})
 		page.on('response', async (res) => {
 			const url = res.url()
 			if (!url.includes('app_versions')) {
