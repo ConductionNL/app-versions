@@ -16,7 +16,7 @@ use InvalidArgumentException;
 use OCA\AppVersions\Db\AuditEntryMapper;
 use OCA\AppVersions\Db\Pat;
 use OCA\AppVersions\Db\PatMapper;
-use OCA\AppVersions\Service\Advisory\AdvisoryService;
+use OCA\AppVersions\Service\Advisory\AdvisoryResultStore;
 use OCA\AppVersions\Service\AutoUpdate\AutoUpdateSettingsStore;
 use OCA\AppVersions\Service\AutoUpdate\AutoUpdateWindow;
 use OCA\AppVersions\Service\Cache\ArtifactCache;
@@ -62,7 +62,7 @@ class ApiController extends OCSController {
 		private PatDeeplinkBuilder $deeplinkBuilder,
 		private PatExpiryEvaluator $patExpiryEvaluator,
 		private DiscoveryAggregator $discoveryAggregator,
-		private AdvisoryService $advisoryService,
+		private AdvisoryResultStore $advisoryResultStore,
 		private AuditEntryMapper $auditEntryMapper,
 		private PinStore $pinStore,
 		private IAppManager $appManager,
@@ -108,14 +108,28 @@ class ApiController extends OCSController {
 	}
 
 	/**
-	 * Correlates each installed app's version against known security advisories
-	 * (admin-only, read-only). Returns a per-app map of advisory state
+	 * Returns the most recent security-advisory correlation for each installed
+	 * app (admin-only, read-only): a per-app map of advisory state
 	 * (`none` | `advisory-available` | `pinned-to-vulnerable`), the matching
-	 * advisories, and the recommended safe version. Never changes a version
+	 * advisories, and the recommended safe version. Never changes a version.
 	 *
-	 * @return DataResponse<Http::STATUS_OK, array{advisories: array<string, mixed>}, array{}>|DataResponse<Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 * READS A SNAPSHOT, DOES NOT COMPUTE ONE. Correlation costs two external
+	 * calls per app — ~176 sequential calls on an 88-app instance — which this
+	 * endpoint used to do inline. Measured on a live instance it then did not
+	 * answer within 120s, twice, and while it held the PHP session lock the
+	 * sibling `/api/pins` request never ran at all, so pin badges silently
+	 * never rendered (issue #160). The sweep now runs in AdvisoryRefreshJob
+	 * every 6 hours and this endpoint serves what it stored.
 	 *
-	 * 200: Advisory correlation returned
+	 * `checkedAt` is part of the contract, not decoration: it is the unix time
+	 * of the last completed sweep, and `null` means no sweep has completed
+	 * yet. Without it the client cannot tell a fresh "no advisories" from a
+	 * six-hour-old one, or from an instance whose cron has never run — three
+	 * states that otherwise render as an identical empty map.
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array{advisories: array<string, mixed>, checkedAt: ?int}, array{}>|DataResponse<Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: Stored advisory correlation returned
 	 * 403: Caller is not an administrator
 	 *
 	 * @spec openspec/specs/security-advisory-correlation/spec.md
@@ -126,7 +140,12 @@ class ApiController extends OCSController {
 			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
 		}
 
-		return new DataResponse(['advisories' => $this->advisoryService->correlateAll()]);
+		$snapshot = $this->advisoryResultStore->read();
+
+		return new DataResponse([
+			'advisories' => $snapshot['advisories'],
+			'checkedAt' => $snapshot['checkedAt'],
+		]);
 	}
 
 	/**

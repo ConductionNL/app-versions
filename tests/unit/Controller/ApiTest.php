@@ -8,7 +8,7 @@ use OCA\AppVersions\Controller\ApiController;
 use OCA\AppVersions\Db\AuditEntry;
 use OCA\AppVersions\Db\AuditEntryMapper;
 use OCA\AppVersions\Db\PatMapper;
-use OCA\AppVersions\Service\Advisory\AdvisoryService;
+use OCA\AppVersions\Service\Advisory\AdvisoryResultStore;
 use OCA\AppVersions\Service\AutoUpdate\AutoUpdateSettingsStore;
 use OCA\AppVersions\Service\Cache\ArtifactCache;
 use OCA\AppVersions\Service\Discovery\DiscoveryAggregator;
@@ -66,7 +66,7 @@ final class ApiTest extends TestCase {
 			$this->createMock(PatDeeplinkBuilder::class),
 			$this->createMock(PatExpiryEvaluator::class),
 			$this->createMock(DiscoveryAggregator::class),
-			$this->createMock(AdvisoryService::class),
+			$this->createMock(AdvisoryResultStore::class),
 			$auditEntryMapper ?? $this->createMock(AuditEntryMapper::class),
 			$pinStore ?? $this->createMock(PinStore::class),
 			$appManager ?? $this->createMock(IAppManager::class),
@@ -112,7 +112,7 @@ final class ApiTest extends TestCase {
 			$this->createMock(PatDeeplinkBuilder::class),
 			$this->createMock(PatExpiryEvaluator::class),
 			$this->createMock(DiscoveryAggregator::class),
-			$this->createMock(AdvisoryService::class),
+			$this->createMock(AdvisoryResultStore::class),
 			$auditEntryMapper ?? $this->createMock(AuditEntryMapper::class),
 			$pinStore ?? $this->createMock(PinStore::class),
 			$appManager ?? $this->createMock(IAppManager::class),

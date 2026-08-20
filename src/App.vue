@@ -488,16 +488,57 @@ const loadApps = async (): Promise<void> => {
 // Advisory correlation is fetched separately from the app list so a slow or
 // unreachable advisory source never delays the (fast) app list. The badge
 // appears once this resolves. Read-only — it never changes a version.
+//
+// The endpoint returns a STORED snapshot written by the 6-hourly
+// AdvisoryRefreshJob, not a live correlation, so `checkedAt` travels with it
+// and is rendered. An empty map has three quite different causes — swept and
+// found nothing, never swept because cron has not run, or the fetch failed —
+// and without the timestamp all three render as "no advisories", which reads
+// as reassurance the data does not support.
 const loadAdvisories = async (): Promise<void> => {
 	try {
 		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/advisories')), { headers: { ...ocsHeaders, Accept: 'application/json' }, signal: AbortSignal.timeout(BACKGROUND_FETCH_TIMEOUT_MS) })
-		const payload = await unwrapOcsResponse<{ advisories: Record<string, AdvisoryCorrelation> }>(response)
+		const payload = await unwrapOcsResponse<{ advisories: Record<string, AdvisoryCorrelation>, checkedAt: number | null }>(response)
 		advisories.value = payload.advisories || {}
+		advisoriesCheckedAt.value = payload.checkedAt ?? null
+		advisoriesUnavailable.value = false
 	} catch {
-		// Non-fatal: the app list stays usable without advisory badges.
+		// Non-fatal: the app list stays usable without advisory badges. The
+		// flag keeps "we could not ask" distinct from "nothing to report".
 		advisories.value = {}
+		advisoriesCheckedAt.value = null
+		advisoriesUnavailable.value = true
 	}
 }
+
+// Unix seconds of the last completed sweep; null means none has completed.
+const advisoriesCheckedAt = ref<number | null>(null)
+// True only when the fetch itself failed — never merely because the map is empty.
+const advisoriesUnavailable = ref(false)
+
+/**
+ * How the advisory data should describe itself. Deliberately says something
+ * in all three states rather than falling silent when there is nothing to
+ * report, because silence is what made #160 invisible for so long.
+ */
+const advisoryFreshnessLabel = computed((): string => {
+	if (advisoriesUnavailable.value) {
+		return t('app_versions', 'Advisory status unavailable — could not reach the server')
+	}
+	if (advisoriesCheckedAt.value === null) {
+		return t('app_versions', 'Advisories not checked yet — the background job runs every 6 hours')
+	}
+
+	const ageMinutes = Math.max(0, Math.round((Date.now() / 1000 - advisoriesCheckedAt.value) / 60))
+	if (ageMinutes < 1) {
+		return t('app_versions', 'Advisories checked just now')
+	}
+	if (ageMinutes < 60) {
+		return t('app_versions', 'Advisories checked {minutes} min ago', { minutes: ageMinutes })
+	}
+
+	return t('app_versions', 'Advisories checked {hours} h ago', { hours: Math.round(ageMinutes / 60) })
+})
 
 const advisoryFor = (appId: string): AdvisoryCorrelation | null => advisories.value[appId] ?? null
 
@@ -1556,6 +1597,11 @@ watch(dryRunEnabled, () => {
 						{{ tabLabel(tab.id) }}
 					</NcButton>
 				</div>
+				<p v-show="currentTab === 'apps'"
+					:class="$style.advisoryFreshness"
+					data-testid="advisory-freshness">
+					{{ advisoryFreshnessLabel }}
+				</p>
 				<div v-show="currentTab === 'apps'"
 					id="apps-panel"
 					role="tabpanel"
@@ -2100,6 +2146,15 @@ watch(dryRunEnabled, () => {
 	background: var(--color-main-background);
 	padding: 16px;
 	margin-top: 8px;
+}
+
+/* Freshness line for the advisory snapshot. Muted, because it is context for
+   the badges rather than a finding of its own — but always present, since the
+   age of a security answer is part of the answer. */
+.advisoryFreshness {
+	margin: 0 0 12px;
+	color: var(--color-text-maxcontrast);
+	font-size: 0.9em;
 }
 
 .tabs {
