@@ -123,11 +123,18 @@ const suppressSafeModeAutoClear = ref(false)
  * absent — with no error, no console output and no failed request, because a
  * promise that never settles reaches neither the success path nor the catch.
  *
- * 20s is far above any healthy response here (every other endpoint on this page
+ * 8s is far above any healthy response here (every other endpoint on this page
  * answers in ~60ms) so a timeout means something is genuinely wrong, and the
  * catch then reports it instead of the UI quietly missing a feature.
+ *
+ * ⚠️ It was 20s, and that made the abort UNOBSERVABLE: the e2e assertion that
+ * watches for the pin badge gives up at 15s, so the timeout fired after the
+ * test had already failed and the catch never ran within the window. A bound
+ * must fit inside the bound that contains it — the same arithmetic error as a
+ * retry that outlasts its job cap. Keep this below the 15s expect timeout in
+ * playwright.config.ts.
  */
-const BACKGROUND_FETCH_TIMEOUT_MS = 20_000
+const BACKGROUND_FETCH_TIMEOUT_MS = 8_000
 
 const safeModeStorageKey = 'app_versions_safe_mode'
 const debugModeStorageKey = 'app_versions_debug_mode'
