@@ -113,6 +113,22 @@ const downgradeOrphanedMigrations = ref<string[] | null>(null)
 // Suppresses the safe-mode auto-clear watcher while "Roll back to last
 // known good" programmatically selects a (necessarily older) version.
 const suppressSafeModeAutoClear = ref(false)
+/**
+ * Ceiling for the three non-blocking loaders fired after the app list renders
+ * (advisories, pins, policies).
+ *
+ * Without one, `fetch` waits forever. Measured (issue #160): all three were
+ * left permanently suspended at their `await fetch`, so `pins` never left `{}`
+ * and pin badges, advisory badges and auto-update policy state were silently
+ * absent — with no error, no console output and no failed request, because a
+ * promise that never settles reaches neither the success path nor the catch.
+ *
+ * 20s is far above any healthy response here (every other endpoint on this page
+ * answers in ~60ms) so a timeout means something is genuinely wrong, and the
+ * catch then reports it instead of the UI quietly missing a feature.
+ */
+const BACKGROUND_FETCH_TIMEOUT_MS = 20_000
+
 const safeModeStorageKey = 'app_versions_safe_mode'
 const debugModeStorageKey = 'app_versions_debug_mode'
 const dryRunStorageKey = 'app_versions_dry_run_mode'
@@ -467,7 +483,7 @@ const loadApps = async (): Promise<void> => {
 // appears once this resolves. Read-only — it never changes a version.
 const loadAdvisories = async (): Promise<void> => {
 	try {
-		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/advisories')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/advisories')), { headers: { ...ocsHeaders, Accept: 'application/json' }, signal: AbortSignal.timeout(BACKGROUND_FETCH_TIMEOUT_MS) })
 		const payload = await unwrapOcsResponse<{ advisories: Record<string, AdvisoryCorrelation> }>(response)
 		advisories.value = payload.advisories || {}
 	} catch {
@@ -505,7 +521,7 @@ const advisoryBadgeLabel = (state: AdvisoryCorrelation['state']): string => {
 // banner / the pin-override dialog. See "Honest pin presentation".
 const loadPins = async (): Promise<void> => {
 	try {
-		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/pins')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/pins')), { headers: { ...ocsHeaders, Accept: 'application/json' }, signal: AbortSignal.timeout(BACKGROUND_FETCH_TIMEOUT_MS) })
 		const payload = await unwrapOcsResponse<{ pins: PinRecord[] }>(response)
 		const map: Record<string, PinRecord> = {}
 		for (const pin of payload.pins || []) {
@@ -548,7 +564,7 @@ const pinTooltip = (pin: PinRecord | null): string => {
 // writes go through onPolicyChange()/saveAutoUpdateSettings().
 const loadPolicies = async (): Promise<void> => {
 	try {
-		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/policies')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/policies')), { headers: { ...ocsHeaders, Accept: 'application/json' }, signal: AbortSignal.timeout(BACKGROUND_FETCH_TIMEOUT_MS) })
 		const payload = await unwrapOcsResponse<{ policies?: PolicyRecord[], autoUpdateEnabled?: boolean, autoUpdateWindow?: string }>(response)
 		const map: Record<string, PolicyRecord> = {}
 		for (const policy of payload.policies || []) {
