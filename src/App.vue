@@ -1618,6 +1618,7 @@ watch(dryRunEnabled, () => {
 										<article
 											v-for="app in filteredApps"
 											:key="app.id"
+											:data-app-id="app.id"
 											:class="[$style.appCard, { [$style.appCardSelected]: selectedApp === app.id, [$style.appCardCore]: app.isCore }]">
 											<div :class="$style.appCardBody">
 												<div :class="$style.appCardHeader">

@@ -99,10 +99,16 @@ test.describe('version pinning', () => {
 		// is a CORE app, and the list hides core apps when the visibility
 		// filter says so — that filter defaults to 'show', but a stale stored
 		// preference would silently empty this list.
-		const card = page.locator('article').filter({ has: page.getByText(APP, { exact: true }) }).first()
+		// Located by the card's OWN app id, not by its visible text. The card
+		// renders `{{ app.label }}`, so a text match proves a label contains the
+		// string — it says nothing about `app.id`, which is the value the
+		// badge's `pinFor(app.id)` actually keys on. Those are the two sides of
+		// the comparison under test, so matching on the wrong one would make a
+		// green assertion meaningless.
+		const card = page.locator(`article[data-app-id="${APP}"]`)
 		await expect(
 			card,
-			`the app card for "${APP}" is not in the Apps list at all — check the core-apps visibility filter before looking at the badge`,
+			`no app card has data-app-id="${APP}" — the pin is keyed by appId, so if the card's id differs from the API's appId that mismatch IS the bug`,
 		).toBeVisible()
 
 		const badge = page.getByTestId('pin-badge').first()
