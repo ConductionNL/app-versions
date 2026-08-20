@@ -90,93 +90,9 @@ test.describe('version pinning', () => {
 			`GET /api/pins must list the pin just seeded for "${APP}" — if this passes and the badge below does not appear, the break is in the component, not the API`,
 		).toContain(APP)
 
-		// `loadPins()` swallows any failure into `pins.value = {}`, so a broken
-		// fetch and an empty pin list are indistinguishable from the outside —
-		// and both render no badge. Capture what the BROWSER actually got, as
-		// opposed to what page.request got above with a different client.
-		const pinsResponses: Array<{ status: number, body: string }> = []
-		// POSITIVE CONTROL. Every app_versions URL is recorded, not just
-		// /api/pins — because "the app never requested /api/pins" and "this
-		// listener never fired for anything" produce the identical empty array.
-		// Asserting that a call we KNOW happens (/api/apps, which populates the
-		// list whose card was located above) was captured proves the instrument
-		// works before its silence is read as a finding.
-		const appVersionsCalls: string[] = []
-		// The page IS a running instance — CI has one, so an unhandled
-		// exception can be read here rather than guessed at. `pageerror` fires
-		// for an uncaught throw or rejection in the page, which is exactly what
-		// would stop `onMounted` before its last three statements.
-		const pageErrors: string[] = []
-		page.on('pageerror', (err) => pageErrors.push(`${err.name}: ${err.message}`))
-		page.on('console', (msg) => {
-			const text = msg.text()
-			if (msg.type() === 'error') {
-				pageErrors.push(`console.error: ${text.slice(0, 200)}`)
-			}
-			// Temporary onMounted trace (issue #160). Absent entirely means the
-			// bundle under test is not the source; present before but not after
-			// means execution stops at that await.
-			if (text.includes('[app_versions][trace]')) {
-				pageErrors.push(text.slice(0, 200))
-			}
-		})
-		// An ABORTED or failed request fires `requestfailed`, never `response`,
-		// so the response listener alone cannot tell "never requested" from
-		// "requested and died". Both render no badge; only one of them is the
-		// app's fault.
-		page.on('requestfailed', (req) => {
-			if (req.url().includes('app_versions')) {
-				appVersionsCalls.push(`FAILED(${req.failure()?.errorText ?? '?'}) ${req.url().replace(/^https?:\/\/[^/]+/, '')}`)
-			}
-		})
-		page.on('response', async (res) => {
-			const url = res.url()
-			if (!url.includes('app_versions')) {
-				return
-			}
-			appVersionsCalls.push(`${res.status()} ${url.replace(/^https?:\/\/[^/]+/, '')}`)
-			if (!url.includes('/api/pins')) {
-				return
-			}
-			await res.text()
-				.then((body) => pinsResponses.push({ status: res.status(), body: body.slice(0, 200) }))
-				.catch(() => pinsResponses.push({ status: res.status(), body: '<unreadable>' }))
-		})
-
 		await openSettings(page)
 		await openTab(page, 'Apps')
 
-		// expect.poll, NOT a bare expect: `loadPins()` is fire-and-forget
-		// (`void loadPins()`), so its response can land after `openTab` returns.
-		// A plain `expect(array.length)` does not retry, and would report "the
-		// app never requested it" for a request that simply had not arrived —
-		// blaming the app for the instrument's impatience.
-		// The control first: if this fails, the listener is the problem and
-		// nothing below it means anything.
-		await expect
-			.poll(() => appVersionsCalls.filter((c) => c.includes('/api/apps')).length, {
-				message: 'the response listener captured no /api/apps call, so it is not observing this page — its silence about /api/pins proves nothing',
-				timeout: 15_000,
-			})
-			.toBeGreaterThan(0)
-
-		await expect
-			.poll(() => pinsResponses.length, {
-				message: `the app never requested /api/pins — loadPins() did not run, so pins is empty by omission rather than by response.\n  app_versions calls seen: ${JSON.stringify(appVersionsCalls)}\n  page errors seen: ${JSON.stringify(pageErrors)}`,
-				timeout: 15_000,
-			})
-			.toBeGreaterThan(0)
-		expect(
-			pinsResponses.map((r) => r.status),
-			`the app's own /api/pins call did not return 200 — its catch sets pins = {} silently, which renders no badge. Bodies: ${JSON.stringify(pinsResponses)}`,
-		).toContain(200)
-
-		// Split the last hypothesis: is the CARD missing, or is the card there
-		// and only the badge absent? The badge renders inside the app card, so
-		// "no badge" is ambiguous until the card itself is located. `dashboard`
-		// is a CORE app, and the list hides core apps when the visibility
-		// filter says so — that filter defaults to 'show', but a stale stored
-		// preference would silently empty this list.
 		// Located by the card's OWN app id, not by its visible text. The card
 		// renders `{{ app.label }}`, so a text match proves a label contains the
 		// string — it says nothing about `app.id`, which is the value the
