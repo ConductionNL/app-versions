@@ -45,6 +45,19 @@ use Psr\Log\LoggerInterface;
  */
 class AdvisoryService {
 	public const STATE_NONE = 'none';
+
+	/**
+	 * Wall-clock ceiling for a full correlateAll() sweep, in seconds.
+	 *
+	 * Chosen against the frontend that consumes it: App.vue aborts its
+	 * background fetches at 8s, so a server budget above that would be spent
+	 * producing a response nobody is still waiting for. 5s leaves room for the
+	 * response to be serialised and delivered inside that window — a bound must
+	 * fit inside the bound that contains it.
+	 *
+	 * @var float
+	 */
+	private const CORRELATE_ALL_BUDGET_SECONDS = 5.0;
 	public const STATE_AVAILABLE = 'advisory-available';
 	public const STATE_VULNERABLE = 'pinned-to-vulnerable';
 
@@ -106,7 +119,38 @@ class AdvisoryService {
 	 */
 	public function correlateAll(): array {
 		$results = [];
+		$deadline = microtime(true) + self::CORRELATE_ALL_BUDGET_SECONDS;
+
 		foreach ($this->appManager->getEnabledApps() as $appId) {
+			// BUDGET, BECAUSE THIS ENDPOINT COULD NOT PREVIOUSLY RETURN AT ALL.
+			//
+			// correlate() makes TWO source calls per app (listAdvisories and
+			// listVersions), so an instance with 88 enabled apps issues 176
+			// sequential external calls on a page-load path. Measured on a live
+			// instance: /api/advisories did not answer within 120s, twice.
+			//
+			// It could not even warm its own per-app payload cache, because the
+			// cache is written on completion and the request never completed —
+			// so a second call was exactly as slow as the first.
+			//
+			// The knock-on was worse than a slow badge: this is dispatched
+			// first of the three background loaders, and while it held the PHP
+			// session lock /api/pins never ran, so pin badges never rendered
+			// and nothing anywhere reported why (issue #160).
+			//
+			// Apps not reached report `error` rather than being dropped: the
+			// caller already treats that field as "could not answer", so
+			// coverage is unchanged in shape — what changes is that a slow
+			// source degrades to a stated gap instead of an endpoint that hangs.
+			if (microtime(true) >= $deadline) {
+				$results[$appId] = $this->emptyResult(
+					$appId,
+					$this->installedVersion($appId),
+					'Advisory correlation budget exceeded before this app was reached; its sources were not queried.'
+				);
+				continue;
+			}
+
 			try {
 				$results[$appId] = $this->correlate($appId);
 			} catch (\Throwable $error) {
