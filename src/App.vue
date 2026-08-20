@@ -535,13 +535,6 @@ const loadPins = async (): Promise<void> => {
 			map[pin.appId] = pin
 		}
 		pins.value = map
-		// TEMPORARY TRACE (issue #160) — remove once the cause is found.
-		// loadPins demonstrably completes without throwing, so `map` is what it
-		// is; printing its keys is the only way to tell "no pins returned" from
-		// "pins returned under a key the card does not use". Reasoning about it
-		// has been wrong twice.
-		// eslint-disable-next-line no-console
-		console.info('[app_versions][trace] loadPins keys:', JSON.stringify(Object.keys(map)))
 	} catch (error) {
 		// NOT a bare `catch {}`. A silent catch here is why this took seven
 		// eliminated hypotheses to chase: pins ends up `{}` and the app-card
@@ -1443,20 +1436,19 @@ onMounted(async () => {
 	} finally {
 		isLoading.value = false
 	}
-	// TEMPORARY TRACE (issue #160) — remove once the cause is found.
-	// The source says the three calls below are unconditional, yet CI shows
-	// /api/pins, /api/advisories and /api/policies are never requested, with no
-	// page error and no aborted request. Either execution does not arrive here,
-	// or the bundle under test is not this source. These markers tell the two
-	// apart: absent entirely => stale bundle; present before but not after =>
-	// execution stops at that await.
-	// eslint-disable-next-line no-console
-	console.info('[app_versions][trace] onMounted: reached post-load section')
+	// Kick off advisory correlation, pin state, and auto-update policies after
+	// the list renders (non-blocking). Each handles its own failures; the extra
+	// catch guards a SYNCHRONOUS throw before the first await, which would
+	// otherwise take the following calls down with it.
+	//
+	// ⚠️ These three do NOT currently complete — see issue #160. Traced with
+	// console markers: execution demonstrably reaches this line and all three
+	// are invoked, yet none reaches its success path or its catch, so each is
+	// still parked on its `await fetch`. Consequence: pin badges, advisory
+	// badges and auto-update policy state are silently absent.
 	void loadAdvisories().catch(() => undefined)
 	void loadPins().catch(() => undefined)
 	void loadPolicies().catch(() => undefined)
-	// eslint-disable-next-line no-console
-	console.info('[app_versions][trace] onMounted: dispatched advisories/pins/policies')
 })
 
 watch([safeModeEnabled, installedVersion, selectedVersion], () => {
