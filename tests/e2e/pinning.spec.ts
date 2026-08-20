@@ -107,10 +107,17 @@ test.describe('version pinning', () => {
 		await openSettings(page)
 		await openTab(page, 'Apps')
 
-		expect(
-			pinsResponses.length,
-			'the app never requested /api/pins — loadPins() did not run, so pins is empty by omission rather than by response',
-		).toBeGreaterThan(0)
+		// expect.poll, NOT a bare expect: `loadPins()` is fire-and-forget
+		// (`void loadPins()`), so its response can land after `openTab` returns.
+		// A plain `expect(array.length)` does not retry, and would report "the
+		// app never requested it" for a request that simply had not arrived —
+		// blaming the app for the instrument's impatience.
+		await expect
+			.poll(() => pinsResponses.length, {
+				message: 'the app never requested /api/pins — loadPins() did not run, so pins is empty by omission rather than by response',
+				timeout: 15_000,
+			})
+			.toBeGreaterThan(0)
 		expect(
 			pinsResponses.map((r) => r.status),
 			`the app's own /api/pins call did not return 200 — its catch sets pins = {} silently, which renders no badge. Bodies: ${JSON.stringify(pinsResponses)}`,
