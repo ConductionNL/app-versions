@@ -93,10 +93,22 @@ test.describe('version pinning', () => {
 		await openSettings(page)
 		await openTab(page, 'Apps')
 
+		// Split the last hypothesis: is the CARD missing, or is the card there
+		// and only the badge absent? The badge renders inside the app card, so
+		// "no badge" is ambiguous until the card itself is located. `dashboard`
+		// is a CORE app, and the list hides core apps when the visibility
+		// filter says so — that filter defaults to 'show', but a stale stored
+		// preference would silently empty this list.
+		const card = page.locator('article').filter({ has: page.getByText(APP, { exact: true }) }).first()
+		await expect(
+			card,
+			`the app card for "${APP}" is not in the Apps list at all — check the core-apps visibility filter before looking at the badge`,
+		).toBeVisible()
+
 		const badge = page.getByTestId('pin-badge').first()
 		await expect(
 			badge,
-			`the API lists a pin for "${APP}" (asserted above), so an absent badge means the Apps list did not render it`,
+			`the API lists a pin for "${APP}" and its card IS rendered (both asserted above), so the badge's own v-if="pinFor(app.id)" is what did not match — compare the pin's appId against the card's app.id`,
 		).toBeVisible()
 		await expect(badge).toContainText('Pinned')
 		// Attribution is carried in the title so hovering explains the badge.
