@@ -109,8 +109,15 @@ test.describe('version pinning', () => {
 		const pageErrors: string[] = []
 		page.on('pageerror', (err) => pageErrors.push(`${err.name}: ${err.message}`))
 		page.on('console', (msg) => {
+			const text = msg.text()
 			if (msg.type() === 'error') {
-				pageErrors.push(`console.error: ${msg.text().slice(0, 200)}`)
+				pageErrors.push(`console.error: ${text.slice(0, 200)}`)
+			}
+			// Temporary onMounted trace (issue #160). Absent entirely means the
+			// bundle under test is not the source; present before but not after
+			// means execution stops at that await.
+			if (text.includes('[app_versions][trace]')) {
+				pageErrors.push(text.slice(0, 200))
 			}
 		})
 		// An ABORTED or failed request fires `requestfailed`, never `response`,

@@ -1407,13 +1407,20 @@ onMounted(async () => {
 	} finally {
 		isLoading.value = false
 	}
-	// Kick off advisory correlation, pin state, and auto-update policies after
-	// the list renders (non-blocking). Each already handles its own failures;
-	// the extra catch here is for a SYNCHRONOUS throw before their first await,
-	// which would otherwise take the following calls down with it.
+	// TEMPORARY TRACE (issue #160) — remove once the cause is found.
+	// The source says the three calls below are unconditional, yet CI shows
+	// /api/pins, /api/advisories and /api/policies are never requested, with no
+	// page error and no aborted request. Either execution does not arrive here,
+	// or the bundle under test is not this source. These markers tell the two
+	// apart: absent entirely => stale bundle; present before but not after =>
+	// execution stops at that await.
+	// eslint-disable-next-line no-console
+	console.info('[app_versions][trace] onMounted: reached post-load section')
 	void loadAdvisories().catch(() => undefined)
 	void loadPins().catch(() => undefined)
 	void loadPolicies().catch(() => undefined)
+	// eslint-disable-next-line no-console
+	console.info('[app_versions][trace] onMounted: dispatched advisories/pins/policies')
 })
 
 watch([safeModeEnabled, installedVersion, selectedVersion], () => {
