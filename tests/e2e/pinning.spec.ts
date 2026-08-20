@@ -102,6 +102,17 @@ test.describe('version pinning', () => {
 		// list whose card was located above) was captured proves the instrument
 		// works before its silence is read as a finding.
 		const appVersionsCalls: string[] = []
+		// The page IS a running instance — CI has one, so an unhandled
+		// exception can be read here rather than guessed at. `pageerror` fires
+		// for an uncaught throw or rejection in the page, which is exactly what
+		// would stop `onMounted` before its last three statements.
+		const pageErrors: string[] = []
+		page.on('pageerror', (err) => pageErrors.push(`${err.name}: ${err.message}`))
+		page.on('console', (msg) => {
+			if (msg.type() === 'error') {
+				pageErrors.push(`console.error: ${msg.text().slice(0, 200)}`)
+			}
+		})
 		// An ABORTED or failed request fires `requestfailed`, never `response`,
 		// so the response listener alone cannot tell "never requested" from
 		// "requested and died". Both render no badge; only one of them is the
@@ -144,7 +155,7 @@ test.describe('version pinning', () => {
 
 		await expect
 			.poll(() => pinsResponses.length, {
-				message: `the app never requested /api/pins — loadPins() did not run, so pins is empty by omission rather than by response. app_versions calls actually seen: ${JSON.stringify(appVersionsCalls)}`,
+				message: `the app never requested /api/pins — loadPins() did not run, so pins is empty by omission rather than by response.\n  app_versions calls seen: ${JSON.stringify(appVersionsCalls)}\n  page errors seen: ${JSON.stringify(pageErrors)}`,
 				timeout: 15_000,
 			})
 			.toBeGreaterThan(0)
