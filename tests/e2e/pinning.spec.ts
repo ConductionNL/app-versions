@@ -75,11 +75,29 @@ test.describe('version pinning', () => {
 		})
 		expect(put.ok(), 'seeding a pin via API should succeed').toBeTruthy()
 
+		// The badge renders `v-if="pinFor(app.id)"`, fed by GET /api/pins. So
+		// "element(s) not found" has three quite different causes — the pin was
+		// never stored, the list endpoint does not return it, or the component
+		// did not render it — and the locator alone cannot tell them apart.
+		// Reading the API first turns one opaque failure into a statement about
+		// WHICH link of that chain broke.
+		const pinsList = await page.request.get('/ocs/v2.php/apps/app_versions/api/pins?format=json', {
+			headers: { 'OCS-APIRequest': 'true' },
+		})
+		const listed = (await pinsList.json())?.ocs?.data?.pins ?? []
+		expect(
+			listed.map((p: { appId: string }) => p.appId),
+			`GET /api/pins must list the pin just seeded for "${APP}" — if this passes and the badge below does not appear, the break is in the component, not the API`,
+		).toContain(APP)
+
 		await openSettings(page)
 		await openTab(page, 'Apps')
 
 		const badge = page.getByTestId('pin-badge').first()
-		await expect(badge).toBeVisible()
+		await expect(
+			badge,
+			`the API lists a pin for "${APP}" (asserted above), so an absent badge means the Apps list did not render it`,
+		).toBeVisible()
 		await expect(badge).toContainText('Pinned')
 		// Attribution is carried in the title so hovering explains the badge.
 		await expect(badge).toHaveAttribute('title', /admin/)
