@@ -90,8 +90,31 @@ test.describe('version pinning', () => {
 			`GET /api/pins must list the pin just seeded for "${APP}" — if this passes and the badge below does not appear, the break is in the component, not the API`,
 		).toContain(APP)
 
+		// `loadPins()` swallows any failure into `pins.value = {}`, so a broken
+		// fetch and an empty pin list are indistinguishable from the outside —
+		// and both render no badge. Capture what the BROWSER actually got, as
+		// opposed to what page.request got above with a different client.
+		const pinsResponses: Array<{ status: number, body: string }> = []
+		page.on('response', async (res) => {
+			if (!res.url().includes('/api/pins')) {
+				return
+			}
+			await res.text()
+				.then((body) => pinsResponses.push({ status: res.status(), body: body.slice(0, 200) }))
+				.catch(() => pinsResponses.push({ status: res.status(), body: '<unreadable>' }))
+		})
+
 		await openSettings(page)
 		await openTab(page, 'Apps')
+
+		expect(
+			pinsResponses.length,
+			'the app never requested /api/pins — loadPins() did not run, so pins is empty by omission rather than by response',
+		).toBeGreaterThan(0)
+		expect(
+			pinsResponses.map((r) => r.status),
+			`the app's own /api/pins call did not return 200 — its catch sets pins = {} silently, which renders no badge. Bodies: ${JSON.stringify(pinsResponses)}`,
+		).toContain(200)
 
 		// Split the last hypothesis: is the CARD missing, or is the card there
 		// and only the badge absent? The badge renders inside the app card, so
