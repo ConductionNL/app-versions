@@ -512,8 +512,14 @@ const loadPins = async (): Promise<void> => {
 			map[pin.appId] = pin
 		}
 		pins.value = map
-	} catch {
+	} catch (error) {
+		// NOT a bare `catch {}`. A silent catch here is why this took seven
+		// eliminated hypotheses to chase: pins ends up `{}` and the app-card
+		// badge simply never renders, with nothing anywhere saying why — no
+		// failed request, no page error, no console output (issue #160).
 		pins.value = {}
+		// eslint-disable-next-line no-console
+		console.error('[app_versions] loadPins failed; pin badges will not render:', error)
 	}
 }
 
