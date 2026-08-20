@@ -1389,14 +1389,31 @@ onMounted(async () => {
 	try {
 		await checkUpdateChannel()
 		await loadApps()
+	} catch (error) {
+		// A `finally` WITHOUT a `catch` re-throws, and the three non-blocking
+		// loaders below are plain statements in the same function — so anything
+		// thrown here silently skipped ALL of them.
+		//
+		// Measured on CI (issue #160): the browser requested update-channel and
+		// apps, then NOTHING — no /api/pins, no /api/advisories, no
+		// /api/policies. `pins` therefore stayed `{}` and the app-card badge's
+		// `v-if="pinFor(app.id)"` never matched, which is why
+		// pinning.spec.ts:70 failed on every run since the suite began running.
+		//
+		// Catching does not depend on knowing WHAT throws: whatever it is, the
+		// page must still load its pins, advisories and policies. The message is
+		// surfaced rather than swallowed so the underlying throw stays visible.
+		errorMessage.value = error instanceof Error ? error.message : 'Could not initialise the app list.'
 	} finally {
 		isLoading.value = false
 	}
 	// Kick off advisory correlation, pin state, and auto-update policies after
-	// the list renders (non-blocking).
-	void loadAdvisories()
-	void loadPins()
-	void loadPolicies()
+	// the list renders (non-blocking). Each already handles its own failures;
+	// the extra catch here is for a SYNCHRONOUS throw before their first await,
+	// which would otherwise take the following calls down with it.
+	void loadAdvisories().catch(() => undefined)
+	void loadPins().catch(() => undefined)
+	void loadPolicies().catch(() => undefined)
 })
 
 watch([safeModeEnabled, installedVersion, selectedVersion], () => {
