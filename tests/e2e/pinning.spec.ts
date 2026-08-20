@@ -95,8 +95,20 @@ test.describe('version pinning', () => {
 		// and both render no badge. Capture what the BROWSER actually got, as
 		// opposed to what page.request got above with a different client.
 		const pinsResponses: Array<{ status: number, body: string }> = []
+		// POSITIVE CONTROL. Every app_versions URL is recorded, not just
+		// /api/pins — because "the app never requested /api/pins" and "this
+		// listener never fired for anything" produce the identical empty array.
+		// Asserting that a call we KNOW happens (/api/apps, which populates the
+		// list whose card was located above) was captured proves the instrument
+		// works before its silence is read as a finding.
+		const appVersionsCalls: string[] = []
 		page.on('response', async (res) => {
-			if (!res.url().includes('/api/pins')) {
+			const url = res.url()
+			if (!url.includes('app_versions')) {
+				return
+			}
+			appVersionsCalls.push(`${res.status()} ${url.replace(/^https?:\/\/[^/]+/, '')}`)
+			if (!url.includes('/api/pins')) {
 				return
 			}
 			await res.text()
@@ -112,9 +124,18 @@ test.describe('version pinning', () => {
 		// A plain `expect(array.length)` does not retry, and would report "the
 		// app never requested it" for a request that simply had not arrived —
 		// blaming the app for the instrument's impatience.
+		// The control first: if this fails, the listener is the problem and
+		// nothing below it means anything.
+		await expect
+			.poll(() => appVersionsCalls.filter((c) => c.includes('/api/apps')).length, {
+				message: 'the response listener captured no /api/apps call, so it is not observing this page — its silence about /api/pins proves nothing',
+				timeout: 15_000,
+			})
+			.toBeGreaterThan(0)
+
 		await expect
 			.poll(() => pinsResponses.length, {
-				message: 'the app never requested /api/pins — loadPins() did not run, so pins is empty by omission rather than by response',
+				message: `the app never requested /api/pins — loadPins() did not run, so pins is empty by omission rather than by response. app_versions calls actually seen: ${JSON.stringify(appVersionsCalls)}`,
 				timeout: 15_000,
 			})
 			.toBeGreaterThan(0)
