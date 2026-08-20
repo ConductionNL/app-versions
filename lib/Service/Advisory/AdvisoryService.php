@@ -47,17 +47,24 @@ class AdvisoryService {
 	public const STATE_NONE = 'none';
 
 	/**
-	 * Wall-clock ceiling for a full correlateAll() sweep, in seconds.
+	 * Default wall-clock ceiling for a correlateAll() sweep, in seconds.
 	 *
-	 * Chosen against the frontend that consumes it: App.vue aborts its
-	 * background fetches at 8s, so a server budget above that would be spent
-	 * producing a response nobody is still waiting for. 5s leaves room for the
-	 * response to be serialised and delivered inside that window — a bound must
-	 * fit inside the bound that contains it.
+	 * Sized for a caller someone is waiting on: App.vue aborts its background
+	 * fetches at 8s, so a budget above that would be spent producing a
+	 * response nobody is still waiting for. A bound must fit inside the bound
+	 * that contains it.
+	 *
+	 * NOTE that this default is now a fallback, not the normal path. The
+	 * request path no longer sweeps at all — it reads the snapshot written by
+	 * AdvisoryRefreshJob — and the job passes its own, far larger budget.
+	 * Leaving 5s as the default here would have quietly clipped the JOB to a
+	 * handful of apps, which is the opposite of what a background sweep is
+	 * for: the budget that made the endpoint answerable would have become the
+	 * budget that made the coverage wrong.
 	 *
 	 * @var float
 	 */
-	private const CORRELATE_ALL_BUDGET_SECONDS = 5.0;
+	public const CORRELATE_ALL_BUDGET_SECONDS = 5.0;
 	public const STATE_AVAILABLE = 'advisory-available';
 	public const STATE_VULNERABLE = 'pinned-to-vulnerable';
 
@@ -115,11 +122,16 @@ class AdvisoryService {
 	 * single unreachable source does not abort the whole sweep.
 	 *
 	 * @spec openspec/specs/security-advisory-correlation/spec.md
+	 * @param ?float $budgetSeconds Wall-clock ceiling for the sweep. Callers a
+	 *   user is waiting on should leave this null (see the default). The
+	 *   background refresh passes its own, much larger budget so that moving
+	 *   the work off the request path does not silently shrink what the
+	 *   feature covers.
 	 * @return array<string, array{appId: string, installedVersion: ?string, state: string, advisories: list<array{id: string, severity: string, summary: string}>, recommendedVersion: ?string, error: ?string}>
 	 */
-	public function correlateAll(): array {
+	public function correlateAll(?float $budgetSeconds = null): array {
 		$results = [];
-		$deadline = microtime(true) + self::CORRELATE_ALL_BUDGET_SECONDS;
+		$deadline = microtime(true) + ($budgetSeconds ?? self::CORRELATE_ALL_BUDGET_SECONDS);
 
 		foreach ($this->appManager->getEnabledApps() as $appId) {
 			// BUDGET, BECAUSE THIS ENDPOINT COULD NOT PREVIOUSLY RETURN AT ALL.
@@ -224,14 +236,16 @@ class AdvisoryService {
 	 * @return list<array{id: string, severity: string, summary: string}>
 	 */
 	private function summarise(array $advisories): array {
-		return array_values(array_map(
+		// No array_values(): $advisories is already a list, so mapping it
+		// yields a list.
+		return array_map(
 			static fn (array $a): array => [
 				'id' => $a['id'],
 				'severity' => $a['severity'],
 				'summary' => $a['summary'],
 			],
 			$advisories,
-		));
+		);
 	}
 
 	/**
@@ -270,9 +284,26 @@ class AdvisoryService {
 		if (preg_match('/^(<=|>=|<|>|=)?\s*(.+)$/', $clause, $matches) !== 1) {
 			return false;
 		}
-		$operator = $matches[1] !== '' ? $matches[1] : '=';
 		$bound = trim($matches[2]);
 		if ($bound === '') {
+			return false;
+		}
+
+		// version_compare's third argument is a CLOSED SET, and with an
+		// operator outside it the function returns null rather than a bool.
+		// The regex above already constrains the input, but naming the set
+		// here makes that guarantee visible to the type system instead of
+		// leaving a `bool|null` that only happens to be safe.
+		$operator = match ($matches[1]) {
+			'<' => '<',
+			'<=' => '<=',
+			'>' => '>',
+			'>=' => '>=',
+			// A bare version with no operator means equality.
+			'=', '' => '=',
+			default => null,
+		};
+		if ($operator === null) {
 			return false;
 		}
 
