@@ -58,6 +58,11 @@ class AdvisoryRefreshJob extends TimedJob {
 	}
 
 	/**
+	 * Sweeps every enabled app, stores the snapshot the admin UI reads, and
+	 * raises notifications for advisories that newly affect an installed or
+	 * pinned version.
+	 *
+	 * @spec openspec/specs/security-advisory-correlation/spec.md
 	 * @param mixed $argument
 	 */
 	protected function run($argument): void {
