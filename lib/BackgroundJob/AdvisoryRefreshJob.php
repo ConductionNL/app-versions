@@ -52,14 +52,17 @@ class AdvisoryRefreshJob extends TimedJob {
 		private AdvisoryNotifier $advisoryNotifier,
 		private AdvisoryDigestNotifier $digestNotifier,
 		private AdvisoryResultStore $resultStore,
-		private AdvisorySettingsStore $settings,
+		// NOT promoted to a property: the interval is read exactly once, here.
+		// TimedJob fixes its interval at construction, so keeping a reference
+		// would suggest the job can re-read the setting mid-life, which it
+		// cannot — the next run after a change picks up the new value because
+		// the job is constructed afresh.
+		AdvisorySettingsStore $settings,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct($time);
-		// Administrator-settable (6h default, 1–24 supported). Read here
-		// because TimedJob fixes its interval at construction; the next run
-		// after a settings change therefore picks up the new value.
-		$this->setInterval($this->settings->getIntervalSeconds());
+		// Administrator-settable: 6h default, 1–24 supported.
+		$this->setInterval($settings->getIntervalSeconds());
 	}
 
 	/**
