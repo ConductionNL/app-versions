@@ -17,6 +17,7 @@ use OCA\AppVersions\Db\AuditEntryMapper;
 use OCA\AppVersions\Db\Pat;
 use OCA\AppVersions\Db\PatMapper;
 use OCA\AppVersions\Service\Advisory\AdvisoryResultStore;
+use OCA\AppVersions\Service\Advisory\AdvisorySettingsStore;
 use OCA\AppVersions\Service\AutoUpdate\AutoUpdateSettingsStore;
 use OCA\AppVersions\Service\AutoUpdate\AutoUpdateWindow;
 use OCA\AppVersions\Service\Cache\ArtifactCache;
@@ -63,6 +64,7 @@ class ApiController extends OCSController {
 		private PatExpiryEvaluator $patExpiryEvaluator,
 		private DiscoveryAggregator $discoveryAggregator,
 		private AdvisoryResultStore $advisoryResultStore,
+		private AdvisorySettingsStore $advisorySettingsStore,
 		private AuditEntryMapper $auditEntryMapper,
 		private PinStore $pinStore,
 		private IAppManager $appManager,
@@ -798,6 +800,98 @@ class ApiController extends OCSController {
 		return new DataResponse([
 			'autoUpdateEnabled' => $this->autoUpdateSettingsStore->isEnabled(),
 			'autoUpdateWindow' => $this->autoUpdateSettingsStore->getWindow(),
+		]);
+	}
+
+	/**
+	 * Returns the advisory check settings: how often the sweep runs and
+	 * whether the weekly digest is sent (admin-only).
+	 *
+	 * The supported bounds travel WITH the values. A client that has to
+	 * hardcode the range in order to build a control will drift from the
+	 * server the first time the range changes.
+	 *
+	 * @return DataResponse<Http::STATUS_OK, array{intervalHours: int, minIntervalHours: int, maxIntervalHours: int, digestEnabled: bool}, array{}>|DataResponse<Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: Advisory settings returned
+	 * 403: Caller is not an administrator
+	 *
+	 * @spec openspec/specs/security-advisory-correlation/spec.md
+	 */
+	#[ApiRoute(verb: 'GET', url: '/api/advisory/settings')]
+	public function advisorySettings(): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		return new DataResponse([
+			'intervalHours' => $this->advisorySettingsStore->getIntervalHours(),
+			'minIntervalHours' => AdvisorySettingsStore::MIN_INTERVAL_HOURS,
+			'maxIntervalHours' => AdvisorySettingsStore::MAX_INTERVAL_HOURS,
+			'digestEnabled' => $this->advisorySettingsStore->isDigestEnabled(),
+		]);
+	}
+
+	/**
+	 * Updates the advisory check settings (admin-only).
+	 *
+	 * An out-of-range interval is REJECTED here rather than silently clamped,
+	 * because a UI that asks for 48 hours and is answered "200 OK" while the
+	 * server stores 24 has been lied to. The store still clamps, for values
+	 * that arrive by other routes such as `occ config:app:set`.
+	 *
+	 * @param ?string $intervalHours How often the sweep runs, in hours. Omitted leaves it unchanged.
+	 * @param ?string $digestEnabled Whether the weekly digest is sent ('1'/'0'). Omitted leaves it unchanged.
+	 * @return DataResponse<Http::STATUS_OK, array{intervalHours: int, minIntervalHours: int, maxIntervalHours: int, digestEnabled: bool}, array{}>|DataResponse<Http::STATUS_BAD_REQUEST, array{message: string}, array{}>|DataResponse<Http::STATUS_FORBIDDEN, array{message: string}, array{}>
+	 *
+	 * 200: Advisory settings updated
+	 * 400: intervalHours outside the supported range
+	 * 403: Caller is not an administrator
+	 *
+	 * @spec openspec/specs/security-advisory-correlation/spec.md
+	 */
+	#[ApiRoute(verb: 'PUT', url: '/api/advisory/settings')]
+	#[PasswordConfirmationRequired]
+	public function updateAdvisorySettings(?string $intervalHours = null, ?string $digestEnabled = null): DataResponse {
+		if (!$this->isAdmin()) {
+			return new DataResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+		}
+
+		if ($intervalHours !== null && $intervalHours !== '') {
+			if (!is_numeric($intervalHours)) {
+				return new DataResponse(
+					['message' => 'intervalHours must be a number.'],
+					Http::STATUS_BAD_REQUEST
+				);
+			}
+			$hours = (int)$intervalHours;
+			if ($hours < AdvisorySettingsStore::MIN_INTERVAL_HOURS || $hours > AdvisorySettingsStore::MAX_INTERVAL_HOURS) {
+				return new DataResponse(
+					['message' => sprintf(
+						'intervalHours must be between %d and %d.',
+						AdvisorySettingsStore::MIN_INTERVAL_HOURS,
+						AdvisorySettingsStore::MAX_INTERVAL_HOURS,
+					)],
+					Http::STATUS_BAD_REQUEST
+				);
+			}
+			$this->advisorySettingsStore->setIntervalHours($hours);
+		}
+
+		// Same empty-string-is-an-explicit-false handling as the auto-update
+		// kill switch above: PHP casts a JSON `false` to "", not "0".
+		if ($digestEnabled !== null) {
+			$digestParam = ($digestEnabled === '') ? '0' : $digestEnabled;
+			$this->advisorySettingsStore->setDigestEnabled(
+				$this->readBinaryBool($digestParam, $this->advisorySettingsStore->isDigestEnabled()),
+			);
+		}
+
+		return new DataResponse([
+			'intervalHours' => $this->advisorySettingsStore->getIntervalHours(),
+			'minIntervalHours' => AdvisorySettingsStore::MIN_INTERVAL_HOURS,
+			'maxIntervalHours' => AdvisorySettingsStore::MAX_INTERVAL_HOURS,
+			'digestEnabled' => $this->advisorySettingsStore->isDigestEnabled(),
 		]);
 	}
 

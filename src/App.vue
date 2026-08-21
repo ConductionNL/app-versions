@@ -511,6 +511,76 @@ const loadAdvisories = async (): Promise<void> => {
 	}
 }
 
+// ── Advisory check settings ───────────────────────────────────────────────
+// The supported range comes from the SERVER rather than being hardcoded here:
+// a client that pins its own bounds drifts from the server the first time the
+// range changes, and then rejects values the server would have accepted.
+const advisoryIntervalInput = ref('6')
+const advisoryDigestEnabled = ref(true)
+const advisoryMinInterval = ref(1)
+const advisoryMaxInterval = ref(24)
+const advisorySavedInterval = ref('6')
+const advisorySavedDigest = ref(true)
+const isSavingAdvisorySettings = ref(false)
+const advisorySettingsError = ref('')
+const advisorySettingsNotice = ref('')
+
+const isAdvisoryIntervalValid = computed((): boolean => {
+	const raw = advisoryIntervalInput.value.trim()
+	if (!/^\d+$/.test(raw)) {
+		return false
+	}
+	const hours = Number(raw)
+	return hours >= advisoryMinInterval.value && hours <= advisoryMaxInterval.value
+})
+
+const isAdvisorySettingsDirty = computed((): boolean =>
+	advisoryIntervalInput.value.trim() !== advisorySavedInterval.value
+	|| advisoryDigestEnabled.value !== advisorySavedDigest.value)
+
+const loadAdvisorySettings = async (): Promise<void> => {
+	try {
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/advisory/settings')), { headers: { ...ocsHeaders, Accept: 'application/json' }, signal: AbortSignal.timeout(BACKGROUND_FETCH_TIMEOUT_MS) })
+		const payload = await unwrapOcsResponse<{ intervalHours: number, minIntervalHours: number, maxIntervalHours: number, digestEnabled: boolean }>(response)
+		advisoryMinInterval.value = payload.minIntervalHours
+		advisoryMaxInterval.value = payload.maxIntervalHours
+		advisoryIntervalInput.value = String(payload.intervalHours)
+		advisorySavedInterval.value = String(payload.intervalHours)
+		advisoryDigestEnabled.value = payload.digestEnabled
+		advisorySavedDigest.value = payload.digestEnabled
+	} catch {
+		// Non-fatal: the settings control simply keeps its defaults.
+	}
+}
+
+const saveAdvisorySettings = async (): Promise<void> => {
+	isSavingAdvisorySettings.value = true
+	advisorySettingsError.value = ''
+	advisorySettingsNotice.value = ''
+	try {
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/advisory/settings')), {
+			method: 'PUT',
+			headers: { ...ocsHeaders, 'Content-Type': 'application/json', Accept: 'application/json' },
+			body: JSON.stringify({
+				intervalHours: advisoryIntervalInput.value.trim(),
+				// '1'/'0' rather than a JSON boolean: PHP casts a JSON `false`
+				// to '' and the server would read that as "unspecified".
+				digestEnabled: advisoryDigestEnabled.value ? '1' : '0',
+			}),
+		})
+		const payload = await unwrapOcsResponse<{ intervalHours: number, digestEnabled: boolean }>(response)
+		advisoryIntervalInput.value = String(payload.intervalHours)
+		advisorySavedInterval.value = String(payload.intervalHours)
+		advisoryDigestEnabled.value = payload.digestEnabled
+		advisorySavedDigest.value = payload.digestEnabled
+		advisorySettingsNotice.value = t('app_versions', 'Advisory settings saved.')
+	} catch (error) {
+		advisorySettingsError.value = error instanceof Error ? error.message : String(error)
+	} finally {
+		isSavingAdvisorySettings.value = false
+	}
+}
+
 // Unix seconds of the last completed sweep; null means none has completed.
 const advisoriesCheckedAt = ref<number | null>(null)
 // True only when the fetch itself failed — never merely because the map is empty.
@@ -1490,6 +1560,7 @@ onMounted(async () => {
 	void loadAdvisories().catch(() => undefined)
 	void loadPins().catch(() => undefined)
 	void loadPolicies().catch(() => undefined)
+	void loadAdvisorySettings().catch(() => undefined)
 })
 
 watch([safeModeEnabled, installedVersion, selectedVersion], () => {
@@ -1677,6 +1748,49 @@ watch(dryRunEnabled, () => {
 									data-testid="auto-update-settings-save"
 									:disabled="isSavingAutoUpdateSettings || !isAutoUpdateSettingsDirty || !isAutoUpdateWindowValid"
 									@click="saveAutoUpdateSettings">
+									{{ t('app_versions', 'Save') }}
+								</NcButton>
+
+								<h3 :class="$style.advisorySettingsHeading">{{ t('app_versions', 'Security advisory checks') }}</h3>
+								<p :class="$style.hint">
+									{{ t('app_versions', 'App Versions checks published Nextcloud security advisories against your installed versions and notifies administrators immediately when an installed version is affected.') }}
+								</p>
+								<label :class="$style.filterField" for="advisory-interval">
+									<span :class="$style.filterFieldLabel">
+										{{ t('app_versions', 'Check every (hours, {min}-{max})', { min: advisoryMinInterval, max: advisoryMaxInterval }) }}
+									</span>
+									<input
+										id="advisory-interval"
+										v-model="advisoryIntervalInput"
+										type="number"
+										:min="advisoryMinInterval"
+										:max="advisoryMaxInterval"
+										data-testid="advisory-interval"
+										:class="$style.appFilterInput"
+										:disabled="isSavingAdvisorySettings">
+								</label>
+								<p v-if="!isAdvisoryIntervalValid" :class="$style.autoUpdateWindowError" data-testid="advisory-interval-error">
+									{{ t('app_versions', 'Enter a whole number of hours between {min} and {max}.', { min: advisoryMinInterval, max: advisoryMaxInterval }) }}
+								</p>
+								<label :class="$style.safeMode">
+									<input
+										v-model="advisoryDigestEnabled"
+										type="checkbox"
+										data-testid="advisory-digest-enabled"
+										:disabled="isSavingAdvisorySettings">
+									<span>{{ t('app_versions', 'Send a weekly digest of non-urgent advisories') }}</span>
+								</label>
+								<p v-if="advisorySettingsError" :class="$style.autoUpdateWindowError" data-testid="advisory-settings-error">
+									{{ advisorySettingsError }}
+								</p>
+								<p v-if="advisorySettingsNotice" :class="$style.autoUpdateSettingsNotice" data-testid="advisory-settings-notice">
+									{{ advisorySettingsNotice }}
+								</p>
+								<NcButton
+									type="primary"
+									data-testid="advisory-settings-save"
+									:disabled="isSavingAdvisorySettings || !isAdvisorySettingsDirty || !isAdvisoryIntervalValid"
+									@click="saveAdvisorySettings">
 									{{ t('app_versions', 'Save') }}
 								</NcButton>
 							</div>
@@ -2146,6 +2260,12 @@ watch(dryRunEnabled, () => {
 	background: var(--color-main-background);
 	padding: 16px;
 	margin-top: 8px;
+}
+
+/* Separates the advisory settings from the auto-update block above, which is
+   a different subject sharing the same panel. */
+.advisorySettingsHeading {
+	margin-top: 24px;
 }
 
 /* Freshness line for the advisory snapshot. Muted, because it is context for
