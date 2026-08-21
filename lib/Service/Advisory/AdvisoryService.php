@@ -68,10 +68,23 @@ class AdvisoryService {
 	public const STATE_AVAILABLE = 'advisory-available';
 	public const STATE_VULNERABLE = 'pinned-to-vulnerable';
 
+	/**
+	 * Key used for the Nextcloud server's own advisory row.
+	 *
+	 * The server is not an app, but 95 of the 277 published advisories are
+	 * about it — by far the largest single subject in the feed — and an
+	 * administrator running a vulnerable server wants to know. It is keyed
+	 * distinctly so no caller mistakes it for an installed app.
+	 */
+	public const SERVER_KEY = AdvisoryPackageMap::SERVER;
+
 	public function __construct(
 		private SourceRegistry $sourceRegistry,
 		private SourceBindingStore $bindingStore,
 		private IAppManager $appManager,
+		private NextcloudAdvisoryFeed $advisoryFeed,
+		private BranchAwareRange $branchRange,
+		private ServerVersionProvider $serverVersion,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -83,24 +96,38 @@ class AdvisoryService {
 	 * answer advisories, so callers can treat the map uniformly.
 	 *
 	 * @spec openspec/specs/security-advisory-correlation/spec.md
+	 * @param list<array{id: string, severity: string, summary: string, affected: list<string>, firstPatchedVersion: ?string, patchedVersions?: list<string>}> $feedAdvisories
+	 *   Advisories the central feed already resolved to this app. Passed in
+	 *   rather than fetched here because the feed is read ONCE per sweep.
 	 * @return array{appId: string, installedVersion: ?string, state: string, advisories: list<array{id: string, severity: string, summary: string}>, recommendedVersion: ?string, error: ?string}
 	 */
-	public function correlate(string $appId): array {
+	public function correlate(string $appId, array $feedAdvisories = []): array {
 		$installedVersion = $this->installedVersion($appId);
 
 		$binding = $this->bindingStore->get($appId) ?? SourceBinding::appStore();
 		$source = $this->sourceRegistry->get($binding);
 
-		if (!$source instanceof AdvisorySourceInterface) {
-			return $this->emptyResult($appId, $installedVersion);
-		}
-
 		if ($installedVersion === null) {
 			return $this->emptyResult($appId, null);
 		}
 
+		// An app whose source cannot answer advisories is NOT a dead end any
+		// more: the centrally-published feed may still cover it, and for App
+		// Store apps it is the only thing that does.
+		if (!$source instanceof AdvisorySourceInterface) {
+			if ($feedAdvisories === []) {
+				return $this->emptyResult($appId, $installedVersion);
+			}
+
+			$evaluated = $this->evaluate($installedVersion, $feedAdvisories, []);
+			$evaluated['appId'] = $appId;
+			$evaluated['error'] = null;
+
+			return $evaluated;
+		}
+
 		$advisoryResult = $source->listAdvisories($appId, $binding);
-		$advisories = $advisoryResult['advisories'];
+		$advisories = [...$feedAdvisories, ...$advisoryResult['advisories']];
 		$error = $advisoryResult['error'];
 
 		$available = [];
@@ -133,6 +160,17 @@ class AdvisoryService {
 		$results = [];
 		$deadline = microtime(true) + ($budgetSeconds ?? self::CORRELATE_ALL_BUDGET_SECONDS);
 
+		// ONE fetch for the whole sweep. The advisories that actually exist are
+		// published centrally, not per app, so asking each app's own source was
+		// asking 87 of 88 apps a question their source cannot answer (#166).
+		$feed = $this->advisoryFeed->fetchAll();
+		$feedAdvisories = $feed['advisories'];
+		if ($feed['error'] !== null) {
+			$this->logger->warning('AdvisoryService: the Nextcloud advisory feed could not be read in full', [
+				'message' => $feed['error'],
+			]);
+		}
+
 		foreach ($this->appManager->getEnabledApps() as $appId) {
 			// BUDGET, BECAUSE THIS ENDPOINT COULD NOT PREVIOUSLY RETURN AT ALL.
 			//
@@ -164,7 +202,7 @@ class AdvisoryService {
 			}
 
 			try {
-				$results[$appId] = $this->correlate($appId);
+				$results[$appId] = $this->correlate($appId, $feedAdvisories[$appId] ?? []);
 			} catch (\Throwable $error) {
 				$this->logger->warning('AdvisoryService: correlation failed for app', [
 					'app' => $appId,
@@ -172,6 +210,18 @@ class AdvisoryService {
 				]);
 				$results[$appId] = $this->emptyResult($appId, $this->installedVersion($appId), $error->getMessage());
 			}
+		}
+
+		// The server's own row. It is not an app, but 95 of the 277 published
+		// advisories are about it — the largest single subject in the feed —
+		// and an administrator on a vulnerable server has to be told.
+		$serverAdvisories = $feedAdvisories[self::SERVER_KEY] ?? [];
+		if ($serverAdvisories !== []) {
+			$installed = $this->serverVersion->current();
+			$evaluated = $this->evaluate($installed, $serverAdvisories, []);
+			$evaluated['appId'] = self::SERVER_KEY;
+			$evaluated['error'] = null;
+			$results[self::SERVER_KEY] = $evaluated;
 		}
 
 		return $results;
@@ -184,7 +234,11 @@ class AdvisoryService {
 	 * core of the feature.
 	 *
 	 * @spec openspec/specs/security-advisory-correlation/spec.md
-	 * @param list<array{id: string, severity: string, summary: string, affected: list<string>, firstPatchedVersion: ?string}> $advisories
+	 * @param list<array{id: string, severity: string, summary: string, affected: list<string>, firstPatchedVersion: ?string, patchedVersions?: list<string>}> $advisories
+	 *   `patchedVersions` is present on records from the central Nextcloud
+	 *   feed and absent on the older per-source shape. Its presence is what
+	 *   selects branch-aware evaluation over clause evaluation, so it is part
+	 *   of the contract rather than an optional extra.
 	 * @param list<string> $availableVersions
 	 * @return array{appId: string, installedVersion: ?string, state: string, advisories: list<array{id: string, severity: string, summary: string}>, recommendedVersion: ?string, error: ?string}
 	 */
@@ -200,10 +254,35 @@ class AdvisoryService {
 			];
 		}
 
-		$active = array_values(array_filter(
-			$advisories,
-			fn (array $advisory): bool => $this->isAffected($installedVersion, $advisory['affected']),
-		));
+		// Two evaluation paths, chosen by what the record carries.
+		//
+		// A record with `patchedVersions` came from the Nextcloud feed, which
+		// describes several maintenance branches per advisory. Its comma-
+		// separated range CANNOT be read as a boolean: measured over the
+		// published corpus, 66.5% of entries are multiple lower bounds with no
+		// upper bound, which ANDed collapse to the highest and clear a
+		// genuinely vulnerable instance. BranchAwareRange resolves those from
+		// the patch list instead.
+		//
+		// A record without it came from a forge source in the older shape, and
+		// keeps the original clause semantics.
+		$active = [];
+		$branchPatches = [];
+		foreach ($advisories as $advisory) {
+			$patchedVersions = $advisory['patchedVersions'] ?? [];
+			if ($patchedVersions !== []) {
+				$patch = $this->branchRange->resolvePatch($installedVersion, $patchedVersions);
+				if ($patch !== null) {
+					$active[] = $advisory;
+					$branchPatches[] = $patch;
+				}
+				continue;
+			}
+
+			if ($this->isAffected($installedVersion, $advisory['affected'])) {
+				$active[] = $advisory;
+			}
+		}
 
 		if ($active === []) {
 			// The app has advisories, but none affect the installed version:
@@ -218,21 +297,47 @@ class AdvisoryService {
 			];
 		}
 
+		// The advisory's own patch beats a guess from the version list: it is
+		// the version the publisher states resolves the issue on THIS branch,
+		// whereas nearestResolving() infers one from whatever the source
+		// happens to offer.
+		$recommended = $branchPatches !== []
+			? $this->lowestVersion($branchPatches)
+			: $this->nearestResolving($installedVersion, $active, $availableVersions);
+
 		return [
 			'appId' => '',
 			'installedVersion' => $installedVersion,
 			'state' => self::STATE_VULNERABLE,
 			'advisories' => $this->summarise($active),
-			'recommendedVersion' => $this->nearestResolving($installedVersion, $active, $availableVersions),
+			'recommendedVersion' => $recommended,
 			'error' => null,
 		];
+	}
+
+	/**
+	 * The lowest of several branch patches — when more than one advisory
+	 * affects the installed version, the nearest upgrade that starts resolving
+	 * them is the one to name.
+	 *
+	 * @param non-empty-list<string> $versions
+	 */
+	private function lowestVersion(array $versions): string {
+		$lowest = $versions[0];
+		foreach ($versions as $candidate) {
+			if (version_compare($candidate, $lowest, '<')) {
+				$lowest = $candidate;
+			}
+		}
+
+		return $lowest;
 	}
 
 	/**
 	 * Reduces advisory records to the id/severity/summary triple surfaced to
 	 * the admin (drops the internal affected-range / patch fields).
 	 *
-	 * @param list<array{id: string, severity: string, summary: string, affected?: list<string>, firstPatchedVersion?: ?string}> $advisories
+	 * @param list<array{id: string, severity: string, summary: string, affected?: list<string>, firstPatchedVersion?: ?string, patchedVersions?: list<string>}> $advisories
 	 * @return list<array{id: string, severity: string, summary: string}>
 	 */
 	private function summarise(array $advisories): array {
@@ -317,7 +422,7 @@ class AdvisoryService {
 	 * source; otherwise scans the available versions ascending. Returns null
 	 * when the source offers no resolving version (stuck-on-vulnerable).
 	 *
-	 * @param list<array{id: string, severity: string, summary: string, affected: list<string>, firstPatchedVersion: ?string}> $active
+	 * @param list<array{id: string, severity: string, summary: string, affected: list<string>, firstPatchedVersion: ?string, patchedVersions?: list<string>}> $active
 	 * @param list<string> $availableVersions
 	 */
 	private function nearestResolving(string $installedVersion, array $active, array $availableVersions): ?string {
