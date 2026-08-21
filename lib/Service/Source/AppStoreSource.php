@@ -439,9 +439,8 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 	 *
 	 * @spec openspec/specs/security-advisory-correlation/spec.md
 	 * @param array<array-key, mixed> $decoded A decoded catalogue response.
-	 * @return int Number of entries cached (0 when the shape is unrecognised).
 	 */
-	private function cacheCatalogueEntries(array $decoded): int {
+	private function cacheCatalogueEntries(array $decoded): void {
 		$entries = null;
 		$data = $this->arrayField($decoded, 'data');
 		if ($data !== null && array_is_list($data)) {
@@ -456,10 +455,9 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 		}
 
 		if ($entries === null) {
-			return 0;
+			return;
 		}
 
-		$cached = 0;
 		/** @var mixed $entry */
 		foreach ($entries as $entry) {
 			if (!is_array($entry)) {
@@ -471,10 +469,7 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 				continue;
 			}
 			$this->writeCachedPayload($id, $entry);
-			$cached++;
 		}
-
-		return $cached;
 	}
 
 	private function findById(array $entries, string $appId): ?array {
