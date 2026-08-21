@@ -12,9 +12,11 @@ declare(strict_types=1);
 
 namespace OCA\AppVersions\BackgroundJob;
 
+use OCA\AppVersions\Service\Advisory\AdvisoryDigestNotifier;
 use OCA\AppVersions\Service\Advisory\AdvisoryNotifier;
 use OCA\AppVersions\Service\Advisory\AdvisoryResultStore;
 use OCA\AppVersions\Service\Advisory\AdvisoryService;
+use OCA\AppVersions\Service\Advisory\AdvisorySettingsStore;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\TimedJob;
 use Psr\Log\LoggerInterface;
@@ -29,8 +31,6 @@ use Psr\Log\LoggerInterface;
  * @psalm-api
  */
 class AdvisoryRefreshJob extends TimedJob {
-	/** Re-resolve advisories every 6 hours. */
-	private const INTERVAL_SECONDS = 6 * 60 * 60;
 
 	/**
 	 * Wall-clock ceiling for the sweep, in seconds.
@@ -50,11 +50,19 @@ class AdvisoryRefreshJob extends TimedJob {
 		ITimeFactory $time,
 		private AdvisoryService $advisoryService,
 		private AdvisoryNotifier $advisoryNotifier,
+		private AdvisoryDigestNotifier $digestNotifier,
 		private AdvisoryResultStore $resultStore,
+		// NOT promoted to a property: the interval is read exactly once, here.
+		// TimedJob fixes its interval at construction, so keeping a reference
+		// would suggest the job can re-read the setting mid-life, which it
+		// cannot — the next run after a change picks up the new value because
+		// the job is constructed afresh.
+		AdvisorySettingsStore $settings,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct($time);
-		$this->setInterval(self::INTERVAL_SECONDS);
+		// Administrator-settable: 6h default, 1–24 supported.
+		$this->setInterval($settings->getIntervalSeconds());
 	}
 
 	/**
@@ -97,6 +105,15 @@ class AdvisoryRefreshJob extends TimedJob {
 			$fired = $this->advisoryNotifier->notifyNewAdvisories($correlations);
 			if ($fired > 0) {
 				$this->logger->info('AdvisoryRefreshJob: raised advisory notifications', ['count' => $fired]);
+			}
+
+			// The weekly digest of everything that is NOT urgent. It rate-
+			// limits itself, so calling it on every sweep is correct — the
+			// sweep runs up to 24 times a day and the digest still sends once
+			// a week.
+			$digested = $this->digestNotifier->sendIfDue($correlations, $this->time->getTime());
+			if ($digested > 0) {
+				$this->logger->info('AdvisoryRefreshJob: sent the weekly advisory digest', ['recipients' => $digested]);
 			}
 		} catch (\Throwable $error) {
 			$this->logger->error('AdvisoryRefreshJob: refresh failed', ['message' => $error->getMessage()]);

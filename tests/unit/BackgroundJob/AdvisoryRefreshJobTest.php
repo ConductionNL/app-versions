@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace OCA\AppVersions\Tests\Unit\BackgroundJob;
 
 use OCA\AppVersions\BackgroundJob\AdvisoryRefreshJob;
+use OCA\AppVersions\Service\Advisory\AdvisoryDigestNotifier;
 use OCA\AppVersions\Service\Advisory\AdvisoryNotifier;
+use OCA\AppVersions\Service\Advisory\AdvisorySettingsStore;
 use OCA\AppVersions\Service\Advisory\AdvisoryResultStore;
 use OCA\AppVersions\Service\Advisory\AdvisoryService;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -34,11 +36,16 @@ final class AdvisoryRefreshJobTest extends TestCase {
 		$time = $this->createMock(ITimeFactory::class);
 		$time->method('getTime')->willReturn($now);
 
+		$settings = $this->createMock(AdvisorySettingsStore::class);
+		$settings->method('getIntervalSeconds')->willReturn(6 * 3600);
+
 		$job = new AdvisoryRefreshJob(
 			$time,
 			$service,
 			$notifier ?? $this->createMock(AdvisoryNotifier::class),
+			$this->createMock(AdvisoryDigestNotifier::class),
 			$store,
+			$settings,
 			$logger ?? $this->createMock(LoggerInterface::class),
 		);
 

@@ -9,6 +9,7 @@ use OCA\AppVersions\Db\AuditEntry;
 use OCA\AppVersions\Db\AuditEntryMapper;
 use OCA\AppVersions\Db\PatMapper;
 use OCA\AppVersions\Service\Advisory\AdvisoryResultStore;
+use OCA\AppVersions\Service\Advisory\AdvisorySettingsStore;
 use OCA\AppVersions\Service\AutoUpdate\AutoUpdateSettingsStore;
 use OCA\AppVersions\Service\Cache\ArtifactCache;
 use OCA\AppVersions\Service\Discovery\DiscoveryAggregator;
@@ -67,6 +68,7 @@ final class ApiTest extends TestCase {
 			$this->createMock(PatExpiryEvaluator::class),
 			$this->createMock(DiscoveryAggregator::class),
 			$this->createMock(AdvisoryResultStore::class),
+			$this->createMock(AdvisorySettingsStore::class),
 			$auditEntryMapper ?? $this->createMock(AuditEntryMapper::class),
 			$pinStore ?? $this->createMock(PinStore::class),
 			$appManager ?? $this->createMock(IAppManager::class),
@@ -113,6 +115,7 @@ final class ApiTest extends TestCase {
 			$this->createMock(PatExpiryEvaluator::class),
 			$this->createMock(DiscoveryAggregator::class),
 			$this->createMock(AdvisoryResultStore::class),
+			$this->createMock(AdvisorySettingsStore::class),
 			$auditEntryMapper ?? $this->createMock(AuditEntryMapper::class),
 			$pinStore ?? $this->createMock(PinStore::class),
 			$appManager ?? $this->createMock(IAppManager::class),
