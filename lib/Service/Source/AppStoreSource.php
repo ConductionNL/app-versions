@@ -326,6 +326,8 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 				if (!is_array($decoded)) {
 					return null;
 				}
+				// The whole catalogue arrived regardless of the filter; keep it.
+				$this->cacheCatalogueEntries($decoded);
 				$appPayload = $this->extractAppPayload($decoded, $appId);
 				if (is_array($appPayload)) {
 					return $appPayload;
@@ -357,6 +359,9 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 				if (!is_array($decoded)) {
 					continue;
 				}
+				// Same reasoning as the filtered endpoint above: this response
+				// is the whole platform catalogue, so index all of it.
+				$this->cacheCatalogueEntries($decoded);
 				$appPayload = $this->extractAppPayload($decoded, $appId);
 				if (is_array($appPayload)) {
 					return $appPayload;
@@ -416,6 +421,62 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 	 * @param array<array-key, mixed> $entries
 	 * @return array<array-key, mixed>|null
 	 */
+	/**
+	 * Caches EVERY app in a freshly-downloaded catalogue, not just the one that
+	 * was asked for.
+	 *
+	 * The App Store's `apps.json` IGNORES its `filter` parameter — measured
+	 * 2026-08-21, `?filter=notes` returned all 755 entries and 31.7 MB — so a
+	 * lookup for one app already pays for the whole catalogue. Keeping one
+	 * entry and discarding 754 meant a full advisory sweep over 88 enabled
+	 * apps downloaded ~31.7 MB per app, and did it twice per app because
+	 * `listAdvisories()` and `listVersions()` each resolve a payload.
+	 *
+	 * Indexing the whole response makes the FIRST lookup pay for the download
+	 * and every subsequent app in the same sweep a cache hit. Nothing else
+	 * changes: entries are written through the same per-app cache with the same
+	 * TTL, so a caller asking for one app in isolation behaves exactly as before.
+	 *
+	 * @spec openspec/specs/security-advisory-correlation/spec.md
+	 * @param array<array-key, mixed> $decoded A decoded catalogue response.
+	 * @return int Number of entries cached (0 when the shape is unrecognised).
+	 */
+	private function cacheCatalogueEntries(array $decoded): int {
+		$entries = null;
+		$data = $this->arrayField($decoded, 'data');
+		if ($data !== null && array_is_list($data)) {
+			$entries = $data;
+		} elseif (array_is_list($decoded)) {
+			$entries = $decoded;
+		} else {
+			$apps = $this->arrayField($decoded, 'apps');
+			if ($apps !== null && array_is_list($apps)) {
+				$entries = $apps;
+			}
+		}
+
+		if ($entries === null) {
+			return 0;
+		}
+
+		$cached = 0;
+		/** @var mixed $entry */
+		foreach ($entries as $entry) {
+			if (!is_array($entry)) {
+				continue;
+			}
+			/** @var mixed $id */
+			$id = $entry['id'] ?? null;
+			if (!is_string($id) || $id === '') {
+				continue;
+			}
+			$this->writeCachedPayload($id, $entry);
+			$cached++;
+		}
+
+		return $cached;
+	}
+
 	private function findById(array $entries, string $appId): ?array {
 		/** @var mixed $entry */
 		foreach ($entries as $entry) {
