@@ -10,16 +10,16 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Lkg;
+namespace OCA\Versioniq\Service\Lkg;
 
 use InvalidArgumentException;
 
 /**
  * Immutable representation of the last-known-good version record: the last
- * version of an app that finalized cleanly through App Versions' own install
+ * version of an app that finalized cleanly through Versioniq' own install
  * path. Persisted as a JSON blob under app config key `lkg.{appId}`,
- * mirroring the {@see \OCA\AppVersions\Service\Pin\Pin} /
- * {@see \OCA\AppVersions\Service\Source\SourceBinding} pattern; see
+ * mirroring the {@see \OCA\Versioniq\Service\Pin\Pin} /
+ * {@see \OCA\Versioniq\Service\Source\SourceBinding} pattern; see
  * "Last-known-good version record".
  *
  * @spec openspec/specs/migration-safety/spec.md

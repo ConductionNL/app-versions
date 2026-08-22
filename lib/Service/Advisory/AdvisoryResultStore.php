@@ -10,9 +10,9 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Advisory;
+namespace OCA\Versioniq\Service\Advisory;
 
-use OCA\AppVersions\AppInfo\Application;
+use OCA\Versioniq\AppInfo\Application;
 use OCP\IAppConfig;
 use Psr\Log\LoggerInterface;
 
@@ -27,7 +27,7 @@ use Psr\Log\LoggerInterface;
  * answer within 120s, twice, and while it held the PHP session lock the
  * sibling `/api/pins` request never ran at all (issue #160).
  *
- * The correlation therefore happens in {@see \OCA\AppVersions\BackgroundJob\AdvisoryRefreshJob},
+ * The correlation therefore happens in {@see \OCA\Versioniq\BackgroundJob\AdvisoryRefreshJob},
  * which writes here, and the endpoint reads. That keeps the feature's COVERAGE
  * — every enabled app is still correlated — and pays for it in staleness
  * rather than in a request that cannot return. The stored `checkedAt` is what

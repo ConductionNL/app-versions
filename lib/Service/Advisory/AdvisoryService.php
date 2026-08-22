@@ -10,11 +10,11 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Advisory;
+namespace OCA\Versioniq\Service\Advisory;
 
-use OCA\AppVersions\Service\Source\SourceBinding;
-use OCA\AppVersions\Service\Source\SourceBindingStore;
-use OCA\AppVersions\Service\Source\SourceRegistry;
+use OCA\Versioniq\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Source\SourceBindingStore;
+use OCA\Versioniq\Service\Source\SourceRegistry;
 use OCP\App\IAppManager;
 use Psr\Log\LoggerInterface;
 
@@ -25,7 +25,7 @@ use Psr\Log\LoggerInterface;
  * for external-sourced apps).
  *
  * The correlation is read-only: it never installs, unpins, or otherwise mutates
- * an app's version — App Versions surfaces the advisory and the recommended
+ * an app's version — Versioniq surfaces the advisory and the recommended
  * safe version, and the administrator decides. External fetches are delegated
  * to the source drivers (which reuse the existing PAT/credential path); this
  * service adds no HTTP client of its own.

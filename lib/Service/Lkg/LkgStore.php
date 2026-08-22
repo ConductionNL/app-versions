@@ -10,9 +10,9 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Lkg;
+namespace OCA\Versioniq\Service\Lkg;
 
-use OCA\AppVersions\AppInfo\Application;
+use OCA\Versioniq\AppInfo\Application;
 use OCP\IAppConfig;
 use Psr\Log\LoggerInterface;
 
@@ -20,10 +20,10 @@ use Psr\Log\LoggerInterface;
  * Reads and writes the per-app last-known-good version record stored under
  * app config key `lkg.{appId}`. JSON; a missing or malformed value is
  * treated as "no record yet" (logged, never fatal) — mirrors
- * {@see \OCA\AppVersions\Service\Pin\PinStore}.
+ * {@see \OCA\Versioniq\Service\Pin\PinStore}.
  *
  * `set()` is called exactly once per successful finalize, from
- * {@see \OCA\AppVersions\Service\Installer\InstallFinalizer::finalize()} —
+ * {@see \OCA\Versioniq\Service\Installer\InstallFinalizer::finalize()} —
  * the single choke point shared by both installers — so a failed or
  * reverted install never touches the record; see "Last-known-good version
  * record".

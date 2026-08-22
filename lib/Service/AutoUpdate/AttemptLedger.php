@@ -10,14 +10,14 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\AutoUpdate;
+namespace OCA\Versioniq\Service\AutoUpdate;
 
-use OCA\AppVersions\AppInfo\Application;
+use OCA\Versioniq\AppInfo\Application;
 use OCP\IAppConfig;
 use Psr\Log\LoggerInterface;
 
 /**
- * Bounds {@see \OCA\AppVersions\BackgroundJob\AutoUpdateJob}'s never-retry
+ * Bounds {@see \OCA\Versioniq\BackgroundJob\AutoUpdateJob}'s never-retry
  * rule without a new table: records one attempt per (appId, version) under
  * app config key `auto_attempt.{appId}` as a JSON map
  * `version => {at, outcome}`, pruned to the most recent

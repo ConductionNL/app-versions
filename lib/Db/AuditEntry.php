@@ -10,17 +10,17 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Db;
+namespace OCA\Versioniq\Db;
 
 use JsonSerializable;
 use OCP\AppFramework\Db\Entity;
 
 /**
  * One immutable audit-trail row: a single version operation (install,
- * bind_source, …) performed through App Versions, with who/what/when.
+ * bind_source, …) performed through Versioniq, with who/what/when.
  *
  * There is no update path for this entity reachable from a controller — the
- * only writer is {@see \OCA\AppVersions\Service\Audit\AuditLogger::record()}
+ * only writer is {@see \OCA\Versioniq\Service\Audit\AuditLogger::record()}
  * (insert-only) and the only deleter is the retention prune job.
  *
  * @psalm-api

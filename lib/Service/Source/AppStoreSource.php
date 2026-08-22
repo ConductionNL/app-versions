@@ -10,10 +10,11 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Source;
+namespace OCA\Versioniq\Service\Source;
 
 use Exception;
-use OCA\AppVersions\Service\Advisory\AdvisorySourceInterface;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Service\Advisory\AdvisorySourceInterface;
 use OCP\Http\Client\IClientService;
 use OCP\IConfig;
 use OCP\L10N\IFactory;
@@ -243,7 +244,7 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 	private function readCachedPayload(string $appId, bool $ignoreTtl): ?array {
 		if (!$ignoreTtl) {
 			$cachedAt = (int)$this->config->getAppValue(
-				'app_versions',
+				Application::APP_ID,
 				self::PAYLOAD_CACHE_TS_PREFIX . $appId,
 				'0',
 			);
@@ -252,7 +253,7 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 			}
 		}
 
-		$raw = $this->config->getAppValue('app_versions', self::PAYLOAD_CACHE_PREFIX . $appId, '');
+		$raw = $this->config->getAppValue(Application::APP_ID, self::PAYLOAD_CACHE_PREFIX . $appId, '');
 		if ($raw === '') {
 			return null;
 		}
@@ -276,12 +277,12 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 	private function writeCachedPayload(string $appId, array $payload): void {
 		try {
 			$this->config->setAppValue(
-				'app_versions',
+				Application::APP_ID,
 				self::PAYLOAD_CACHE_PREFIX . $appId,
 				json_encode($payload, JSON_THROW_ON_ERROR),
 			);
 			$this->config->setAppValue(
-				'app_versions',
+				Application::APP_ID,
 				self::PAYLOAD_CACHE_TS_PREFIX . $appId,
 				(string)time(),
 			);
@@ -301,7 +302,7 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 	 */
 	private function apiBase(): string {
 		/** @var string|null $raw */
-		$raw = $this->config->getAppValue('app_versions', 'appstore.api_base', '');
+		$raw = $this->config->getAppValue(Application::APP_ID, 'appstore.api_base', '');
 		$override = trim((string)$raw);
 
 		return rtrim($override !== '' ? $override : self::DEFAULT_API_BASE, '/');

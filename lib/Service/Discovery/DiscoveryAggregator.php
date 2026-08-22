@@ -10,7 +10,7 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Discovery;
+namespace OCA\Versioniq\Service\Discovery;
 
 use Exception;
 use OCP\App\IAppManager;

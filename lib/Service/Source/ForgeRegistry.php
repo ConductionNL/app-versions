@@ -10,9 +10,10 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Source;
+namespace OCA\Versioniq\Service\Source;
 
 use InvalidArgumentException;
+use OCA\Versioniq\AppInfo\Application;
 use OCP\IConfig;
 
 /**
@@ -76,7 +77,7 @@ class ForgeRegistry {
 	 */
 	private function baseUrl(string $forgeId, string $key, string $default): string {
 		/** @var string|null $raw */
-		$raw = $this->config->getAppValue('app_versions', 'forge.' . $forgeId . '.' . $key, '');
+		$raw = $this->config->getAppValue(Application::APP_ID, 'forge.' . $forgeId . '.' . $key, '');
 		$override = trim((string)$raw);
 
 		return rtrim($override !== '' ? $override : $default, '/');

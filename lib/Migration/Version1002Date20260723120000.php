@@ -10,7 +10,7 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Migration;
+namespace OCA\Versioniq\Migration;
 
 use Closure;
 use OCP\DB\ISchemaWrapper;
@@ -21,6 +21,11 @@ use OCP\Migration\SimpleMigrationStep;
 /**
  * Adds the `app_versions_audit` table backing the audit trail — one immutable
  * row per version operation (install, bind_source, …) with who/what/when.
+ *
+ * The table name is FROZEN on the pre-rename `app_versions` prefix — see
+ * {@see \OCA\Versioniq\Db\AuditEntryMapper::TABLE_NAME}, and the note on
+ * {@see \OCA\Versioniq\Migration\Version1000Date20260502120000} about why a
+ * shipped migration cannot be edited after the fact.
  *
  * @spec openspec/specs/audit-trail/spec.md
  * @psalm-suppress UnusedClass

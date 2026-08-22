@@ -10,10 +10,10 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Cron;
+namespace OCA\Versioniq\Cron;
 
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Db\AuditEntryMapper;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Db\AuditEntryMapper;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\TimedJob;
 use OCP\IAppConfig;
@@ -32,7 +32,7 @@ use Psr\Log\LoggerInterface;
  * @psalm-api
  */
 class PruneAuditJob extends TimedJob {
-	/** Config key under the app_versions app: retention window in days. */
+	/** Config key under the versioniq app: retention window in days. */
 	public const CONFIG_KEY_RETENTION_DAYS = 'audit_retention_days';
 
 	public const DEFAULT_RETENTION_DAYS = 365;
@@ -52,7 +52,7 @@ class PruneAuditJob extends TimedJob {
 	}
 
 	/**
-	 * Prunes audit entries older than `app_versions.audit_retention_days`
+	 * Prunes audit entries older than `versioniq.audit_retention_days`
 	 * (default 365, floor 30 — lower configured values are clamped and the
 	 * clamp is logged); see "Retention".
 	 *

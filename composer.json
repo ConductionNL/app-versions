@@ -1,5 +1,5 @@
 {
-  "name": "nextcloud/app_versions",
+  "name": "nextcloud/versioniq",
   "description": "An example description",
   "license": "EUPL-1.2",
   "authors": [
@@ -11,7 +11,7 @@
   ],
   "autoload": {
     "psr-4": {
-      "OCA\\AppVersions\\": "lib/"
+      "OCA\\Versioniq\\": "lib/"
     }
   },
   "scripts": {

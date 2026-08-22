@@ -10,7 +10,7 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Advisory;
+namespace OCA\Versioniq\Service\Advisory;
 
 /**
  * Decides whether an installed version is affected by an advisory, using the

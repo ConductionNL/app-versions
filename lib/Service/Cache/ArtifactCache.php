@@ -10,9 +10,9 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Cache;
+namespace OCA\Versioniq\Service\Cache;
 
-use OCA\AppVersions\AppInfo\Application;
+use OCA\Versioniq\AppInfo\Application;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Files\AppData\IAppDataFactory;
 use OCP\Files\IAppData;
@@ -37,7 +37,7 @@ use Psr\Log\LoggerInterface;
  *
  * Write path (`store()`) is best-effort by construction: a caching failure
  * must never fail an otherwise-successful install (mirrors
- * {@see \OCA\AppVersions\Service\Audit\AuditLogger}). The read path
+ * {@see \OCA\Versioniq\Service\Audit\AuditLogger}). The read path
  * (`fetch()`) re-verifies the stored SHA-256 before returning anything —
  * the tamper gate lives here, not in the caller.
  *
@@ -193,7 +193,7 @@ class ArtifactCache {
 	/**
 	 * Lists the versions currently cached for `$appId` (one directory
 	 * listing, no per-version IO), used by
-	 * {@see \OCA\AppVersions\Service\InstallerService::getAppVersions()} to
+	 * {@see \OCA\Versioniq\Service\InstallerService::getAppVersions()} to
 	 * stamp `cachedOffline` on a version listing; see "Cache visibility and
 	 * management".
 	 *

@@ -10,11 +10,11 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Discovery;
+namespace OCA\Versioniq\Service\Discovery;
 
 use Exception;
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Service\Source\SourceBinding;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Service\Source\SourceBinding;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Http\Client\IClientService;
 use OCP\IAppConfig;

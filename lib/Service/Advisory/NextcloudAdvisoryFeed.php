@@ -10,8 +10,9 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Advisory;
+namespace OCA\Versioniq\Service\Advisory;
 
+use OCA\Versioniq\AppInfo\Application;
 use OCP\Http\Client\IClientService;
 use OCP\IAppConfig;
 use Psr\Log\LoggerInterface;
@@ -244,7 +245,7 @@ class NextcloudAdvisoryFeed {
 	}
 
 	private function feedUrl(): string {
-		$override = trim($this->config->getValueString('app_versions', 'advisory.feed_base', ''));
+		$override = trim($this->config->getValueString(Application::APP_ID, 'advisory.feed_base', ''));
 
 		return $override !== '' ? rtrim($override, '/') : self::DEFAULT_FEED_URL;
 	}

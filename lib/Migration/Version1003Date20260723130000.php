@@ -10,7 +10,7 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Migration;
+namespace OCA\Versioniq\Migration;
 
 use Closure;
 use OCP\DB\ISchemaWrapper;

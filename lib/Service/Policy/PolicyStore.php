@@ -10,9 +10,9 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Policy;
+namespace OCA\Versioniq\Service\Policy;
 
-use OCA\AppVersions\AppInfo\Application;
+use OCA\Versioniq\AppInfo\Application;
 use OCP\IAppConfig;
 use Psr\Log\LoggerInterface;
 
@@ -20,8 +20,8 @@ use Psr\Log\LoggerInterface;
  * Reads and writes per-app auto-update policies stored under app config key
  * `policy.{appId}`. Policies are JSON; a missing or malformed value is
  * treated as "no policy" (level `none`), logged, never fatal — mirrors
- * {@see \OCA\AppVersions\Service\Pin\PinStore} and
- * {@see \OCA\AppVersions\Service\Source\SourceBindingStore}.
+ * {@see \OCA\Versioniq\Service\Pin\PinStore} and
+ * {@see \OCA\Versioniq\Service\Source\SourceBindingStore}.
  *
  * @psalm-api
  */

@@ -10,10 +10,10 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Audit;
+namespace OCA\Versioniq\Service\Audit;
 
-use OCA\AppVersions\Db\AuditEntry;
-use OCA\AppVersions\Db\AuditEntryMapper;
+use OCA\Versioniq\Db\AuditEntry;
+use OCA\Versioniq\Db\AuditEntryMapper;
 use OCP\AppFramework\Utility\ITimeFactory;
 use Psr\Log\LoggerInterface;
 

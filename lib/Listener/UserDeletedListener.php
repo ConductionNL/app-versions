@@ -10,9 +10,9 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Listener;
+namespace OCA\Versioniq\Listener;
 
-use OCA\AppVersions\Db\PatMapper;
+use OCA\Versioniq\Db\PatMapper;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 use OCP\User\Events\UserDeletedEvent;

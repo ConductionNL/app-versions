@@ -10,11 +10,11 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Pat;
+namespace OCA\Versioniq\Service\Pat;
 
 use InvalidArgumentException;
-use OCA\AppVersions\Db\Pat;
-use OCA\AppVersions\Service\Source\ForgeRegistry;
+use OCA\Versioniq\Db\Pat;
+use OCA\Versioniq\Service\Source\ForgeRegistry;
 use OCP\IRequest;
 
 /**
@@ -59,9 +59,9 @@ class PatDeeplinkBuilder {
 			'url' => $this->forgeRegistry->get(ForgeRegistry::FORGE_CODEBERG)->tokenCreateUrl,
 			'instructions' => [
 				'Open the link to create a Codeberg access token (Settings → Applications → Manage access tokens).',
-				'Give it a name like "Nextcloud App Versions" and select read-only repository scopes only.',
+				'Give it a name like "Nextcloud Versioniq" and select read-only repository scopes only.',
 				'Set an expiration if your policy requires one.',
-				'Click "Generate Token" and paste the resulting value back into App Versions.',
+				'Click "Generate Token" and paste the resulting value back into Versioniq.',
 			],
 		];
 	}
@@ -70,7 +70,7 @@ class PatDeeplinkBuilder {
 	 * @return array{kind:string, url:string, instructions:list<string>}
 	 */
 	private function buildClassic(): array {
-		$description = 'Nextcloud App Versions - ' . $this->describeHost();
+		$description = 'Nextcloud Versioniq - ' . $this->describeHost();
 		$query = http_build_query([
 			'scopes' => 'repo',
 			'description' => $description,
@@ -82,7 +82,7 @@ class PatDeeplinkBuilder {
 			'instructions' => [
 				'Click the link to open GitHub with the recommended scope (`repo`) and description prefilled.',
 				'Set an expiration of 90 days or less.',
-				'Click "Generate token" and paste the resulting `ghp_...` value back into App Versions.',
+				'Click "Generate token" and paste the resulting `ghp_...` value back into Versioniq.',
 			],
 		];
 	}
@@ -95,11 +95,11 @@ class PatDeeplinkBuilder {
 			'kind' => Pat::KIND_FINE_GRAINED,
 			'url' => self::FINE_GRAINED_BASE,
 			'instructions' => [
-				'Repository access: choose "Only select repositories" and pick the ones App Versions should install from.',
+				'Repository access: choose "Only select repositories" and pick the ones Versioniq should install from.',
 				'Permissions → Repository permissions → Contents: Read-only.',
 				'Metadata: Read-only (this is auto-included; do not change).',
 				'Set an expiration of 90 days or less.',
-				'Click "Generate token" and paste the resulting `github_pat_...` value back into App Versions.',
+				'Click "Generate token" and paste the resulting `github_pat_...` value back into Versioniq.',
 			],
 		];
 	}

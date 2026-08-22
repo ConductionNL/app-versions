@@ -10,10 +10,10 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Command;
+namespace OCA\Versioniq\Command;
 
-use OCA\AppVersions\Service\Installer\FailureClassifier;
-use OCA\AppVersions\Service\InstallerService;
+use OCA\Versioniq\Service\Installer\FailureClassifier;
+use OCA\Versioniq\Service\InstallerService;
 use OCP\AppFramework\Http;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -23,7 +23,7 @@ use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * `occ app_versions:install <appId> <version> [--source=] [--dry-run]
+ * `occ versioniq:install <appId> <version> [--source=] [--dry-run]
  * [--allow-downgrade] [--json]` — installs a specific version through the
  * same `InstallerService::installAppVersion()` path the HTTP API uses
  * (source resolution, allowlist, integrity verification, backup/restore,
@@ -63,7 +63,7 @@ class InstallVersion extends Command {
 
 	protected function configure(): void {
 		$this
-			->setName('app_versions:install')
+			->setName('versioniq:install')
 			->setDescription('Install a specific version of an already-installed app.')
 			->addArgument('appId', InputArgument::REQUIRED, 'The app id to install.')
 			->addArgument('version', InputArgument::REQUIRED, 'The target version to install.')
@@ -93,7 +93,7 @@ class InstallVersion extends Command {
 		// see "CLI trust context". Reuses the shared predicate rather than
 		// duplicating the self/core check (Task 1).
 		if (!$this->installerService->isManageableApp($appId)) {
-			$message = sprintf('"%s" cannot be installed or updated from App Versions (it is App Versions itself or a core/always-enabled app).', $appId);
+			$message = sprintf('"%s" cannot be installed or updated from Versioniq (it is Versioniq itself or a core/always-enabled app).', $appId);
 			$this->reportRefusal($output, $json, $appId, $version, $message);
 
 			return self::EXIT_BAD_ARGUMENTS;

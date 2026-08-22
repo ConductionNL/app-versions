@@ -10,17 +10,17 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\BackgroundJob;
+namespace OCA\Versioniq\BackgroundJob;
 
-use OCA\AppVersions\Service\AutoUpdate\AttemptLedger;
-use OCA\AppVersions\Service\AutoUpdate\AutoUpdateNotifier;
-use OCA\AppVersions\Service\AutoUpdate\AutoUpdateSettingsStore;
-use OCA\AppVersions\Service\AutoUpdate\AutoUpdateWindow;
-use OCA\AppVersions\Service\AutoUpdate\CandidateSelector;
-use OCA\AppVersions\Service\InstallerService;
-use OCA\AppVersions\Service\Pin\PinStore;
-use OCA\AppVersions\Service\Policy\Policy;
-use OCA\AppVersions\Service\Policy\PolicyStore;
+use OCA\Versioniq\Service\AutoUpdate\AttemptLedger;
+use OCA\Versioniq\Service\AutoUpdate\AutoUpdateNotifier;
+use OCA\Versioniq\Service\AutoUpdate\AutoUpdateSettingsStore;
+use OCA\Versioniq\Service\AutoUpdate\AutoUpdateWindow;
+use OCA\Versioniq\Service\AutoUpdate\CandidateSelector;
+use OCA\Versioniq\Service\InstallerService;
+use OCA\Versioniq\Service\Pin\PinStore;
+use OCA\Versioniq\Service\Policy\Policy;
+use OCA\Versioniq\Service\Policy\PolicyStore;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -28,7 +28,7 @@ use OCP\BackgroundJob\TimedJob;
 use Psr\Log\LoggerInterface;
 
 /**
- * Nightly policy-driven auto-update sweep — turns App Versions from a repair
+ * Nightly policy-driven auto-update sweep — turns Versioniq from a repair
  * tool into bounded, observable update automation; see "Nightly policy
  * execution through the standard installer".
  *

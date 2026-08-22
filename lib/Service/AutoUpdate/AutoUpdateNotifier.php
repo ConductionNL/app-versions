@@ -10,9 +10,9 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\AutoUpdate;
+namespace OCA\Versioniq\Service\AutoUpdate;
 
-use OCA\AppVersions\AppInfo\Application;
+use OCA\Versioniq\AppInfo\Application;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IGroupManager;
 use OCP\IURLGenerator;
@@ -22,10 +22,10 @@ use Psr\Log\LoggerInterface;
 /**
  * Raises the `auto_update_success` / `auto_update_failure` admin notification
  * for one attempted install performed by
- * {@see \OCA\AppVersions\BackgroundJob\AutoUpdateJob}; see "Every auto-update
+ * {@see \OCA\Versioniq\BackgroundJob\AutoUpdateJob}; see "Every auto-update
  * outcome is reported". Every admin-group member is notified, linking back
- * into the App Versions admin settings page — mirrors
- * {@see \OCA\AppVersions\Service\Pin\PinDriftHandler::notifyAdmins()}.
+ * into the Versioniq admin settings page — mirrors
+ * {@see \OCA\Versioniq\Service\Pin\PinDriftHandler::notifyAdmins()}.
  *
  * @psalm-api
  */
@@ -73,7 +73,7 @@ class AutoUpdateNotifier {
 	 * @param array<string, string> $subjectParameters
 	 */
 	private function fireAll(string $appId, string $version, string $subject, array $subjectParameters): void {
-		// Links into the App Versions admin settings page.
+		// Links into the Versioniq admin settings page.
 		$link = $this->urlGenerator->linkToRouteAbsolute(
 			'settings.AdminSettings.index',
 			['section' => Application::APP_ID],

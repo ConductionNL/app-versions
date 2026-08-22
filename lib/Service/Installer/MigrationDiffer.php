@@ -10,7 +10,7 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Installer;
+namespace OCA\Versioniq\Service\Installer;
 
 /**
  * Compares the database migration step files (`lib/Migration/Version*.php`)

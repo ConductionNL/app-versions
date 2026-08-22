@@ -10,9 +10,9 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Command;
+namespace OCA\Versioniq\Command;
 
-use OCA\AppVersions\Service\InstallerService;
+use OCA\Versioniq\Service\InstallerService;
 use OCP\AppFramework\Http;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Helper\Table;
@@ -23,7 +23,7 @@ use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * `occ app_versions:versions <appId> [--source=] [--json]` — lists the
+ * `occ versioniq:versions <appId> [--source=] [--json]` — lists the
  * versions available for an already-installed app from its bound (or
  * one-off overridden) source, the same resolution `InstallerService`
  * performs for the HTTP API; see "List versions from the CLI".
@@ -40,7 +40,7 @@ class ListVersions extends Command {
 
 	protected function configure(): void {
 		$this
-			->setName('app_versions:versions')
+			->setName('versioniq:versions')
 			->setDescription('List the versions available for an app from its bound (or overridden) source.')
 			->addArgument('appId', InputArgument::REQUIRED, 'The app id to list versions for.')
 			->addOption('source', null, InputOption::VALUE_REQUIRED, 'One-off source id override (e.g. github:owner/repo), instead of the app\'s bound source.')
