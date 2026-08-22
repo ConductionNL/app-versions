@@ -33,9 +33,10 @@ jobs:
     uses: ConductionNL/.github/.github/workflows/release.yml@main
     with:
       release-type: unstable
-      app-name: app_versions
+      app-name: versioniq
       # The packaged folder must match <id> in appinfo/info.xml, which is
-      # `app_versions` (underscore) — not the repository name.
+      # `versioniq`. Renamed in lockstep with that id: a tarball whose folder
+      # name disagrees with the id inside it will not install.
       node-version: "24"
     secrets: inherit
 
@@ -44,9 +45,10 @@ jobs:
     uses: ConductionNL/.github/.github/workflows/release.yml@main
     with:
       release-type: beta
-      app-name: app_versions
+      app-name: versioniq
       # The packaged folder must match <id> in appinfo/info.xml, which is
-      # `app_versions` (underscore) — not the repository name.
+      # `versioniq`. Renamed in lockstep with that id: a tarball whose folder
+      # name disagrees with the id inside it will not install.
       node-version: "24"
     secrets: inherit
 
@@ -55,8 +57,9 @@ jobs:
     uses: ConductionNL/.github/.github/workflows/release.yml@main
     with:
       release-type: stable
-      app-name: app_versions
+      app-name: versioniq
       # The packaged folder must match <id> in appinfo/info.xml, which is
-      # `app_versions` (underscore) — not the repository name.
+      # `versioniq`. Renamed in lockstep with that id: a tarball whose folder
+      # name disagrees with the id inside it will not install.
       node-version: "24"
     secrets: inherit

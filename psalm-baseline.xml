@@ -218,8 +218,8 @@
     <InvalidReturnStatement>
       <code><![CDATA[$this->errorEnvelope(
 				$this->isCoreProtectedApp($appId)
-					? 'This core app cannot be managed from App Versions.'
-					: 'This app cannot be managed from App Versions.',
+					? 'This core app cannot be managed from Versioniq.'
+					: 'This app cannot be managed from Versioniq.',
 				Http::STATUS_FORBIDDEN
 			)]]></code>
       <code><![CDATA[$this->errorEnvelope($error->getMessage(), Http::STATUS_BAD_REQUEST)]]></code>

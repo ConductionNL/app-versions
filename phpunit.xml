@@ -7,7 +7,7 @@
 
       ::error::PHPUnit is enabled but no phpunit.xml or phpunit-unit.xml found.
 
-    There is no input to point it somewhere else. app-versions kept its config
+    There is no input to point it somewhere else. This app kept its config
     at tests/phpunit.xml — the only app in the fleet that did — so all six
     PHPUnit legs failed at "Validate test infrastructure" without running a
     single test. Every other app already has this file here.
@@ -21,7 +21,7 @@
          timeoutForLargeTests="900"
          xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.4/phpunit.xsd"
          cacheDirectory=".phpunit.cache">
-	<testsuite name="App Versions Tests">
+	<testsuite name="Versioniq Tests">
 		<directory suffix="Test.php">tests</directory>
 	</testsuite>
 	<source>
