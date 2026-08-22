@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Db;
+namespace OCA\Versioniq\Tests\Unit\Db;
 
-use OCA\AppVersions\Db\Pat;
+use OCA\Versioniq\Db\Pat;
 use PHPUnit\Framework\TestCase;
 
 final class PatTest extends TestCase {

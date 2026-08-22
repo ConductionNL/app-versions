@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Cron;
+namespace OCA\Versioniq\Tests\Unit\Cron;
 
-use OCA\AppVersions\Cron\PinReconcileJob;
-use OCA\AppVersions\Service\Pin\Pin;
-use OCA\AppVersions\Service\Pin\PinDriftHandler;
-use OCA\AppVersions\Service\Pin\PinStore;
+use OCA\Versioniq\Cron\PinReconcileJob;
+use OCA\Versioniq\Service\Pin\Pin;
+use OCA\Versioniq\Service\Pin\PinDriftHandler;
+use OCA\Versioniq\Service\Pin\PinStore;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Utility\ITimeFactory;
 use PHPUnit\Framework\TestCase;

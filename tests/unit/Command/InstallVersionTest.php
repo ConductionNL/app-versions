@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Command;
+namespace OCA\Versioniq\Tests\Unit\Command;
 
-use OCA\AppVersions\Command\InstallVersion;
-use OCA\AppVersions\Service\Installer\FailureClassifier;
-use OCA\AppVersions\Service\InstallerService;
+use OCA\Versioniq\Command\InstallVersion;
+use OCA\Versioniq\Service\Installer\FailureClassifier;
+use OCA\Versioniq\Service\InstallerService;
 use OCP\AppFramework\Http;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Tester\CommandTester;

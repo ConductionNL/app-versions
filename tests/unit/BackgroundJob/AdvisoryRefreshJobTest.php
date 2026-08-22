@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\BackgroundJob;
+namespace OCA\Versioniq\Tests\Unit\BackgroundJob;
 
-use OCA\AppVersions\BackgroundJob\AdvisoryRefreshJob;
-use OCA\AppVersions\Service\Advisory\AdvisoryDigestNotifier;
-use OCA\AppVersions\Service\Advisory\AdvisoryNotifier;
-use OCA\AppVersions\Service\Advisory\AdvisorySettingsStore;
-use OCA\AppVersions\Service\Advisory\AdvisoryResultStore;
-use OCA\AppVersions\Service\Advisory\AdvisoryService;
+use OCA\Versioniq\BackgroundJob\AdvisoryRefreshJob;
+use OCA\Versioniq\Service\Advisory\AdvisoryDigestNotifier;
+use OCA\Versioniq\Service\Advisory\AdvisoryNotifier;
+use OCA\Versioniq\Service\Advisory\AdvisorySettingsStore;
+use OCA\Versioniq\Service\Advisory\AdvisoryResultStore;
+use OCA\Versioniq\Service\Advisory\AdvisoryService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;

@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\BackgroundJob;
+namespace OCA\Versioniq\Tests\Unit\BackgroundJob;
 
-use OCA\AppVersions\BackgroundJob\PatExpiryWarningJob;
-use OCA\AppVersions\Db\Pat;
-use OCA\AppVersions\Db\PatMapper;
-use OCA\AppVersions\Service\Pat\PatExpiryEvaluator;
-use OCA\AppVersions\Service\Pat\PatExpiryNotifier;
+use OCA\Versioniq\BackgroundJob\PatExpiryWarningJob;
+use OCA\Versioniq\Db\Pat;
+use OCA\Versioniq\Db\PatMapper;
+use OCA\Versioniq\Service\Pat\PatExpiryEvaluator;
+use OCA\Versioniq\Service\Pat\PatExpiryNotifier;
 use OCP\AppFramework\Utility\ITimeFactory;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
