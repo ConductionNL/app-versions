@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Pat;
+namespace OCA\Versioniq\Tests\Unit\Service\Pat;
 
-use OCA\AppVersions\Db\Pat;
-use OCA\AppVersions\Db\PatMapper;
-use OCA\AppVersions\Service\Pat\PatResolver;
+use OCA\Versioniq\Db\Pat;
+use OCA\Versioniq\Db\PatMapper;
+use OCA\Versioniq\Service\Pat\PatResolver;
 use PHPUnit\Framework\TestCase;
 
 final class PatResolverTest extends TestCase {

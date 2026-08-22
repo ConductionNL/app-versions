@@ -42,7 +42,7 @@ const acceptMove = async (): Promise<void> => {
 	try {
 		const { payload, error: apiError } = await ocsWrite<{ appId: string, pin: PinRecord }>(
 			'PUT',
-			`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(props.appId)}/pin`,
+			`/ocs/v2.php/apps/versioniq/api/app/${encodeURIComponent(props.appId)}/pin`,
 			{ version: props.pin.driftedTo },
 		)
 		if (apiError) {
@@ -51,7 +51,7 @@ const acceptMove = async (): Promise<void> => {
 		}
 		emit('update:pin', props.appId, { ...payload.pin, appId: props.appId })
 	} catch (e) {
-		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not move the pin.')
+		error.value = e instanceof Error ? e.message : t('versioniq', 'Could not move the pin.')
 	} finally {
 		busy.value = false
 	}
@@ -63,7 +63,7 @@ const acceptRemove = async (): Promise<void> => {
 	try {
 		const { error: apiError } = await ocsWrite<{ appId: string, unpinned: boolean }>(
 			'DELETE',
-			`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(props.appId)}/pin`,
+			`/ocs/v2.php/apps/versioniq/api/app/${encodeURIComponent(props.appId)}/pin`,
 		)
 		if (apiError) {
 			error.value = apiError
@@ -71,7 +71,7 @@ const acceptRemove = async (): Promise<void> => {
 		}
 		emit('update:pin', props.appId, null)
 	} catch (e) {
-		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not remove the pin.')
+		error.value = e instanceof Error ? e.message : t('versioniq', 'Could not remove the pin.')
 	} finally {
 		busy.value = false
 	}
@@ -81,17 +81,17 @@ const acceptRemove = async (): Promise<void> => {
 <template>
 	<NcNoteCard type="warning" data-testid="pin-drift-banner">
 		<p :class="$style.text">
-			{{ t('app_versions', '{appId} is pinned to {pinnedVersion} but is now running {observedVersion} — something other than App Versions changed it.', { appId, pinnedVersion: pin.version, observedVersion: pin.driftedTo ?? '' }) }}
+			{{ t('versioniq', '{appId} is pinned to {pinnedVersion} but is now running {observedVersion} — something other than Versioniq changed it.', { appId, pinnedVersion: pin.version, observedVersion: pin.driftedTo ?? '' }) }}
 		</p>
 		<div :class="$style.actions">
 			<NcButton type="primary" :disabled="busy" @click="requestRepin">
-				{{ t('app_versions', 'Re-pin {version}', { version: pin.version }) }}
+				{{ t('versioniq', 'Re-pin {version}', { version: pin.version }) }}
 			</NcButton>
 			<NcButton type="secondary" :disabled="busy" @click="acceptMove">
-				{{ t('app_versions', 'Accept: move pin to {version}', { version: pin.driftedTo ?? '' }) }}
+				{{ t('versioniq', 'Accept: move pin to {version}', { version: pin.driftedTo ?? '' }) }}
 			</NcButton>
 			<NcButton type="tertiary" :disabled="busy" @click="acceptRemove">
-				{{ t('app_versions', 'Accept: remove pin') }}
+				{{ t('versioniq', 'Accept: remove pin') }}
 			</NcButton>
 		</div>
 		<p v-if="error" :class="$style.error">

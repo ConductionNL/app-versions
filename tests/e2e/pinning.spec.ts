@@ -13,7 +13,7 @@ const APP = 'dashboard'
 test.describe('version pinning', () => {
 	test.afterEach(async ({ page }) => {
 		// Best-effort cleanup: remove any pin this spec may have left behind.
-		await page.request.delete(`/ocs/v2.php/apps/app_versions/api/app/${APP}/pin?format=json`, {
+		await page.request.delete(`/ocs/v2.php/apps/versioniq/api/app/${APP}/pin?format=json`, {
 			headers: { 'OCS-APIRequest': 'true' },
 		}).catch(() => undefined)
 	})
@@ -69,7 +69,7 @@ test.describe('version pinning', () => {
 
 	test('a pinned app shows who pinned it and when', async ({ page }) => {
 		// Seed a pin through the API, then assert the UI presents it.
-		const put = await page.request.put(`/ocs/v2.php/apps/app_versions/api/app/${APP}/pin?format=json`, {
+		const put = await page.request.put(`/ocs/v2.php/apps/versioniq/api/app/${APP}/pin?format=json`, {
 			headers: { 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' },
 			data: { reason: 'seeded by e2e' },
 		})
@@ -81,7 +81,7 @@ test.describe('version pinning', () => {
 		// did not render it — and the locator alone cannot tell them apart.
 		// Reading the API first turns one opaque failure into a statement about
 		// WHICH link of that chain broke.
-		const pinsList = await page.request.get('/ocs/v2.php/apps/app_versions/api/pins?format=json', {
+		const pinsList = await page.request.get('/ocs/v2.php/apps/versioniq/api/pins?format=json', {
 			headers: { 'OCS-APIRequest': 'true' },
 		})
 		const listed = (await pinsList.json())?.ocs?.data?.pins ?? []

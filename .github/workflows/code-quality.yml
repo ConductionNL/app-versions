@@ -11,19 +11,21 @@ jobs:
   quality:
     uses: ConductionNL/.github/.github/workflows/quality.yml@main
     with:
-      # app_versions with an UNDERSCORE, matching <id>app_versions</id> in
-      # appinfo/info.xml — NOT the repository name, which is hyphenated.
+      # MUST equal <id>versioniq</id> in appinfo/info.xml, character for
+      # character. Renamed here in lockstep with that id — this input and the
+      # id are one value in two files, and a rename that moves only one of them
+      # breaks every leg of this workflow.
       #
       # Nextcloud requires the app DIRECTORY name to equal the app id. Checked
-      # out as `apps/app-versions`, `occ app:enable` fails with
+      # out under any other name, `occ app:enable` fails with
       #
-      #   App "app-versions" cannot be installed because appinfo file cannot be read.
+      #   App "<dir>" cannot be installed because appinfo file cannot be read.
       #
       # which reads like a malformed or missing info.xml and is nothing of the
-      # sort — the file is valid and simply not where that id says to look. All
-      # six PHPUnit legs and the E2E job died on this at the install step, so
-      # not one of them ever ran a test.
-      app-name: app_versions
+      # sort — the file is valid and simply not where that id says to look.
+      # Under the old id this mismatch killed all six PHPUnit legs and the E2E
+      # job at the install step, so not one of them ever ran a test.
+      app-name: versioniq
       php-version: "8.3"
       php-test-versions: '["8.3", "8.4"]'
       # THE LIST IS THE WHOLE DECLARED RANGE. appinfo/info.xml declares
@@ -149,7 +151,7 @@ jobs:
       # not come up — the seed step fails the job on that, which is the point.
       # A fixture that silently fails to start would put those 66 tests back to
       # skipping for a reason that is no longer true.
-      playwright-seed-command: "bash apps/app_versions/tests/e2e/fixtures/forge/bootstrap-ci.sh"
+      playwright-seed-command: "bash apps/versioniq/tests/e2e/fixtures/forge/bootstrap-ci.sh"
 
       # ── Hydra mechanical gates ───────────────────────────────────────────
       # `enable-hydra-gates` defaults to FALSE, so this tier has never executed

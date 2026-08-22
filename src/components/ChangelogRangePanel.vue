@@ -16,7 +16,7 @@ defineProps<{
 <template>
 	<div v-if="entries.length > 0" :class="$style.panel" data-testid="changelog-range-panel">
 		<p :class="$style.title">
-			{{ t('app_versions', 'Changes in this range') }}
+			{{ t('versioniq', 'Changes in this range') }}
 		</p>
 		<ul :class="$style.list">
 			<li
@@ -32,7 +32,7 @@ defineProps<{
 					{{ entry.changelog }}
 				</p>
 				<p v-else :class="$style.placeholder" data-testid="changelog-range-placeholder">
-					{{ t('app_versions', 'No release notes provided') }}
+					{{ t('versioniq', 'No release notes provided') }}
 				</p>
 			</li>
 		</ul>

@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Installer;
+namespace OCA\Versioniq\Tests\Unit\Service\Installer;
 
-use OCA\AppVersions\Service\Installer\MigrationDiffer;
+use OCA\Versioniq\Service\Installer\MigrationDiffer;
 use PHPUnit\Framework\TestCase;
 
 /**
  * Exercises the migration diff algorithm against real fixture directories —
- * mirrors {@see \OCA\AppVersions\Tests\Unit\Service\InstallerRecoveryTest}'s
+ * mirrors {@see \OCA\Versioniq\Tests\Unit\Service\InstallerRecoveryTest}'s
  * approach of driving filesystem primitives against a real temp tree, since
  * the diff itself is a pure filesystem read with no network dependency.
  */

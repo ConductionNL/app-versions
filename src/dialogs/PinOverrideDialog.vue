@@ -30,17 +30,17 @@ const choose = (choice: 'repin' | 'unpin' | 'cancel'): void => {
 
 const buttons = [
 	{
-		label: t('app_versions', 'Cancel'),
+		label: t('versioniq', 'Cancel'),
 		type: 'tertiary' as const,
 		callback: () => choose('cancel'),
 	},
 	{
-		label: t('app_versions', 'Unpin and install'),
+		label: t('versioniq', 'Unpin and install'),
 		type: 'secondary' as const,
 		callback: () => choose('unpin'),
 	},
 	{
-		label: t('app_versions', 'Move pin and install'),
+		label: t('versioniq', 'Move pin and install'),
 		type: 'primary' as const,
 		callback: () => choose('repin'),
 	},
@@ -50,14 +50,14 @@ const buttons = [
 <template>
 	<NcDialog
 		:open="open"
-		:name="t('app_versions', '{appId} is pinned', { appId })"
+		:name="t('versioniq', '{appId} is pinned', { appId })"
 		:buttons="buttons"
 		@update:open="(value: boolean) => { if (!value) { choose('cancel') } }">
 		<p :class="$style.text">
-			{{ t('app_versions', '{appId} is pinned to version {pinnedVersion}. App Versions will not overwrite a pin without an explicit choice.', { appId, pinnedVersion }) }}
+			{{ t('versioniq', '{appId} is pinned to version {pinnedVersion}. Versioniq will not overwrite a pin without an explicit choice.', { appId, pinnedVersion }) }}
 		</p>
 		<p :class="$style.text">
-			{{ t('app_versions', 'Move pin and install will install {targetVersion} and move the pin there. Unpin and install will remove the pin entirely before installing.', { targetVersion }) }}
+			{{ t('versioniq', 'Move pin and install will install {targetVersion} and move the pin there. Unpin and install will remove the pin entirely before installing.', { targetVersion }) }}
 		</p>
 	</NcDialog>
 </template>

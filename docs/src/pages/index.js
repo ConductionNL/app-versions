@@ -1,15 +1,15 @@
 /**
- * App Versions landing page.
+ * Versioniq landing page.
  *
  * Composes the brand <DetailHero> + <WidgetShelf> from
  * @conduction/docusaurus-preset/components, mirroring the OpenRegister
  * landing page at openregister.conduction.nl (docs/src/pages/index.js).
  *
- * App Versions is in development — this page tells visitors what the
+ * Versioniq is in development — this page tells visitors what the
  * app is (a version-rollback / pin tool that spans App Store + GitHub
  * releases, see openspec/specs/{version-management,external-sources,
  * pat-management,app-discovery}) and previews the three core surfaces
- * with token-built mock panels. No <AppMock> yet (no app-versions
+ * with token-built mock panels. No <AppMock> yet (no versioniq
  * variant in the preset).
  *
  * Written as .js (not .mdx) because the docs site has the docs plugin
@@ -29,7 +29,7 @@ import {
 
 /* Version-rows glyph — two stacked rows with a version marker, lifted
    straight from the apps-catalog entry on conduction-website. */
-const APP_VERSIONS_ICON = (
+const VERSIONIQ_ICON = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M3 6h18v4H3zM3 14h12v4H3z" />
     <circle cx="19" cy="16" r="2" />
@@ -46,7 +46,7 @@ const TAGLINE = (
 );
 
 /* --- Token-built mock widget panels -----------------------------------
-   Sketches of the three surfaces App Versions will land with: the
+   Sketches of the three surfaces Versioniq will land with: the
    list of installed apps + their current version, the version picker
    that fans out per source, and a feed of recent rollbacks. */
 
@@ -254,7 +254,7 @@ const WIDGETS = [
 export default function Home() {
   return (
     <Layout
-      title="App Versions"
+      title="Versioniq"
       description="Install any earlier or newer version of already installed Nextcloud apps. Essential for debugging, testing compatibility, and recovering from breaking changes."
     >
       <main className="marketing-page">
@@ -263,22 +263,22 @@ export default function Home() {
           status={{ label: 'In development', color: 'var(--c-orange-knvb)' }}
           version="pre-release"
           locales="NL · EN"
-          title="App Versions"
+          title="Versioniq"
           tagline={TAGLINE}
           primaryCta={{
             label: 'View on Codeberg',
-            href: 'https://codeberg.org/Conduction/app-versions',
+            href: 'https://github.com/ConductionNL/versioniq',
             tone: 'orange',
           }}
           secondaryCta={{ label: 'Read the docs', href: '/docs/intro' }}
           iconColor="var(--c-orange-knvb)"
-          icon={APP_VERSIONS_ICON}
+          icon={VERSIONIQ_ICON}
         />
 
         <WidgetShelf
-          eyebrow="What App Versions will land with"
+          eyebrow="What Versioniq will land with"
           title="Versiebeheer voor je hele Nextcloud — App Store én GitHub."
-          lede="Een breaking change in een minor release sloopt soms productie. App Versions geeft je de uitknop: rol terug naar de versie die wél werkte, pin op een release candidate om compatibility te testen, of installeer een private GitHub release als je app daar leeft. Eén interface, één audit trail."
+          lede="Een breaking change in een minor release sloopt soms productie. Versioniq geeft je de uitknop: rol terug naar de versie die wél werkte, pin op een release candidate om compatibility te testen, of installeer een private GitHub release als je app daar leeft. Eén interface, één audit trail."
           widgets={WIDGETS}
         />
       </main>

@@ -10,9 +10,9 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Listener;
+namespace OCA\Versioniq\Listener;
 
-use OCA\AppVersions\Service\Pin\PinDriftHandler;
+use OCA\Versioniq\Service\Pin\PinDriftHandler;
 use OCP\App\Events\AppUpdateEvent;
 use OCP\App\IAppManager;
 use OCP\EventDispatcher\Event;
@@ -24,7 +24,7 @@ use OCP\EventDispatcher\IEventListener;
  * tool built on `IAppManager`. `AppUpdateEvent` is post-hoc and
  * non-cancellable (Nextcloud core has no pre-update veto hook — see
  * design.md), so this listener can only detect and report; the daily
- * {@see \OCA\AppVersions\Cron\PinReconcileJob} is the safety net for updates
+ * {@see \OCA\Versioniq\Cron\PinReconcileJob} is the safety net for updates
  * that bypass the event entirely (e.g. performed while this app was
  * disabled).
  *

@@ -57,7 +57,7 @@ const confirmPin = async (): Promise<void> => {
 		}
 		const { payload, error: apiError } = await ocsWrite<{ appId: string, pin: PinRecord }>(
 			'PUT',
-			`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(props.appId)}/pin`,
+			`/ocs/v2.php/apps/versioniq/api/app/${encodeURIComponent(props.appId)}/pin`,
 			body,
 		)
 		if (apiError) {
@@ -67,7 +67,7 @@ const confirmPin = async (): Promise<void> => {
 		emit('pinned', { ...payload.pin, appId: props.appId })
 		emit('update:open', false)
 	} catch (e) {
-		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not pin this app.')
+		error.value = e instanceof Error ? e.message : t('versioniq', 'Could not pin this app.')
 	} finally {
 		saving.value = false
 	}
@@ -75,12 +75,12 @@ const confirmPin = async (): Promise<void> => {
 
 const buttons = [
 	{
-		label: t('app_versions', 'Cancel'),
+		label: t('versioniq', 'Cancel'),
 		type: 'tertiary' as const,
 		callback: () => emit('update:open', false),
 	},
 	{
-		label: t('app_versions', 'Pin'),
+		label: t('versioniq', 'Pin'),
 		type: 'primary' as const,
 		callback: confirmPin,
 	},
@@ -90,17 +90,17 @@ const buttons = [
 <template>
 	<NcDialog
 		:open="open"
-		:name="t('app_versions', 'Pin {appId} at {version}', { appId, version })"
+		:name="t('versioniq', 'Pin {appId} at {version}', { appId, version })"
 		:buttons="buttons"
 		@update:open="(value: boolean) => emit('update:open', value)">
 		<div :class="$style.body">
 			<NcNoteCard type="info">
-				{{ t('app_versions', 'Pins are enforced inside App Versions and monitored elsewhere — Nextcloud\'s own updater can still update this app. If that happens you will be notified and offered a one-click re-pin.') }}
+				{{ t('versioniq', 'Pins are enforced inside Versioniq and monitored elsewhere — Nextcloud\'s own updater can still update this app. If that happens you will be notified and offered a one-click re-pin.') }}
 			</NcNoteCard>
 			<NcTextField
 				:model-value="reason"
-				:label="t('app_versions', 'Reason (optional)')"
-				:placeholder="t('app_versions', 'e.g. 2.5.0 breaks LDAP sync')"
+				:label="t('versioniq', 'Reason (optional)')"
+				:placeholder="t('versioniq', 'e.g. 2.5.0 breaks LDAP sync')"
 				:disabled="saving"
 				@update:model-value="(value: string) => (reason = value)" />
 			<p v-if="error" :class="$style.error">

@@ -33,12 +33,12 @@ const choose = (accept: boolean): void => {
 
 const buttons = [
 	{
-		label: t('app_versions', 'Cancel'),
+		label: t('versioniq', 'Cancel'),
 		type: 'tertiary' as const,
 		callback: () => choose(false),
 	},
 	{
-		label: t('app_versions', 'Accept new checksum and install'),
+		label: t('versioniq', 'Accept new checksum and install'),
 		variant: 'error' as const,
 		callback: () => choose(true),
 	},
@@ -48,24 +48,24 @@ const buttons = [
 <template>
 	<NcDialog
 		:open="open"
-		:name="t('app_versions', 'Checksum does not match first install')"
+		:name="t('versioniq', 'Checksum does not match first install')"
 		:buttons="buttons"
 		@update:open="(value: boolean) => { if (!value) { choose(false) } }">
 		<p :class="$style.text">
-			{{ t('app_versions', '{appId} {version} was previously installed with a different SHA-256 checksum. The upstream release may have been rewritten since — App Versions blocks the install to protect you from a silently altered artifact.', { appId, version }) }}
+			{{ t('versioniq', '{appId} {version} was previously installed with a different SHA-256 checksum. The upstream release may have been rewritten since — Versioniq blocks the install to protect you from a silently altered artifact.', { appId, version }) }}
 		</p>
 		<dl :class="$style.shaGrid">
-			<dt>{{ t('app_versions', 'Recorded at first install') }}</dt>
+			<dt>{{ t('versioniq', 'Recorded at first install') }}</dt>
 			<dd :class="$style.shaValue">
 				{{ expectedSha }}
 			</dd>
-			<dt>{{ t('app_versions', 'Just downloaded') }}</dt>
+			<dt>{{ t('versioniq', 'Just downloaded') }}</dt>
 			<dd :class="$style.shaValue">
 				{{ actualSha }}
 			</dd>
 		</dl>
 		<p :class="$style.text">
-			{{ t('app_versions', 'Only accept if you are certain this change is legitimate — for example the maintainer re-tagged the release to fix a packaging error.') }}
+			{{ t('versioniq', 'Only accept if you are certain this change is legitimate — for example the maintainer re-tagged the release to fix a packaging error.') }}
 		</p>
 	</NcDialog>
 </template>

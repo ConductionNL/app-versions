@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Pin;
+namespace OCA\Versioniq\Tests\Unit\Service\Pin;
 
-use OCA\AppVersions\Service\Pin\Pin;
-use OCA\AppVersions\Service\Pin\PinDriftHandler;
-use OCA\AppVersions\Service\Pin\PinStore;
+use OCA\Versioniq\Service\Pin\Pin;
+use OCA\Versioniq\Service\Pin\PinDriftHandler;
+use OCA\Versioniq\Service\Pin\PinStore;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IGroup;
 use OCP\IGroupManager;
@@ -27,7 +27,7 @@ final class PinDriftHandlerTest extends TestCase {
 
 	private function urlGenerator(): IURLGenerator {
 		$urlGenerator = $this->createMock(IURLGenerator::class);
-		$urlGenerator->method('linkToRouteAbsolute')->willReturn('https://example.test/settings/admin/app_versions');
+		$urlGenerator->method('linkToRouteAbsolute')->willReturn('https://example.test/settings/admin/versioniq');
 
 		return $urlGenerator;
 	}
@@ -105,7 +105,7 @@ final class PinDriftHandlerTest extends TestCase {
 		$notification->method('setSubject')->willReturnSelf();
 		$notification->expects($this->exactly(2))
 			->method('setLink')
-			->with('https://example.test/settings/admin/app_versions')
+			->with('https://example.test/settings/admin/versioniq')
 			->willReturnSelf();
 
 		$notificationManager = $this->createMock(IManager::class);

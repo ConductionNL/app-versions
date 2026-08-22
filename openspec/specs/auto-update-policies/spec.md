@@ -10,7 +10,7 @@ status: implemented
 
 ## Purpose
 
-Turn App Versions from a repair tool into bounded, observable update automation: per-app semver-level policies executed nightly through the app's own verified installer path, honoring pins, constrained to a maintenance window, defaulting to off, and reporting every action. Explicitly not a silent `occ app:update --all` clone — the value is the bounds and the reporting.
+Turn Versioniq from a repair tool into bounded, observable update automation: per-app semver-level policies executed nightly through the app's own verified installer path, honoring pins, constrained to a maintenance window, defaulting to off, and reporting every action. Explicitly not a silent `occ app:update --all` clone — the value is the bounds and the reporting.
 
 ## Requirements
 

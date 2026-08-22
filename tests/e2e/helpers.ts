@@ -6,9 +6,9 @@ import { expect, type Page } from '@playwright/test'
 
 const execFileAsync = promisify(execFile)
 
-export const SETTINGS_URL = '/index.php/settings/admin/app_versions'
+export const SETTINGS_URL = '/index.php/settings/admin/versioniq'
 
-/** Tab labels as rendered in the App Versions settings tablist. */
+/** Tab labels as rendered in the Versioniq settings tablist. */
 export type TabName =
 	| 'Apps'
 	| 'History'
@@ -37,13 +37,13 @@ export type TabName =
  */
 export async function openSettings(page: Page): Promise<void> {
 	await page.goto(SETTINGS_URL, { waitUntil: 'domcontentloaded' })
-	await expect(page.getByRole('heading', { name: 'App Versions', level: 2 })).toBeVisible()
-	await expect(page.getByRole('tablist', { name: 'App Versions sections' })).toBeVisible()
+	await expect(page.getByRole('heading', { name: 'Versioniq', level: 2 })).toBeVisible()
+	await expect(page.getByRole('tablist', { name: 'Versioniq sections' })).toBeVisible()
 }
 
 /** Switches to a top-level tab and returns its panel locator. */
 export async function openTab(page: Page, tab: TabName) {
-	await page.getByRole('tablist', { name: 'App Versions sections' })
+	await page.getByRole('tablist', { name: 'Versioniq sections' })
 		.getByRole('tab', { name: tab, exact: true })
 		.click()
 	const panel = page.getByRole('tabpanel', { name: tab })
@@ -94,7 +94,7 @@ export async function versionsLoaded(page: Page): Promise<boolean> {
 /** Reads an app config value straight from the server, to assert persistence. */
 export async function appConfigValue(page: Page, key: string): Promise<string | null> {
 	const res = await page.request.get(
-		`/ocs/v2.php/apps/provisioning_api/api/v1/config/apps/app_versions/${key}?format=json`,
+		`/ocs/v2.php/apps/provisioning_api/api/v1/config/apps/versioniq/${key}?format=json`,
 		{ headers: { 'OCS-APIRequest': 'true' } },
 	)
 	if (!res.ok()) {
@@ -153,7 +153,7 @@ export async function fixtureControl(page: Page, path: string, body: unknown): P
  *
  * The mode is DETECTED rather than configured, so neither the developer setup
  * nor the shared workflow needs a new environment variable: Playwright runs
- * with cwd inside the app, which in CI sits at `<server>/apps/app_versions`, so
+ * with cwd inside the app, which in CI sits at `<server>/apps/versioniq`, so
  * walking up for an `occ` file finds the server root. A developer checkout is
  * not inside a Nextcloud tree, finds nothing, and keeps the Docker behaviour.
  * An explicit `NC_CONTAINER` or `NC_SERVER_ROOT` overrides the detection.
@@ -263,7 +263,7 @@ function dbPrelude(): string {
 /**
  * Installs a version of the fixture app and returns the structured outcome.
  *
- * Installs are driven through `occ app_versions:install` rather than the HTTP
+ * Installs are driven through `occ versioniq:install` rather than the HTTP
  * API. Both call the same `InstallerService::installAppVersion`, so the forge
  * integration under test is identical — but the install swaps app files and
  * calls `opcache_reset()`, which under the test image's mod_php poisons the
@@ -278,7 +278,7 @@ export async function installFixture(
 	opts: { allowDowngrade?: boolean; acceptNewSha?: boolean } = {},
 ): Promise<{ status: number; body: any }> {
 	void page
-	const args = ['php', 'occ', 'app_versions:install',
+	const args = ['php', 'occ', 'versioniq:install',
 		FIXTURE_APP, version, `--source=${FIXTURE_SOURCE}`, '--json']
 	if (opts.allowDowngrade) args.push('--allow-downgrade')
 	if (opts.acceptNewSha) args.push('--accept-new-sha')
@@ -331,7 +331,7 @@ export function tsOffset(days = 0): string {
 export async function discoverDiagnostics(page: Page, query: string): Promise<string> {
 	try {
 		const res = await page.request.get(
-			`/ocs/v2.php/apps/app_versions/api/discover?q=${encodeURIComponent(query)}&format=json`,
+			`/ocs/v2.php/apps/versioniq/api/discover?q=${encodeURIComponent(query)}&format=json`,
 			{ headers: { 'OCS-APIRequest': 'true' } },
 		)
 		const data = (await res.json())?.ocs?.data ?? {}
@@ -426,13 +426,13 @@ export async function resetFixtureApp(page: Page): Promise<void> {
 	// Clear any pin and — crucially — the recorded SHA-256 map, which lives in
 	// the binding config and would otherwise leak across tests (a test that
 	// records a rewritten digest would make the next test's tamper "match").
-	await page.request.delete(`/ocs/v2.php/apps/app_versions/api/app/${FIXTURE_APP}/pin?format=json`, {
+	await page.request.delete(`/ocs/v2.php/apps/versioniq/api/app/${FIXTURE_APP}/pin?format=json`, {
 		headers: { 'OCS-APIRequest': 'true' },
 	}).catch(() => undefined)
-	await occ('config:app:set', 'app_versions', `source.${FIXTURE_APP}`, '--value', CLEAN_FIXTURE_BINDING)
+	await occ('config:app:set', 'versioniq', `source.${FIXTURE_APP}`, '--value', CLEAN_FIXTURE_BINDING)
 	// Clear the artifact cache too: a genuine copy cached by a prior test would
 	// otherwise be served as a download fallback and mask a tampered forge.
-	await page.request.delete('/ocs/v2.php/apps/app_versions/api/cache?format=json', {
+	await page.request.delete('/ocs/v2.php/apps/versioniq/api/cache?format=json', {
 		headers: { 'OCS-APIRequest': 'true' },
 	}).catch(() => undefined)
 

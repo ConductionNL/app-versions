@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Lkg;
+namespace OCA\Versioniq\Tests\Unit\Service\Lkg;
 
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Service\Lkg\Lkg;
-use OCA\AppVersions\Service\Lkg\LkgStore;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Service\Lkg\Lkg;
+use OCA\Versioniq\Service\Lkg\LkgStore;
 use OCP\IAppConfig;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;

@@ -10,7 +10,7 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Pat;
+namespace OCA\Versioniq\Service\Pat;
 
 use OCP\AppFramework\Utility\ITimeFactory;
 

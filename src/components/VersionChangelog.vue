@@ -32,7 +32,7 @@ const toggle = (): void => {
 			data-testid="changelog-toggle"
 			@click="toggle">
 			<span :class="$style.chevron" aria-hidden="true">{{ expanded ? '▾' : '▸' }}</span>
-			{{ t('app_versions', 'Release notes') }}
+			{{ t('versioniq', 'Release notes') }}
 		</button>
 		<div
 			v-if="expanded"
@@ -43,7 +43,7 @@ const toggle = (): void => {
 				{{ changelog }}
 			</p>
 			<p v-else :class="$style.placeholder" data-testid="changelog-placeholder">
-				{{ t('app_versions', 'No release notes provided') }}
+				{{ t('versioniq', 'No release notes provided') }}
 			</p>
 		</div>
 	</div>

@@ -10,10 +10,10 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Pin;
+namespace OCA\Versioniq\Service\Pin;
 
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Service\Audit\AuditLogger;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Service\Audit\AuditLogger;
 use OCP\IAppConfig;
 use Psr\Log\LoggerInterface;
 
@@ -21,7 +21,7 @@ use Psr\Log\LoggerInterface;
  * Reads and writes per-app pins stored under app config key `pin.{appId}`.
  * Pins are JSON; a missing or malformed value is treated as "not pinned"
  * (logged, never fatal) — mirrors
- * {@see \OCA\AppVersions\Service\Source\SourceBindingStore}.
+ * {@see \OCA\Versioniq\Service\Source\SourceBindingStore}.
  *
  * `set()`/`clear()`/`markDrift()` are the only write paths and each records
  * exactly one audit entry (`pin` / `unpin` / `pin_drift`), so every caller —

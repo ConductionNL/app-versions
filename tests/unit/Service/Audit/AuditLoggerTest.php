@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Audit;
+namespace OCA\Versioniq\Tests\Unit\Service\Audit;
 
-use OCA\AppVersions\Db\AuditEntry;
-use OCA\AppVersions\Db\AuditEntryMapper;
-use OCA\AppVersions\Service\Audit\AuditLogger;
+use OCA\Versioniq\Db\AuditEntry;
+use OCA\Versioniq\Db\AuditEntryMapper;
+use OCA\Versioniq\Service\Audit\AuditLogger;
 use OCP\AppFramework\Utility\ITimeFactory;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;

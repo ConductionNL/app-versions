@@ -10,12 +10,12 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\AutoUpdate;
+namespace OCA\Versioniq\Service\AutoUpdate;
 
-use OCA\AppVersions\Service\Policy\Policy;
+use OCA\Versioniq\Service\Policy\Policy;
 
 /**
- * Pure candidate-selection logic for {@see \OCA\AppVersions\BackgroundJob\AutoUpdateJob}:
+ * Pure candidate-selection logic for {@see \OCA\Versioniq\BackgroundJob\AutoUpdateJob}:
  * given the installed version, the versions available from the app's bound
  * source, and a policy level, returns the highest available version that is
  * strictly newer than installed and within the level's semver bound — or

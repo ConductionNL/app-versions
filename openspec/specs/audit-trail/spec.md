@@ -10,20 +10,20 @@ status: implemented
 
 ## Purpose
 
-The audit trail records every version operation App Versions performs — installs (App Store and external, success and failure) and source-binding changes — with who, what, and when. It backs the explicit `docs/intro.md` promise ("Every install, downgrade, or pin is logged with who, what, and when") with a dedicated, immutable, retention-managed table that admins can query without digging through server logs.
+The audit trail records every version operation Versioniq performs — installs (App Store and external, success and failure) and source-binding changes — with who, what, and when. It backs the explicit `docs/intro.md` promise ("Every install, downgrade, or pin is logged with who, what, and when") with a dedicated, immutable, retention-managed table that admins can query without digging through server logs.
 
 ## Requirements
 
 ### Requirement: Version operations are recorded [MVP]
 
-The system MUST write one audit entry for every install operation executed through App Versions, on both the success and the failure path. Each entry MUST record: actor uid, app id, operation (`install`), version before (`from_version`), requested version (`to_version`), canonical source id, status (`success`/`failure`), an optional message, and a UTC timestamp. The audit write MUST be best-effort: a failed audit insert MUST NOT fail, abort, or roll back the install, and MUST be logged via `LoggerInterface`.
+The system MUST write one audit entry for every install operation executed through Versioniq, on both the success and the failure path. Each entry MUST record: actor uid, app id, operation (`install`), version before (`from_version`), requested version (`to_version`), canonical source id, status (`success`/`failure`), an optional message, and a UTC timestamp. The audit write MUST be best-effort: a failed audit insert MUST NOT fail, abort, or roll back the install, and MUST be logged via `LoggerInterface`.
 
 #### Scenario: Successful App Store install is recorded
 
 @e2e tests/e2e/audit.spec.ts
 
 - GIVEN admin `alice` has `openregister@2.5.0` installed
-- WHEN she installs `openregister@2.3.0` from the App Store via App Versions and the install succeeds
+- WHEN she installs `openregister@2.3.0` from the App Store via Versioniq and the install succeeds
 - THEN one audit entry MUST exist with `actor_uid=alice`, `app_id=openregister`, `operation=install`, `from_version=2.5.0`, `to_version=2.3.0`, `source_id=appstore`, `status=success`
 - AND `created_at` MUST be the operation time in UTC
 
@@ -159,7 +159,7 @@ The system MUST present the audit trail in the admin UI: a global history view a
 
 ### Requirement: Retention [MVP]
 
-The system MUST prune audit entries older than `app_versions.audit_retention_days` (default 365, minimum 30 — lower configured values MUST be clamped to 30) via a daily background job. Entries within the window MUST NOT be pruned by count.
+The system MUST prune audit entries older than `versioniq.audit_retention_days` (default 365, minimum 30 — lower configured values MUST be clamped to 30) via a daily background job. Entries within the window MUST NOT be pruned by count.
 
 #### Scenario: Old entries are pruned
 

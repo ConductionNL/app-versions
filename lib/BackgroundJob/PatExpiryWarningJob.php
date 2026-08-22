@@ -10,12 +10,12 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\BackgroundJob;
+namespace OCA\Versioniq\BackgroundJob;
 
-use OCA\AppVersions\Db\Pat;
-use OCA\AppVersions\Db\PatMapper;
-use OCA\AppVersions\Service\Pat\PatExpiryEvaluator;
-use OCA\AppVersions\Service\Pat\PatExpiryNotifier;
+use OCA\Versioniq\Db\Pat;
+use OCA\Versioniq\Db\PatMapper;
+use OCA\Versioniq\Service\Pat\PatExpiryEvaluator;
+use OCA\Versioniq\Service\Pat\PatExpiryNotifier;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\TimedJob;
 use Psr\Log\LoggerInterface;

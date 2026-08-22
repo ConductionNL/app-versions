@@ -22,10 +22,10 @@ const emit = defineEmits<{
 type SelectOption = { id: PolicyLevel, label: string }
 
 const options = computed<SelectOption[]>(() => [
-	{ id: 'none', label: t('app_versions', 'Off') },
-	{ id: 'patch', label: t('app_versions', 'Patch') },
-	{ id: 'minor', label: t('app_versions', 'Minor') },
-	{ id: 'all', label: t('app_versions', 'All') },
+	{ id: 'none', label: t('versioniq', 'Off') },
+	{ id: 'patch', label: t('versioniq', 'Patch') },
+	{ id: 'minor', label: t('versioniq', 'Minor') },
+	{ id: 'all', label: t('versioniq', 'All') },
 ])
 
 const selected = computed<SelectOption>({
@@ -43,16 +43,16 @@ const isActive = computed(() => props.level !== 'none')
 		<NcSelect
 			v-model="selected"
 			data-testid="policy-select"
-			:input-label="t('app_versions', 'Auto-update policy')"
+			:input-label="t('versioniq', 'Auto-update policy')"
 			:options="options"
 			:clearable="false"
 			:disabled="disabled"
 			label="label" />
 		<span v-if="isActive" :class="$style.badge" data-testid="policy-active-badge">
-			{{ t('app_versions', 'Auto-update: {level}', { level: selected.label }) }}
+			{{ t('versioniq', 'Auto-update: {level}', { level: selected.label }) }}
 		</span>
 		<span v-if="isActive && !autoUpdateEnabled" :class="$style.disabledHint" data-testid="policy-disabled-hint">
-			{{ t('app_versions', 'Automation disabled — enable it in settings to take effect.') }}
+			{{ t('versioniq', 'Automation disabled — enable it in settings to take effect.') }}
 		</span>
 	</div>
 </template>

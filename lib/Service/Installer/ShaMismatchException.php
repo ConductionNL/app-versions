@@ -10,12 +10,12 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Installer;
+namespace OCA\Versioniq\Service\Installer;
 
 use Exception;
 
 /**
- * Thrown by {@see \OCA\AppVersions\Service\ExternalReleaseInstallerService}
+ * Thrown by {@see \OCA\Versioniq\Service\ExternalReleaseInstallerService}
  * when the SHA-256 of a freshly downloaded artifact does not match the digest
  * recorded on the binding at a previous successful install of the same
  * (appId, version, source) triple. Thrown before extraction/backup — no

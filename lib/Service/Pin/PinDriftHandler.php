@@ -10,9 +10,9 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Pin;
+namespace OCA\Versioniq\Service\Pin;
 
-use OCA\AppVersions\AppInfo\Application;
+use OCA\Versioniq\AppInfo\Application;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IGroupManager;
 use OCP\IURLGenerator;
@@ -20,8 +20,8 @@ use OCP\Notification\IManager;
 use Psr\Log\LoggerInterface;
 
 /**
- * Shared drift-response path used by both {@see \OCA\AppVersions\Listener\AppUpdatedListener}
- * (immediate, event-driven) and {@see \OCA\AppVersions\Cron\PinReconcileJob}
+ * Shared drift-response path used by both {@see \OCA\Versioniq\Listener\AppUpdatedListener}
+ * (immediate, event-driven) and {@see \OCA\Versioniq\Cron\PinReconcileJob}
  * (daily safety net): compares a pinned app's live installed version against
  * its pin, records drift on the pin (idempotently, via {@see PinStore::markDrift()}),
  * and — only on a genuinely new drift — notifies every admin-group member.
@@ -76,7 +76,7 @@ class PinDriftHandler {
 	}
 
 	private function notifyAdmins(string $appId, string $pinnedVersion, string $observedVersion): void {
-		// Links into the App Versions admin settings page; see "Admins are notified".
+		// Links into the Versioniq admin settings page; see "Admins are notified".
 		$link = $this->urlGenerator->linkToRouteAbsolute(
 			'settings.AdminSettings.index',
 			['section' => Application::APP_ID],

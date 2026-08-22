@@ -10,11 +10,11 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Pat;
+namespace OCA\Versioniq\Service\Pat;
 
 use Exception;
-use OCA\AppVersions\Db\Pat;
-use OCA\AppVersions\Db\PatMapper;
+use OCA\Versioniq\Db\Pat;
+use OCA\Versioniq\Db\PatMapper;
 use OCP\Security\ICrypto;
 
 /**

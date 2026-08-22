@@ -10,10 +10,10 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Tests\Unit\Service\Advisory;
+namespace OCA\Versioniq\Tests\Unit\Service\Advisory;
 
-use OCA\AppVersions\Service\Advisory\AdvisoryNotifier;
-use OCA\AppVersions\Service\Advisory\AdvisoryService;
+use OCA\Versioniq\Service\Advisory\AdvisoryNotifier;
+use OCA\Versioniq\Service\Advisory\AdvisoryService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;
 use OCP\IGroup;

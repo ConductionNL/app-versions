@@ -10,9 +10,9 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Installer;
+namespace OCA\Versioniq\Service\Installer;
 
-use OCA\AppVersions\AppInfo\Application;
+use OCA\Versioniq\AppInfo\Application;
 use OCP\AppFramework\Http;
 use OCP\IL10N;
 use OCP\L10N\IFactory;

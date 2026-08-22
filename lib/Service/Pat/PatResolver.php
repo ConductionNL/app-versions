@@ -10,10 +10,10 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Pat;
+namespace OCA\Versioniq\Service\Pat;
 
-use OCA\AppVersions\Db\Pat;
-use OCA\AppVersions\Db\PatMapper;
+use OCA\Versioniq\Db\Pat;
+use OCA\Versioniq\Db\PatMapper;
 
 /**
  * Looks up the highest-priority non-expired PAT visible to the current uid

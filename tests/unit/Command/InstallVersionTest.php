@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Command;
+namespace OCA\Versioniq\Tests\Unit\Command;
 
-use OCA\AppVersions\Command\InstallVersion;
-use OCA\AppVersions\Service\Installer\FailureClassifier;
-use OCA\AppVersions\Service\InstallerService;
+use OCA\Versioniq\Command\InstallVersion;
+use OCA\Versioniq\Service\Installer\FailureClassifier;
+use OCA\Versioniq\Service\InstallerService;
 use OCP\AppFramework\Http;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -14,12 +14,12 @@ use Symfony\Component\Console\Tester\CommandTester;
 final class InstallVersionTest extends TestCase {
 	public function testSelfManagementIsRefusedWithoutCallingInstallAppVersion(): void {
 		$installer = $this->createMock(InstallerService::class);
-		$installer->method('isManageableApp')->with('app_versions')->willReturn(false);
+		$installer->method('isManageableApp')->with('versioniq')->willReturn(false);
 		$installer->expects(self::never())->method('installAppVersion');
 
 		$tester = new CommandTester(new InstallVersion($installer));
 		$exitCode = $tester->execute(
-			['appId' => 'app_versions', 'version' => '1.0.0'],
+			['appId' => 'versioniq', 'version' => '1.0.0'],
 			['capture_stderr_separately' => true]
 		);
 

@@ -27,7 +27,7 @@ test.describe('faults, diffs and cache integrity', () => {
 
 	async function dryRunDowngrade(page: import('@playwright/test').Page, version: string) {
 		const res = await page.request.post(
-			`/ocs/v2.php/apps/app_versions/api/app/${FIXTURE_APP}/versions/${version}/install?dryRun=1&allowDowngrade=1&format=json`,
+			`/ocs/v2.php/apps/versioniq/api/app/${FIXTURE_APP}/versions/${version}/install?dryRun=1&allowDowngrade=1&format=json`,
 			{ headers: { 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' }, data: { source: FIXTURE_SOURCE } },
 		)
 		return (await res.json())?.ocs?.data
@@ -65,16 +65,16 @@ test.describe('faults, diffs and cache integrity', () => {
 
 	// --- artifact-cache integrity -----------------------------------------
 	test('the cache retains only the configured number of artifacts', async ({ page }) => {
-		await occ('config:app:set', 'app_versions', 'artifact_cache_keep', '--value', '2')
-		await occ('app_versions:install', FIXTURE_APP, '1.0.0', `--source=${FIXTURE_SOURCE}`, '--allow-downgrade', '--json')
-		await occ('app_versions:install', FIXTURE_APP, '1.0.1', `--source=${FIXTURE_SOURCE}`, '--json')
-		await occ('app_versions:install', FIXTURE_APP, '1.1.0', `--source=${FIXTURE_SOURCE}`, '--json')
+		await occ('config:app:set', 'versioniq', 'artifact_cache_keep', '--value', '2')
+		await occ('versioniq:install', FIXTURE_APP, '1.0.0', `--source=${FIXTURE_SOURCE}`, '--allow-downgrade', '--json')
+		await occ('versioniq:install', FIXTURE_APP, '1.0.1', `--source=${FIXTURE_SOURCE}`, '--json')
+		await occ('versioniq:install', FIXTURE_APP, '1.1.0', `--source=${FIXTURE_SOURCE}`, '--json')
 
-		const summary = await (await page.request.get('/ocs/v2.php/apps/app_versions/api/cache?format=json', { headers: { 'OCS-APIRequest': 'true' } })).json()
+		const summary = await (await page.request.get('/ocs/v2.php/apps/versioniq/api/cache?format=json', { headers: { 'OCS-APIRequest': 'true' } })).json()
 		const app = (summary?.ocs?.data?.apps ?? []).find((a: any) => a.appId === FIXTURE_APP)
 		expect(app.versions.length, 'kept at most 2 (oldest evicted)').toBeLessThanOrEqual(2)
 		expect(app.versions).toContain('1.1.0') // newest retained
-		await occ('config:app:delete', 'app_versions', 'artifact_cache_keep')
+		await occ('config:app:delete', 'versioniq', 'artifact_cache_keep')
 	})
 
 	test('a cached artifact for a now-untrusted source is not served', async ({ page }) => {
@@ -83,14 +83,14 @@ test.describe('faults, diffs and cache integrity', () => {
 		await installFixture(page, '1.0.1')
 		await installFixture(page, '1.1.0')
 		await fixtureControl(page, 'asset', { asset: 'fixtureapp-1.0.1.tar.gz', status: 404 })
-		await occ('config:app:set', 'app_versions', 'trusted_sources', '--value', '["github:ConductionNL/*"]')
+		await occ('config:app:set', 'versioniq', 'trusted_sources', '--value', '["github:ConductionNL/*"]')
 
 		const { status, body } = await installFixture(page, '1.0.1', { allowDowngrade: true })
 		expect(status, 'untrusted install refused even with a cache hit').not.toBe(0)
 		expect(body.servedFromCache ?? false).toBeFalsy()
 
 		// restore the allowlist for later tests
-		await occ('config:app:set', 'app_versions', 'trusted_sources', '--value',
+		await occ('config:app:set', 'versioniq', 'trusted_sources', '--value',
 			'["github:ConductionNL/*","codeberg:Conduction/*","codeberg:fixtureowner/*","github:fixtureowner/*"]')
 	})
 
@@ -116,15 +116,15 @@ test.describe('faults, diffs and cache integrity', () => {
 	test('an unreachable App Store surfaces an error, not silent zero versions', async ({ page }) => {
 		// Point the App Store base at a dead endpoint and clear its payload cache,
 		// then query a store-bound app: the listing must report an error.
-		await occ('config:app:set', 'app_versions', 'appstore.api_base', '--value', 'http://forge-fixture:9099/no-such-appstore')
-		await occ('config:app:delete', 'app_versions', 'appstore.payload.activity')
-		await occ('config:app:delete', 'app_versions', 'appstore.payload_ts.activity')
-		const res = await page.request.get('/ocs/v2.php/apps/app_versions/api/app/activity/versions?format=json', {
+		await occ('config:app:set', 'versioniq', 'appstore.api_base', '--value', 'http://forge-fixture:9099/no-such-appstore')
+		await occ('config:app:delete', 'versioniq', 'appstore.payload.activity')
+		await occ('config:app:delete', 'versioniq', 'appstore.payload_ts.activity')
+		const res = await page.request.get('/ocs/v2.php/apps/versioniq/api/app/activity/versions?format=json', {
 			headers: { 'OCS-APIRequest': 'true' },
 		})
 		const data = (await res.json())?.ocs?.data
 		expect(data.error ?? '', 'an error is surfaced').not.toBe('')
 		expect(data.availableVersions ?? []).toHaveLength(0)
-		await occ('config:app:delete', 'app_versions', 'appstore.api_base')
+		await occ('config:app:delete', 'versioniq', 'appstore.api_base')
 	})
 })

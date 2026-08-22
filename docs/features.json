@@ -16,14 +16,14 @@
   {
     "slug": "audit-trail",
     "title": "Audit Trail",
-    "summary": "The audit trail records every version operation App Versions performs.",
+    "summary": "The audit trail records every version operation Versioniq performs.",
     "status": "stable",
     "docsUrl": "openspec/specs/audit-trail/spec.md"
   },
   {
     "slug": "auto-update-policies",
     "title": "Auto-Update Policies",
-    "summary": "Turn App Versions from a repair tool into bounded, observable update automation: per-app semver-level policies executed nightly through the app's own verified installer path, honoring pins, constrained to a maintenance window, defaulting to off, and reporting every action.",
+    "summary": "Turn Versioniq from a repair tool into bounded, observable update automation: per-app semver-level policies executed nightly through the app's own verified installer path, honoring pins, constrained to a maintenance window, defaulting to off, and reporting every action.",
     "status": "stable",
     "docsUrl": "openspec/specs/auto-update-policies/spec.md"
   },
@@ -37,28 +37,28 @@
   {
     "slug": "cli-commands",
     "title": "CLI Commands",
-    "summary": "Expose App Versions' version listing and version-specific install through occ, so provisioning scripts, CI pipelines, and Docker image builds can reproduce exact app versions.",
+    "summary": "Expose Versioniq's version listing and version-specific install through occ, so provisioning scripts, CI pipelines, and Docker image builds can reproduce exact app versions.",
     "status": "stable",
     "docsUrl": "openspec/specs/cli-commands/spec.md"
   },
   {
     "slug": "external-sources",
     "title": "External Sources",
-    "summary": "External sources allow App Versions to install Nextcloud apps from origins outside the Nextcloud App Store.",
+    "summary": "External sources allow Versioniq to install Nextcloud apps from origins outside the Nextcloud App Store.",
     "status": "stable",
     "docsUrl": "openspec/specs/external-sources/spec.md"
   },
   {
     "slug": "pat-management",
     "title": "PAT Management",
-    "summary": "Encrypted Personal Access Token storage for the App Versions app, so admins can install apps from private GitHub repositories.",
+    "summary": "Encrypted Personal Access Token storage for the Versioniq app, so admins can install apps from private GitHub repositories.",
     "status": "stable",
     "docsUrl": "openspec/specs/pat-management/spec.md"
   },
   {
     "slug": "version-management",
     "title": "Version Management",
-    "summary": "Version management is the core capability of App Versions.",
+    "summary": "Version management is the core capability of Versioniq.",
     "status": "stable",
     "docsUrl": "openspec/specs/version-management/spec.md"
   },

@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3
 title: Install versions from GitHub or Codeberg
-description: Bind an installed app to a GitHub or Codeberg repository so App Versions installs releases from there — for apps that release faster on a forge, or that are not in the App Store at all.
+description: Bind an installed app to a GitHub or Codeberg repository so Versioniq installs releases from there — for apps that release faster on a forge, or that are not in the App Store at all.
 ---
 
 # Install versions from GitHub or Codeberg
@@ -12,7 +12,7 @@ you deploy yourself, or apps that ship bundled with the Nextcloud
 server). This guide binds an installed app to a GitHub or Codeberg
 repository so its release list lands in the version picker.
 
-> **Scope: App Versions manages versions of apps that are already
+> **Scope: Versioniq manages versions of apps that are already
 > installed.** It does not install a brand-new app that has never been
 > on the instance — do the first install via the App Store, `occ
 > app:install`, or a manual deploy, then manage every later version
@@ -31,8 +31,8 @@ By the end of this guide you will have:
 
 ## Prerequisites
 
-- App Versions is installed, enabled, and reachable as an admin (see
-  [Open App Versions for the first time](./01-admin-settings.md)).
+- Versioniq is installed, enabled, and reachable as an admin (see
+  [Open Versioniq for the first time](./01-admin-settings.md)).
 - The repository publishes **release assets** containing the packaged
   app (a `*.tar.gz` by default — the same artifact you would upload to
   the App Store).
@@ -43,7 +43,7 @@ By the end of this guide you will have:
 
 ## Step 1 — Trust the source
 
-Open **Settings → Administration → App Versions** and switch to the
+Open **Settings → Administration → Versioniq** and switch to the
 **Trusted sources** tab. Nothing can ever be installed from a forge
 unless its repository matches a pattern on this allowlist — this is the
 security boundary, so add concrete owners only.

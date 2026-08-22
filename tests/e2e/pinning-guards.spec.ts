@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { FIXTURE_APP, FIXTURE_SOURCE, fixtureAvailable, installFixture, occ, resetFixtureApp } from './helpers'
 
 /**
- * Pin enforcement on App Versions' own install path, and pin listing — driven
+ * Pin enforcement on Versioniq's own install path, and pin listing — driven
  * against the fixture forge (install-over-pin is refused; the pinned version
  * still reinstalls without an override).
  *
@@ -12,13 +12,13 @@ test.describe('pin enforcement', () => {
 	test.beforeEach(async ({ page }) => {
 		test.skip(!(await fixtureAvailable(page)), 'forge fixture not running')
 		await resetFixtureApp(page)
-		await page.request.delete(`/ocs/v2.php/apps/app_versions/api/app/${FIXTURE_APP}/pin?format=json`, {
+		await page.request.delete(`/ocs/v2.php/apps/versioniq/api/app/${FIXTURE_APP}/pin?format=json`, {
 			headers: { 'OCS-APIRequest': 'true' },
 		}).catch(() => undefined)
 	})
 
 	async function pin(page: import('@playwright/test').Page) {
-		const res = await page.request.put(`/ocs/v2.php/apps/app_versions/api/app/${FIXTURE_APP}/pin?format=json`, {
+		const res = await page.request.put(`/ocs/v2.php/apps/versioniq/api/app/${FIXTURE_APP}/pin?format=json`, {
 			headers: { 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' },
 			data: { reason: 'pinned by e2e' },
 		})
@@ -43,7 +43,7 @@ test.describe('pin enforcement', () => {
 
 	test('pins are listed with their live status', async ({ page }) => {
 		await pin(page)
-		const res = await page.request.get('/ocs/v2.php/apps/app_versions/api/pins?format=json', {
+		const res = await page.request.get('/ocs/v2.php/apps/versioniq/api/pins?format=json', {
 			headers: { 'OCS-APIRequest': 'true' },
 		})
 		const data = (await res.json())?.ocs?.data
@@ -57,7 +57,7 @@ test.describe('pin enforcement', () => {
 
 	test.afterEach(async ({ page }) => {
 		void FIXTURE_SOURCE
-		await page.request.delete(`/ocs/v2.php/apps/app_versions/api/app/${FIXTURE_APP}/pin?format=json`, {
+		await page.request.delete(`/ocs/v2.php/apps/versioniq/api/app/${FIXTURE_APP}/pin?format=json`, {
 			headers: { 'OCS-APIRequest': 'true' },
 		}).catch(() => undefined)
 	})

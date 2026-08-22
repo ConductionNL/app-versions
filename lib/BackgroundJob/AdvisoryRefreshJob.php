@@ -10,13 +10,13 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\BackgroundJob;
+namespace OCA\Versioniq\BackgroundJob;
 
-use OCA\AppVersions\Service\Advisory\AdvisoryDigestNotifier;
-use OCA\AppVersions\Service\Advisory\AdvisoryNotifier;
-use OCA\AppVersions\Service\Advisory\AdvisoryResultStore;
-use OCA\AppVersions\Service\Advisory\AdvisoryService;
-use OCA\AppVersions\Service\Advisory\AdvisorySettingsStore;
+use OCA\Versioniq\Service\Advisory\AdvisoryDigestNotifier;
+use OCA\Versioniq\Service\Advisory\AdvisoryNotifier;
+use OCA\Versioniq\Service\Advisory\AdvisoryResultStore;
+use OCA\Versioniq\Service\Advisory\AdvisoryService;
+use OCA\Versioniq\Service\Advisory\AdvisorySettingsStore;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\TimedJob;
 use Psr\Log\LoggerInterface;

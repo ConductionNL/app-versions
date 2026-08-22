@@ -29,14 +29,14 @@ test.describe('install effects', () => {
 
 	async function versions(page: import('@playwright/test').Page) {
 		const res = await page.request.get(
-			`/ocs/v2.php/apps/app_versions/api/app/${FIXTURE_APP}/versions?source=${encodeURIComponent(FIXTURE_SOURCE)}&format=json`,
+			`/ocs/v2.php/apps/versioniq/api/app/${FIXTURE_APP}/versions?source=${encodeURIComponent(FIXTURE_SOURCE)}&format=json`,
 			{ headers: { 'OCS-APIRequest': 'true' } },
 		)
 		return (await res.json())?.ocs?.data
 	}
 
 	async function cache(page: import('@playwright/test').Page) {
-		const res = await page.request.get('/ocs/v2.php/apps/app_versions/api/cache?format=json', {
+		const res = await page.request.get('/ocs/v2.php/apps/versioniq/api/cache?format=json', {
 			headers: { 'OCS-APIRequest': 'true' },
 		})
 		return (await res.json())?.ocs?.data
@@ -74,7 +74,7 @@ test.describe('install effects', () => {
 	test('the cache can be cleared', async ({ page }) => {
 		await installFixture(page, '1.0.1')
 		expect((await cache(page)).apps ?? []).not.toHaveLength(0)
-		const del = await page.request.delete('/ocs/v2.php/apps/app_versions/api/cache?format=json', {
+		const del = await page.request.delete('/ocs/v2.php/apps/versioniq/api/cache?format=json', {
 			headers: { 'OCS-APIRequest': 'true' },
 		})
 		expect(del.ok()).toBeTruthy()
@@ -90,7 +90,7 @@ test.describe('install effects', () => {
 
 	// --- auto-update-policies ----------------------------------------------
 	test('an invalid policy level is rejected', async ({ page }) => {
-		const res = await page.request.put(`/ocs/v2.php/apps/app_versions/api/app/${FIXTURE_APP}/policy?format=json`, {
+		const res = await page.request.put(`/ocs/v2.php/apps/versioniq/api/app/${FIXTURE_APP}/policy?format=json`, {
 			headers: { 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' },
 			data: { level: 'not-a-level' },
 		})
@@ -99,7 +99,7 @@ test.describe('install effects', () => {
 	})
 
 	test.afterEach(async ({ page }) => {
-		await page.request.delete(`/ocs/v2.php/apps/app_versions/api/app/${FIXTURE_APP}/policy?format=json`, {
+		await page.request.delete(`/ocs/v2.php/apps/versioniq/api/app/${FIXTURE_APP}/policy?format=json`, {
 			headers: { 'OCS-APIRequest': 'true' },
 		}).catch(() => undefined)
 	})

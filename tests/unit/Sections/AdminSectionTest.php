@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Sections;
+namespace OCA\Versioniq\Tests\Unit\Sections;
 
-use OCA\AppVersions\Sections\AdminSection;
+use OCA\Versioniq\Sections\AdminSection;
 use OCP\IL10N;
 use OCP\IURLGenerator;
 use PHPUnit\Framework\TestCase;
@@ -17,13 +17,13 @@ final class AdminSectionTest extends TestCase {
 			static fn (string $text, array $parameters = []): string => vsprintf($text, $parameters),
 		);
 		$urlGenerator = $this->createMock(IURLGenerator::class);
-		$urlGenerator->method('imagePath')->willReturn('/apps/app_versions/img/app.svg');
+		$urlGenerator->method('imagePath')->willReturn('/apps/versioniq/img/app.svg');
 
 		return new AdminSection($l, $urlGenerator);
 	}
 
 	public function testGetIdIsAppId(): void {
-		self::assertSame('app_versions', $this->build()->getID());
+		self::assertSame('versioniq', $this->build()->getID());
 	}
 
 	public function testGetNameIsNonEmpty(): void {

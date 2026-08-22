@@ -10,8 +10,8 @@ import { ocsGet, ocsWrite } from '../ocs'
 
 type SelectOption = { id: string, label: string }
 
-const SOURCES = '/ocs/v2.php/apps/app_versions/api/sources'
-const TRUSTED = '/ocs/v2.php/apps/app_versions/api/trusted-sources'
+const SOURCES = '/ocs/v2.php/apps/versioniq/api/sources'
+const TRUSTED = '/ocs/v2.php/apps/versioniq/api/trusted-sources'
 
 const patterns = ref<string[]>([])
 const forge = ref('github')
@@ -33,7 +33,7 @@ const loadPatterns = async (): Promise<void> => {
 		const { payload } = await ocsGet<{ trustedPatterns?: string[] }>(SOURCES)
 		patterns.value = Array.isArray(payload.trustedPatterns) ? payload.trustedPatterns : []
 	} catch (e) {
-		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not load trusted sources.')
+		error.value = e instanceof Error ? e.message : t('versioniq', 'Could not load trusted sources.')
 	}
 }
 
@@ -41,11 +41,11 @@ const addPattern = async (): Promise<void> => {
 	error.value = ''
 	notice.value = ''
 	if (!owner.value.trim()) {
-		error.value = t('app_versions', 'An owner/organisation is required.')
+		error.value = t('versioniq', 'An owner/organisation is required.')
 		return
 	}
 	if (!confirmTrust.value) {
-		error.value = t('app_versions', 'Please confirm you trust this source before adding it.')
+		error.value = t('versioniq', 'Please confirm you trust this source before adding it.')
 		return
 	}
 	loading.value = true
@@ -60,12 +60,12 @@ const addPattern = async (): Promise<void> => {
 			return
 		}
 		patterns.value = Array.isArray(payload.trustedPatterns) ? payload.trustedPatterns : patterns.value
-		notice.value = t('app_versions', 'Trusted {pattern}', { pattern: `${forge.value}:${owner.value.trim()}/${repo.value.trim() || '*'}` })
+		notice.value = t('versioniq', 'Trusted {pattern}', { pattern: `${forge.value}:${owner.value.trim()}/${repo.value.trim() || '*'}` })
 		owner.value = ''
 		repo.value = ''
 		confirmTrust.value = false
 	} catch (e) {
-		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not add the trusted source.')
+		error.value = e instanceof Error ? e.message : t('versioniq', 'Could not add the trusted source.')
 	} finally {
 		loading.value = false
 	}
@@ -86,7 +86,7 @@ const removePattern = async (pattern: string): Promise<void> => {
 		}
 		patterns.value = Array.isArray(payload.trustedPatterns) ? payload.trustedPatterns : patterns.value
 	} catch (e) {
-		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not remove the trusted source.')
+		error.value = e instanceof Error ? e.message : t('versioniq', 'Could not remove the trusted source.')
 	} finally {
 		loading.value = false
 	}
@@ -97,9 +97,9 @@ onMounted(loadPatterns)
 
 <template>
 	<div :class="$style.panel">
-		<h3>{{ t('app_versions', 'Trusted sources') }}</h3>
+		<h3>{{ t('versioniq', 'Trusted sources') }}</h3>
 		<p :class="$style.hint">
-			{{ t('app_versions', 'Only repositories matching these forge-qualified patterns may be installed from external sources. Widening this list extends trust — add concrete owners only.') }}
+			{{ t('versioniq', 'Only repositories matching these forge-qualified patterns may be installed from external sources. Widening this list extends trust — add concrete owners only.') }}
 		</p>
 
 		<NcNoteCard v-if="error" type="error">
@@ -113,29 +113,29 @@ onMounted(loadPatterns)
 			<li v-for="pattern in patterns" :key="pattern" :class="$style.row">
 				<code>{{ pattern }}</code>
 				<NcButton type="tertiary" :disabled="loading" @click="removePattern(pattern)">
-					{{ t('app_versions', 'Remove') }}
+					{{ t('versioniq', 'Remove') }}
 				</NcButton>
 			</li>
 			<li v-if="patterns.length === 0" :class="$style.empty">
-				{{ t('app_versions', 'No trusted sources configured.') }}
+				{{ t('versioniq', 'No trusted sources configured.') }}
 			</li>
 		</ul>
 
 		<form :class="$style.form" @submit.prevent="addPattern">
 			<NcSelect
 				v-model="forge"
-				:input-label="t('app_versions', 'Forge')"
+				:input-label="t('versioniq', 'Forge')"
 				:options="forgeOptions"
 				:reduce="(option) => option.id"
 				:clearable="false"
 				label="label" />
-			<NcTextField v-model="owner" :label="t('app_versions', 'Owner / organisation')" placeholder="ConductionNL" />
-			<NcTextField v-model="repo" :label="t('app_versions', 'Repository (optional — blank trusts the whole owner)')" placeholder="openregister" />
+			<NcTextField v-model="owner" :label="t('versioniq', 'Owner / organisation')" placeholder="ConductionNL" />
+			<NcTextField v-model="repo" :label="t('versioniq', 'Repository (optional — blank trusts the whole owner)')" placeholder="openregister" />
 			<NcCheckboxRadioSwitch v-model="confirmTrust">
-				{{ t('app_versions', 'I trust this source and understand apps will be installed from it.') }}
+				{{ t('versioniq', 'I trust this source and understand apps will be installed from it.') }}
 			</NcCheckboxRadioSwitch>
 			<NcButton variant="primary" type="submit" :disabled="loading">
-				{{ t('app_versions', 'Add trusted source') }}
+				{{ t('versioniq', 'Add trusted source') }}
 			</NcButton>
 		</form>
 	</div>

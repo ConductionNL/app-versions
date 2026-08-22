@@ -2,24 +2,24 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service;
+namespace OCA\Versioniq\Tests\Unit\Service;
 
 use Exception;
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Service\Cache\ArtifactCache;
-use OCA\AppVersions\Service\ExternalReleaseInstallerService;
-use OCA\AppVersions\Service\Installer\EnvironmentCheck;
-use OCA\AppVersions\Service\Installer\FailureClassifier;
-use OCA\AppVersions\Service\Installer\InstallFailure;
-use OCA\AppVersions\Service\InstallerService;
-use OCA\AppVersions\Service\Lkg\LkgStore;
-use OCA\AppVersions\Service\Pin\Pin;
-use OCA\AppVersions\Service\Pin\PinStore;
-use OCA\AppVersions\Service\SelectedReleaseInstallerService;
-use OCA\AppVersions\Service\Source\SourceBindingStore;
-use OCA\AppVersions\Service\Source\SourceInterface;
-use OCA\AppVersions\Service\Source\SourceRegistry;
-use OCA\AppVersions\Service\Source\TrustedSourceList;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Service\Cache\ArtifactCache;
+use OCA\Versioniq\Service\ExternalReleaseInstallerService;
+use OCA\Versioniq\Service\Installer\EnvironmentCheck;
+use OCA\Versioniq\Service\Installer\FailureClassifier;
+use OCA\Versioniq\Service\Installer\InstallFailure;
+use OCA\Versioniq\Service\InstallerService;
+use OCA\Versioniq\Service\Lkg\LkgStore;
+use OCA\Versioniq\Service\Pin\Pin;
+use OCA\Versioniq\Service\Pin\PinStore;
+use OCA\Versioniq\Service\SelectedReleaseInstallerService;
+use OCA\Versioniq\Service\Source\SourceBindingStore;
+use OCA\Versioniq\Service\Source\SourceInterface;
+use OCA\Versioniq\Service\Source\SourceRegistry;
+use OCA\Versioniq\Service\Source\TrustedSourceList;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -216,7 +216,7 @@ final class InstallerServiceTest extends TestCase {
 		self::assertNotSame('', $result['payload']['hint']);
 	}
 
-	// --- Pin guard matrix (see "Pins are enforced on App Versions' own install path") ---
+	// --- Pin guard matrix (see "Pins are enforced on Versioniq's own install path") ---
 
 	private function stubSuccessfulSignedInstall(string $resultingVersion): void {
 		$this->appManager->method('getAppPath')->willReturn('/writable/app');
@@ -441,7 +441,7 @@ final class InstallerServiceTest extends TestCase {
 
 	// --- Shared manageability predicate (see "CLI trust context") ---
 
-	public function testIsManageableAppIsFalseForAppVersionsItself(): void {
+	public function testIsManageableAppIsFalseForVersioniqItself(): void {
 		self::assertFalse($this->service()->isManageableApp(Application::APP_ID));
 	}
 

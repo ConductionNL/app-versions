@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Command;
+namespace OCA\Versioniq\Tests\Unit\Command;
 
-use OCA\AppVersions\Command\ListVersions;
-use OCA\AppVersions\Service\InstallerService;
+use OCA\Versioniq\Command\ListVersions;
+use OCA\Versioniq\Service\InstallerService;
 use OCP\AppFramework\Http;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -96,11 +96,11 @@ final class ListVersionsTest extends TestCase {
 			'sourceId' => 'none',
 			'statusCode' => Http::STATUS_FORBIDDEN,
 			'hasError' => true,
-			'error' => 'This app cannot be managed from App Versions.',
+			'error' => 'This app cannot be managed from Versioniq.',
 		]);
 
 		$tester = new CommandTester(new ListVersions($installer));
-		$exitCode = $tester->execute(['appId' => 'app_versions'], ['capture_stderr_separately' => true]);
+		$exitCode = $tester->execute(['appId' => 'versioniq'], ['capture_stderr_separately' => true]);
 
 		self::assertNotSame(0, $exitCode);
 		self::assertStringContainsString('cannot be managed', $tester->getErrorOutput());

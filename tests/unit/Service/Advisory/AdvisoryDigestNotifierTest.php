@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Advisory;
+namespace OCA\Versioniq\Tests\Unit\Service\Advisory;
 
-use OCA\AppVersions\Service\Advisory\AdvisoryDigestNotifier;
-use OCA\AppVersions\Service\Advisory\AdvisoryService;
-use OCA\AppVersions\Service\Advisory\AdvisorySettingsStore;
+use OCA\Versioniq\Service\Advisory\AdvisoryDigestNotifier;
+use OCA\Versioniq\Service\Advisory\AdvisoryService;
+use OCA\Versioniq\Service\Advisory\AdvisorySettingsStore;
 use OCP\IAppConfig;
 use OCP\IGroup;
 use OCP\IGroupManager;

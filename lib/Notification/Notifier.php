@@ -10,16 +10,16 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Notification;
+namespace OCA\Versioniq\Notification;
 
-use OCA\AppVersions\AppInfo\Application;
+use OCA\Versioniq\AppInfo\Application;
 use OCP\L10N\IFactory;
 use OCP\Notification\INotification;
 use OCP\Notification\INotifier;
 use OCP\Notification\UnknownNotificationException;
 
 /**
- * Renders App Versions notifications (the `pinned_to_vulnerable` advisory
+ * Renders Versioniq notifications (the `pinned_to_vulnerable` advisory
  * notice, the `pat_expiring` / `pat_expired` token-expiry notices, the
  * `pin_drift` version-pinning notice, and the `auto_update_success` /
  * `auto_update_failure` auto-update outcome notices) into localized
@@ -39,7 +39,7 @@ class Notifier implements INotifier {
 	}
 
 	public function getName(): string {
-		return 'App Versions';
+		return 'Versioniq';
 	}
 
 	/**
@@ -107,7 +107,7 @@ class Notifier implements INotifier {
 
 			$notification
 				->setParsedSubject(
-					$l->t('A pinned app was updated outside App Versions')
+					$l->t('A pinned app was updated outside Versioniq')
 				)
 				->setParsedMessage(
 					$l->t('%1$s is pinned to %2$s but is now running %3$s. Re-pin to restore the pinned version, or accept the change.', [$app, $pinnedVersion, $observedVersion])

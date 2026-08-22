@@ -94,7 +94,7 @@ test.describe('version listing and release notes', () => {
 		// still-listed release below the installed version at runtime rather than
 		// hard-coding a version that may have aged out of the catalogue.
 		const listing = (await (await page.request.get(
-			`/ocs/v2.php/apps/app_versions/api/app/${APP}/versions?format=json`,
+			`/ocs/v2.php/apps/versioniq/api/app/${APP}/versions?format=json`,
 			{ headers: { 'OCS-APIRequest': 'true' } },
 		)).json())?.ocs?.data
 		const installed = String(listing?.installedVersion ?? '')
@@ -104,7 +104,7 @@ test.describe('version listing and release notes', () => {
 		expect(older, 'an older release exists to attempt a downgrade to').not.toBe(installed)
 
 		const res = await page.request.post(
-			`/ocs/v2.php/apps/app_versions/api/app/${APP}/versions/${older}/install?format=json`,
+			`/ocs/v2.php/apps/versioniq/api/app/${APP}/versions/${older}/install?format=json`,
 			{ headers: { 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' }, data: {} },
 		)
 		const body = await res.text()

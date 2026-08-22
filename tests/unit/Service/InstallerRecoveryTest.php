@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service;
+namespace OCA\Versioniq\Tests\Unit\Service;
 
-use OCA\AppVersions\Service\ExternalReleaseInstallerService;
-use OCA\AppVersions\Service\SelectedReleaseInstallerService;
+use OCA\Versioniq\Service\ExternalReleaseInstallerService;
+use OCA\Versioniq\Service\SelectedReleaseInstallerService;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 

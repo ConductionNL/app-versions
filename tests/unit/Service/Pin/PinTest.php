@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Pin;
+namespace OCA\Versioniq\Tests\Unit\Service\Pin;
 
 use InvalidArgumentException;
-use OCA\AppVersions\Service\Pin\Pin;
+use OCA\Versioniq\Service\Pin\Pin;
 use PHPUnit\Framework\TestCase;
 
 final class PinTest extends TestCase {

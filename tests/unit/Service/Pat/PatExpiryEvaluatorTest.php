@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Pat;
+namespace OCA\Versioniq\Tests\Unit\Service\Pat;
 
-use OCA\AppVersions\Service\Pat\PatExpiryEvaluator;
+use OCA\Versioniq\Service\Pat\PatExpiryEvaluator;
 use OCP\AppFramework\Utility\ITimeFactory;
 use PHPUnit\Framework\TestCase;
 

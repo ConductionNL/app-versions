@@ -1,7 +1,7 @@
 {
     "openapi": "3.0.3",
     "info": {
-        "title": "app_versions",
+        "title": "versioniq",
         "version": "0.0.1",
         "description": "Install any earlier or newer version of already installed Nextcloud apps",
         "license": {
@@ -47,7 +47,7 @@
         }
     },
     "paths": {
-        "/ocs/v2.php/apps/app_versions/api/admin-check": {
+        "/ocs/v2.php/apps/versioniq/api/admin-check": {
             "get": {
                 "operationId": "api-admin-check",
                 "summary": "Reports whether the current user is an admin so the frontend can gate the UI",
@@ -173,7 +173,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/apps": {
+        "/ocs/v2.php/apps/versioniq/api/apps": {
             "get": {
                 "operationId": "api-apps",
                 "summary": "Lists installed apps (admin-only); see \"List Installed Apps\"",
@@ -340,7 +340,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/advisories": {
+        "/ocs/v2.php/apps/versioniq/api/advisories": {
             "get": {
                 "operationId": "api-advisories",
                 "summary": "Returns the most recent security-advisory correlation for each installed app (admin-only, read-only): a per-app map of advisory state (`none` | `advisory-available` | `pinned-to-vulnerable`), the matching advisories, and the recommended safe version. Never changes a version.",
@@ -510,7 +510,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/update-channel": {
+        "/ocs/v2.php/apps/versioniq/api/update-channel": {
             "get": {
                 "operationId": "api-update-channel",
                 "summary": "Returns the server update channel so versions can be filtered; see \"Respect update channel\"",
@@ -671,7 +671,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/sources": {
+        "/ocs/v2.php/apps/versioniq/api/sources": {
             "get": {
                 "operationId": "api-sources",
                 "summary": "Lists registered sources and trusted-source globs; see \"Source management API\"",
@@ -845,7 +845,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/source/{appId}/binding": {
+        "/ocs/v2.php/apps/versioniq/api/source/{appId}/binding": {
             "get": {
                 "operationId": "api-get-binding",
                 "summary": "Returns the active source binding for an app, including any recorded SHA-256 digests (not secrets); see \"Source binding\" and \"Recorded * digests are binding-scoped and surfaced\"",
@@ -1027,7 +1027,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/source/{appId}/bind": {
+        "/ocs/v2.php/apps/versioniq/api/source/{appId}/bind": {
             "post": {
                 "operationId": "api-bind-source",
                 "summary": "Binds a source to an app after allowlist validation; see \"Source management API\"",
@@ -1246,7 +1246,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/trusted-sources": {
+        "/ocs/v2.php/apps/versioniq/api/trusted-sources": {
             "post": {
                 "operationId": "api-add-trusted-source",
                 "summary": "Curated add of a forge-qualified trusted-source pattern; see \"Source management API\".",
@@ -1666,7 +1666,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/app/{appId}/versions": {
+        "/ocs/v2.php/apps/versioniq/api/app/{appId}/versions": {
             "get": {
                 "operationId": "api-app-versions",
                 "summary": "Fetches available versions from the bound (or overridden) source; see \"Fetch Available Versions\" and \"Version listings carry release notes\"",
@@ -1841,7 +1841,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/app/{appId}/versions/{version}/install": {
+        "/ocs/v2.php/apps/versioniq/api/app/{appId}/versions/{version}/install": {
             "post": {
                 "operationId": "api-install-version",
                 "summary": "Installs a specific version (password-confirmed); see \"Install Specific * Version\" and, when the app is pinned, \"Pins are enforced on App * Versions' own install path\" (`overridePin=repin|unpin`, `pin=1`). For an external source with a recorded SHA-256 mismatch, `acceptNewSha=1` bypasses the check once and replaces the recorded digest on success; see \"Recorded SHA-256 enforced on reinstall\". A downgrade (target version older than installed) is refused with a 409 unless `allowDowngrade=1`; see \"Server-side downgrade guard\".",
@@ -2087,7 +2087,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/pins": {
+        "/ocs/v2.php/apps/versioniq/api/pins": {
             "get": {
                 "operationId": "api-pins",
                 "summary": "Lists all pins joined with the live installed version and current drift status; see \"Honest pin presentation\"",
@@ -2254,7 +2254,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/app/{appId}/pin": {
+        "/ocs/v2.php/apps/versioniq/api/app/{appId}/pin": {
             "put": {
                 "operationId": "api-pin-app",
                 "summary": "Pins an app to its currently installed version (password-confirmed); rejects a `version` other than the installed one; see \"Pin an * installed app to its current version\"",
@@ -2641,7 +2641,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/policies": {
+        "/ocs/v2.php/apps/versioniq/api/policies": {
             "get": {
                 "operationId": "api-policies",
                 "summary": "Lists every persisted per-app auto-update policy plus the global kill switch / window; see \"Per-app update policy\" and \"Global kill * switch and window\"",
@@ -2797,7 +2797,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/app/{appId}/policy": {
+        "/ocs/v2.php/apps/versioniq/api/app/{appId}/policy": {
             "put": {
                 "operationId": "api-set-policy",
                 "summary": "Sets an app's auto-update policy level (password-confirmed); rejects an unknown level with 400; see \"Per-app update policy\"",
@@ -3184,7 +3184,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/auto-update/settings": {
+        "/ocs/v2.php/apps/versioniq/api/auto-update/settings": {
             "put": {
                 "operationId": "api-update-auto-update-settings",
                 "summary": "Updates the global auto-update kill switch and/or maintenance window (password-confirmed); rejects a malformed window with 400; see \"Global * kill switch and window\"",
@@ -3396,7 +3396,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/advisory/settings": {
+        "/ocs/v2.php/apps/versioniq/api/advisory/settings": {
             "get": {
                 "operationId": "api-advisory-settings",
                 "summary": "Returns the advisory check settings: how often the sweep runs and whether the weekly digest is sent (admin-only).",
@@ -3808,7 +3808,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/pats": {
+        "/ocs/v2.php/apps/versioniq/api/pats": {
             "get": {
                 "operationId": "api-list-pats",
                 "summary": "Lists PATs visible to the current admin, redacted, with derived `expiryState`/`daysRemaining`; see \"PAT management API\" and \"Expiry state in the PAT API and UI\"",
@@ -4182,7 +4182,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/pats/{id}": {
+        "/ocs/v2.php/apps/versioniq/api/pats/{id}": {
             "patch": {
                 "operationId": "api-patch-pat",
                 "summary": "Updates a PAT's label / share flag, owner-only; see \"PAT management API\" and \"PAT storage\"",
@@ -4626,7 +4626,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/discover": {
+        "/ocs/v2.php/apps/versioniq/api/discover": {
             "get": {
                 "operationId": "api-discover",
                 "summary": "Multi-source app search with query-length + filter handling; see \"Discovery API\"",
@@ -4829,7 +4829,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/pats/deeplink": {
+        "/ocs/v2.php/apps/versioniq/api/pats/deeplink": {
             "get": {
                 "operationId": "api-pat-deeplink",
                 "summary": "Returns a prefilled GitHub PAT-creation deeplink; see \"PAT management API\" (deeplink scenarios)",
@@ -5023,7 +5023,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/audit": {
+        "/ocs/v2.php/apps/versioniq/api/audit": {
             "get": {
                 "operationId": "api-audit-log",
                 "summary": "Lists audit entries, newest-first, admin-only, paginated and optionally filtered by app id; see \"Audit entries are immutable and admin-readable\". No mutation endpoint exists for this resource — the retention prune job is the only deletion path.",
@@ -5179,7 +5179,7 @@
                 }
             }
         },
-        "/ocs/v2.php/apps/app_versions/api/cache": {
+        "/ocs/v2.php/apps/versioniq/api/cache": {
             "get": {
                 "operationId": "api-cache-summary",
                 "summary": "Cache summary: per-app cached versions + size, and the total cache size, admin-only; see \"Cache visibility and management\"",

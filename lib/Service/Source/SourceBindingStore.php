@@ -10,10 +10,10 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Source;
+namespace OCA\Versioniq\Service\Source;
 
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Service\Audit\AuditLogger;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Service\Audit\AuditLogger;
 use OCP\IAppConfig;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;

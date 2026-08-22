@@ -136,9 +136,44 @@ const suppressSafeModeAutoClear = ref(false)
  */
 const BACKGROUND_FETCH_TIMEOUT_MS = 8_000
 
-const safeModeStorageKey = 'app_versions_safe_mode'
-const debugModeStorageKey = 'app_versions_debug_mode'
-const dryRunStorageKey = 'app_versions_dry_run_mode'
+const safeModeStorageKey = 'versioniq_safe_mode'
+const debugModeStorageKey = 'versioniq_debug_mode'
+const dryRunStorageKey = 'versioniq_dry_run_mode'
+
+/**
+ * The same three keys under the pre-rename `app_versions` app id.
+ *
+ * localStorage is the ADMIN'S OWN BROWSER STORE, and the `app_versions` ->
+ * `versioniq` rename cuts it off exactly the way it cuts off oc_appconfig —
+ * except that no server-side repair step can reach into a browser. Without a
+ * fallback, `getItem(newKey)` returns null on the first load after the rename
+ * and each toggle silently reverts to its shipped default. Safe mode is the
+ * one that matters: an admin who deliberately turned it OFF would find it
+ * back ON with nothing to explain why.
+ *
+ * So reads fall back to the old key (see readStoredFlag) while writes only
+ * ever go to the new one — the old entries are left in place rather than
+ * removed, so rolling back to the previous app id still finds them.
+ */
+const legacyStorageKeys: Record<string, string> = {
+	versioniq_safe_mode: 'app_versions_safe_mode',
+	versioniq_debug_mode: 'app_versions_debug_mode',
+	versioniq_dry_run_mode: 'app_versions_dry_run_mode',
+}
+
+/**
+ * Read one persisted UI flag, preferring the current key and falling back to
+ * the pre-rename one. Returns null when neither is set.
+ * @param key The current (post-rename) localStorage key.
+ */
+const readStoredFlag = (key: string): string | null => {
+	const current = window?.localStorage?.getItem(key) ?? null
+	if (current !== null) {
+		return current
+	}
+	const legacyKey = legacyStorageKeys[key]
+	return legacyKey === undefined ? null : (window?.localStorage?.getItem(legacyKey) ?? null)
+}
 const lastInstallDebug = ref<InstallDebugEntry[]>([])
 const lastInstallResult = ref<InstallResult | null>(null)
 const hasInstallResult = ref(false)
@@ -199,13 +234,13 @@ const tablistEl = ref<HTMLElement | null>(null)
 
 // Literal strings (not interpolated) so they remain extractable for translation.
 const tabLabel = (id: string): string => ({
-	apps: t('app_versions', 'Apps'),
-	history: t('app_versions', 'History'),
-	sources: t('app_versions', 'Sources'),
-	tokens: t('app_versions', 'Tokens'),
-	trusted: t('app_versions', 'Trusted sources'),
-	discover: t('app_versions', 'Discover'),
-	cache: t('app_versions', 'Artifact cache'),
+	apps: t('versioniq', 'Apps'),
+	history: t('versioniq', 'History'),
+	sources: t('versioniq', 'Sources'),
+	tokens: t('versioniq', 'Tokens'),
+	trusted: t('versioniq', 'Trusted sources'),
+	discover: t('versioniq', 'Discover'),
+	cache: t('versioniq', 'Artifact cache'),
 }[id] ?? id)
 
 // Prefill applied to the Sources bind form when a Discover hit's install
@@ -467,7 +502,7 @@ const installStatusLabel = computed(() => {
 
 const checkUpdateChannel = async (): Promise<void> => {
 	try {
-		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/update-channel')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/versioniq/api/update-channel')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
 		const payload = await unwrapOcsResponse<{ updateChannel: string }>(response)
 		updateChannel.value = payload.updateChannel || ''
 	} catch {
@@ -477,7 +512,7 @@ const checkUpdateChannel = async (): Promise<void> => {
 
 const loadApps = async (): Promise<void> => {
 	try {
-		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/apps')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/versioniq/api/apps')), { headers: { ...ocsHeaders, Accept: 'application/json' } })
 		const payload = await unwrapOcsResponse<{ apps: AppOption[] }>(response)
 		apps.value = payload.apps || []
 	} catch (error) {
@@ -497,7 +532,7 @@ const loadApps = async (): Promise<void> => {
 // as reassurance the data does not support.
 const loadAdvisories = async (): Promise<void> => {
 	try {
-		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/advisories')), { headers: { ...ocsHeaders, Accept: 'application/json' }, signal: AbortSignal.timeout(BACKGROUND_FETCH_TIMEOUT_MS) })
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/versioniq/api/advisories')), { headers: { ...ocsHeaders, Accept: 'application/json' }, signal: AbortSignal.timeout(BACKGROUND_FETCH_TIMEOUT_MS) })
 		const payload = await unwrapOcsResponse<{ advisories: Record<string, AdvisoryCorrelation>, checkedAt: number | null }>(response)
 		advisories.value = payload.advisories || {}
 		advisoriesCheckedAt.value = payload.checkedAt ?? null
@@ -540,7 +575,7 @@ const isAdvisorySettingsDirty = computed((): boolean =>
 
 const loadAdvisorySettings = async (): Promise<void> => {
 	try {
-		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/advisory/settings')), { headers: { ...ocsHeaders, Accept: 'application/json' }, signal: AbortSignal.timeout(BACKGROUND_FETCH_TIMEOUT_MS) })
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/versioniq/api/advisory/settings')), { headers: { ...ocsHeaders, Accept: 'application/json' }, signal: AbortSignal.timeout(BACKGROUND_FETCH_TIMEOUT_MS) })
 		const payload = await unwrapOcsResponse<{ intervalHours: number, minIntervalHours: number, maxIntervalHours: number, digestEnabled: boolean }>(response)
 		advisoryMinInterval.value = payload.minIntervalHours
 		advisoryMaxInterval.value = payload.maxIntervalHours
@@ -558,7 +593,7 @@ const saveAdvisorySettings = async (): Promise<void> => {
 	advisorySettingsError.value = ''
 	advisorySettingsNotice.value = ''
 	try {
-		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/advisory/settings')), {
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/versioniq/api/advisory/settings')), {
 			method: 'PUT',
 			headers: { ...ocsHeaders, 'Content-Type': 'application/json', Accept: 'application/json' },
 			body: JSON.stringify({
@@ -573,7 +608,7 @@ const saveAdvisorySettings = async (): Promise<void> => {
 		advisorySavedInterval.value = String(payload.intervalHours)
 		advisoryDigestEnabled.value = payload.digestEnabled
 		advisorySavedDigest.value = payload.digestEnabled
-		advisorySettingsNotice.value = t('app_versions', 'Advisory settings saved.')
+		advisorySettingsNotice.value = t('versioniq', 'Advisory settings saved.')
 	} catch (error) {
 		advisorySettingsError.value = error instanceof Error ? error.message : String(error)
 	} finally {
@@ -593,21 +628,21 @@ const advisoriesUnavailable = ref(false)
  */
 const advisoryFreshnessLabel = computed((): string => {
 	if (advisoriesUnavailable.value) {
-		return t('app_versions', 'Advisory status unavailable — could not reach the server')
+		return t('versioniq', 'Advisory status unavailable — could not reach the server')
 	}
 	if (advisoriesCheckedAt.value === null) {
-		return t('app_versions', 'Advisories not checked yet — the background job runs every 6 hours')
+		return t('versioniq', 'Advisories not checked yet — the background job runs every 6 hours')
 	}
 
 	const ageMinutes = Math.max(0, Math.round((Date.now() / 1000 - advisoriesCheckedAt.value) / 60))
 	if (ageMinutes < 1) {
-		return t('app_versions', 'Advisories checked just now')
+		return t('versioniq', 'Advisories checked just now')
 	}
 	if (ageMinutes < 60) {
-		return t('app_versions', 'Advisories checked {minutes} min ago', { minutes: ageMinutes })
+		return t('versioniq', 'Advisories checked {minutes} min ago', { minutes: ageMinutes })
 	}
 
-	return t('app_versions', 'Advisories checked {hours} h ago', { hours: Math.round(ageMinutes / 60) })
+	return t('versioniq', 'Advisories checked {hours} h ago', { hours: Math.round(ageMinutes / 60) })
 })
 
 const advisoryFor = (appId: string): AdvisoryCorrelation | null => advisories.value[appId] ?? null
@@ -619,17 +654,17 @@ const advisoryFor = (appId: string): AdvisoryCorrelation | null => advisories.va
 const recordedShaBadgeLabel = (version: string): string => {
 	const lastResult = lastInstallResult.value
 	if (lastResult?.recordedShaMatched === true && lastResult.toVersion === version) {
-		return t('app_versions', 'Matches first-install checksum')
+		return t('versioniq', 'Matches first-install checksum')
 	}
-	return t('app_versions', 'Checksum recorded')
+	return t('versioniq', 'Checksum recorded')
 }
 
 const advisoryBadgeLabel = (state: AdvisoryCorrelation['state']): string => {
 	if (state === 'pinned-to-vulnerable') {
-		return t('app_versions', 'Vulnerable version')
+		return t('versioniq', 'Vulnerable version')
 	}
 	if (state === 'advisory-available') {
-		return t('app_versions', 'Advisory')
+		return t('versioniq', 'Advisory')
 	}
 	return ''
 }
@@ -639,7 +674,7 @@ const advisoryBadgeLabel = (state: AdvisoryCorrelation['state']): string => {
 // banner / the pin-override dialog. See "Honest pin presentation".
 const loadPins = async (): Promise<void> => {
 	try {
-		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/pins')), { headers: { ...ocsHeaders, Accept: 'application/json' }, signal: AbortSignal.timeout(BACKGROUND_FETCH_TIMEOUT_MS) })
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/versioniq/api/pins')), { headers: { ...ocsHeaders, Accept: 'application/json' }, signal: AbortSignal.timeout(BACKGROUND_FETCH_TIMEOUT_MS) })
 		const payload = await unwrapOcsResponse<{ pins: PinRecord[] }>(response)
 		const map: Record<string, PinRecord> = {}
 		for (const pin of payload.pins || []) {
@@ -653,7 +688,7 @@ const loadPins = async (): Promise<void> => {
 		// failed request, no page error, no console output (issue #160).
 		pins.value = {}
 		// eslint-disable-next-line no-console
-		console.error('[app_versions] loadPins failed; pin badges will not render:', error)
+		console.error('[versioniq] loadPins failed; pin badges will not render:', error)
 	}
 }
 
@@ -663,7 +698,7 @@ const pinTooltip = (pin: PinRecord | null): string => {
 	if (!pin) {
 		return ''
 	}
-	const parts = [t('app_versions', 'Pinned by {user} on {date}', { user: pin.pinnedBy, date: pin.pinnedAt })]
+	const parts = [t('versioniq', 'Pinned by {user} on {date}', { user: pin.pinnedBy, date: pin.pinnedAt })]
 	if (pin.reason) {
 		parts.push(pin.reason)
 	}
@@ -675,7 +710,7 @@ const pinTooltip = (pin: PinRecord | null): string => {
 // writes go through onPolicyChange()/saveAutoUpdateSettings().
 const loadPolicies = async (): Promise<void> => {
 	try {
-		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/policies')), { headers: { ...ocsHeaders, Accept: 'application/json' }, signal: AbortSignal.timeout(BACKGROUND_FETCH_TIMEOUT_MS) })
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/versioniq/api/policies')), { headers: { ...ocsHeaders, Accept: 'application/json' }, signal: AbortSignal.timeout(BACKGROUND_FETCH_TIMEOUT_MS) })
 		const payload = await unwrapOcsResponse<{ policies?: PolicyRecord[], autoUpdateEnabled?: boolean, autoUpdateWindow?: string }>(response)
 		const map: Record<string, PolicyRecord> = {}
 		for (const policy of payload.policies || []) {
@@ -703,7 +738,7 @@ const onPolicyChange = async (appId: string, level: PolicyLevel): Promise<void> 
 	try {
 		await ensurePasswordConfirmation()
 		if (level === 'none') {
-			const response = await fetch(apiUrl(withOcsJson(`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(appId)}/policy`)), {
+			const response = await fetch(apiUrl(withOcsJson(`/ocs/v2.php/apps/versioniq/api/app/${encodeURIComponent(appId)}/policy`)), {
 				method: 'DELETE',
 				headers: { ...ocsHeaders, Accept: 'application/json', 'Content-Type': 'application/json' },
 			})
@@ -712,7 +747,7 @@ const onPolicyChange = async (appId: string, level: PolicyLevel): Promise<void> 
 			delete next[appId]
 			policies.value = next
 		} else {
-			const response = await fetch(apiUrl(withOcsJson(`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(appId)}/policy`, { level })), {
+			const response = await fetch(apiUrl(withOcsJson(`/ocs/v2.php/apps/versioniq/api/app/${encodeURIComponent(appId)}/policy`, { level })), {
 				method: 'PUT',
 				headers: { ...ocsHeaders, Accept: 'application/json', 'Content-Type': 'application/json' },
 				body: JSON.stringify({ level }),
@@ -721,7 +756,7 @@ const onPolicyChange = async (appId: string, level: PolicyLevel): Promise<void> 
 			policies.value = { ...policies.value, [appId]: { ...payload.policy, appId } }
 		}
 	} catch (e) {
-		errorMessage.value = e instanceof Error ? e.message : t('app_versions', 'Could not update the auto-update policy.')
+		errorMessage.value = e instanceof Error ? e.message : t('versioniq', 'Could not update the auto-update policy.')
 	} finally {
 		isSavingPolicy.value = false
 	}
@@ -737,7 +772,7 @@ const saveAutoUpdateSettings = async (): Promise<void> => {
 	autoUpdateSettingsError.value = ''
 	autoUpdateSettingsNotice.value = ''
 	if (!isAutoUpdateWindowValid.value) {
-		autoUpdateSettingsError.value = t('app_versions', 'Window must be in HH:MM-HH:MM format.')
+		autoUpdateSettingsError.value = t('versioniq', 'Window must be in HH:MM-HH:MM format.')
 		return
 	}
 
@@ -745,7 +780,7 @@ const saveAutoUpdateSettings = async (): Promise<void> => {
 	try {
 		await ensurePasswordConfirmation()
 		const window = autoUpdateWindowInput.value.trim()
-		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/app_versions/api/auto-update/settings', {
+		const response = await fetch(apiUrl(withOcsJson('/ocs/v2.php/apps/versioniq/api/auto-update/settings', {
 			enabled: autoUpdateEnabled.value ? '1' : '0',
 			window,
 		})), {
@@ -770,9 +805,9 @@ const saveAutoUpdateSettings = async (): Promise<void> => {
 		autoUpdateWindowInput.value = payload.autoUpdateWindow || window
 		savedAutoUpdateEnabled.value = autoUpdateEnabled.value
 		savedAutoUpdateWindow.value = autoUpdateWindowInput.value
-		autoUpdateSettingsNotice.value = t('app_versions', 'Automatic update settings saved.')
+		autoUpdateSettingsNotice.value = t('versioniq', 'Automatic update settings saved.')
 	} catch (e) {
-		autoUpdateSettingsError.value = e instanceof Error ? e.message : t('app_versions', 'Could not save automatic update settings.')
+		autoUpdateSettingsError.value = e instanceof Error ? e.message : t('versioniq', 'Could not save automatic update settings.')
 	} finally {
 		isSavingAutoUpdateSettings.value = false
 	}
@@ -801,7 +836,7 @@ const onPinDriftUpdated = (appId: string, pin: PinRecord | null): void => {
 const unpinApp = async (appId: string): Promise<void> => {
 	try {
 		await ensurePasswordConfirmation()
-		const response = await fetch(apiUrl(withOcsJson(`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(appId)}/pin`)), {
+		const response = await fetch(apiUrl(withOcsJson(`/ocs/v2.php/apps/versioniq/api/app/${encodeURIComponent(appId)}/pin`)), {
 			method: 'DELETE',
 			headers: { ...ocsHeaders, Accept: 'application/json', 'Content-Type': 'application/json' },
 		})
@@ -810,7 +845,7 @@ const unpinApp = async (appId: string): Promise<void> => {
 		delete next[appId]
 		pins.value = next
 	} catch (e) {
-		errorMessage.value = e instanceof Error ? e.message : t('app_versions', 'Could not unpin this app.')
+		errorMessage.value = e instanceof Error ? e.message : t('versioniq', 'Could not unpin this app.')
 	}
 }
 
@@ -849,7 +884,7 @@ const checkVersions = async (preserveInstallResult = false): Promise<void> => {
 	installedVersion.value = ''
 
 	try {
-		const url = withOcsJson(`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(appId)}/versions`)
+		const url = withOcsJson(`/ocs/v2.php/apps/versioniq/api/app/${encodeURIComponent(appId)}/versions`)
 		const response = await fetch(apiUrl(url), { headers: { ...ocsHeaders, Accept: 'application/json' } })
 		const payload = await unwrapOcsResponse<{
 			availableVersions?: AppVersion[]
@@ -1272,7 +1307,7 @@ const requestInstall = async (
 		query.allowDowngrade = '1'
 	}
 	const endpoint = withOcsJson(
-		`/ocs/v2.php/apps/app_versions/api/app/${encodeURIComponent(appId)}/versions/${encodeURIComponent(version)}/install`,
+		`/ocs/v2.php/apps/versioniq/api/app/${encodeURIComponent(appId)}/versions/${encodeURIComponent(version)}/install`,
 		query,
 	)
 	const response = await fetch(apiUrl(endpoint), {
@@ -1289,7 +1324,7 @@ const requestInstall = async (
 }
 
 // Offers Re-pin / Unpin-and-install / Cancel when the install endpoint
-// refuses to overwrite a pin (409); see "Pins are enforced on App Versions'
+// refuses to overwrite a pin (409); see "Pins are enforced on Versioniq's
 // own install path".
 const confirmPinOverride = (appId: string, pinnedVersion: string, targetVersion: string): Promise<'repin' | 'unpin' | 'cancel'> => {
 	if (pinOverrideResolve) {
@@ -1359,7 +1394,7 @@ const onRepinRequested = async (appId: string, version: string): Promise<void> =
 			await checkVersions(true)
 		}
 	} catch (e) {
-		errorMessage.value = e instanceof Error ? e.message : t('app_versions', 'Could not re-pin this app.')
+		errorMessage.value = e instanceof Error ? e.message : t('versioniq', 'Could not re-pin this app.')
 	} finally {
 		isInstallingVersion.value = false
 	}
@@ -1509,15 +1544,15 @@ const rollbackToLastKnownGood = async (appId: string, version: string): Promise<
 }
 
 onMounted(async () => {
-	const storedSafeMode = window?.localStorage?.getItem(safeModeStorageKey)
+	const storedSafeMode = readStoredFlag(safeModeStorageKey)
 	if (storedSafeMode !== null) {
 		safeModeEnabled.value = storedSafeMode !== 'false'
 	}
-	const storedDebugMode = window?.localStorage?.getItem(debugModeStorageKey)
+	const storedDebugMode = readStoredFlag(debugModeStorageKey)
 	if (storedDebugMode !== null) {
 		debugModeEnabled.value = storedDebugMode === 'true'
 	}
-	const storedDryRunMode = window?.localStorage?.getItem(dryRunStorageKey)
+	const storedDryRunMode = readStoredFlag(dryRunStorageKey)
 	if (storedDryRunMode !== null) {
 		dryRunEnabled.value = storedDryRunMode === 'true'
 	}
@@ -1614,10 +1649,10 @@ watch(dryRunEnabled, () => {
 			Visible only on focus, so it costs sighted mouse users nothing and
 			appears exactly when a keyboard user reaches it.
 		-->
-		<a :class="$style.skipLink" href="#app-versions-main">
-			{{ t('app_versions', 'Skip to main content') }}
+		<a :class="$style.skipLink" href="#versioniq-main">
+			{{ t('versioniq', 'Skip to main content') }}
 		</a>
-		<div id="app-versions-main" :class="$style.content">
+		<div id="versioniq-main" :class="$style.content">
 			<DowngradeConfirmDialog
 				:open="isDowngradeConfirmOpen"
 				:app-id="downgradeConfirmApp"
@@ -1649,12 +1684,12 @@ watch(dryRunEnabled, () => {
 				:actual-sha="shaMismatchActualSha"
 				@update:open="isShaMismatchDialogOpen = $event"
 				@resolve="onShaMismatchResolve" />
-			<h2>{{ t('app_versions', 'App Versions') }}</h2>
+			<h2>{{ t('versioniq', 'Versioniq') }}</h2>
 			<div :class="$style.well">
 				<div ref="tablistEl"
 					:class="$style.tabs"
 					role="tablist"
-					:aria-label="t('app_versions', 'App Versions sections')"
+					:aria-label="t('versioniq', 'Versioniq sections')"
 					@keydown="onTabKeydown">
 					<NcButton v-for="tab in tabs"
 						:id="`${tab.id}-tab`"
@@ -1710,9 +1745,9 @@ watch(dryRunEnabled, () => {
 								</label>
 							</div>
 							<div :class="$style.autoUpdateSettings" data-testid="auto-update-settings">
-								<h3>{{ t('app_versions', 'Automatic updates') }}</h3>
+								<h3>{{ t('versioniq', 'Automatic updates') }}</h3>
 								<p :class="$style.hint">
-									{{ t('app_versions', 'When enabled, App Versions installs qualifying newer versions per app policy during the nightly window, honoring pins and reporting every outcome.') }}
+									{{ t('versioniq', 'When enabled, Versioniq installs qualifying newer versions per app policy during the nightly window, honoring pins and reporting every outcome.') }}
 								</p>
 								<label :class="$style.safeMode">
 									<input
@@ -1721,10 +1756,10 @@ watch(dryRunEnabled, () => {
 										:class="$style.safeModeCheckbox"
 										data-testid="auto-update-kill-switch"
 										:disabled="isSavingAutoUpdateSettings">
-									<span>{{ t('app_versions', 'Enable automatic updates') }}</span>
+									<span>{{ t('versioniq', 'Enable automatic updates') }}</span>
 								</label>
 								<label :class="$style.filterField" for="auto-update-window">
-									<span :class="$style.filterFieldLabel">{{ t('app_versions', 'Update window (HH:MM-HH:MM, server time)') }}</span>
+									<span :class="$style.filterFieldLabel">{{ t('versioniq', 'Update window (HH:MM-HH:MM, server time)') }}</span>
 									<input
 										id="auto-update-window"
 										v-model="autoUpdateWindowInput"
@@ -1735,7 +1770,7 @@ watch(dryRunEnabled, () => {
 										:disabled="isSavingAutoUpdateSettings">
 								</label>
 								<p v-if="autoUpdateWindowInput.trim() !== '' && !isAutoUpdateWindowValid" :class="$style.autoUpdateWindowError" data-testid="auto-update-window-error">
-									{{ t('app_versions', 'Use the HH:MM-HH:MM format, e.g. 01:00-05:00.') }}
+									{{ t('versioniq', 'Use the HH:MM-HH:MM format, e.g. 01:00-05:00.') }}
 								</p>
 								<p v-if="autoUpdateSettingsError" :class="$style.autoUpdateWindowError">
 									{{ autoUpdateSettingsError }}
@@ -1748,16 +1783,16 @@ watch(dryRunEnabled, () => {
 									data-testid="auto-update-settings-save"
 									:disabled="isSavingAutoUpdateSettings || !isAutoUpdateSettingsDirty || !isAutoUpdateWindowValid"
 									@click="saveAutoUpdateSettings">
-									{{ t('app_versions', 'Save') }}
+									{{ t('versioniq', 'Save') }}
 								</NcButton>
 
-								<h3 :class="$style.advisorySettingsHeading">{{ t('app_versions', 'Security advisory checks') }}</h3>
+								<h3 :class="$style.advisorySettingsHeading">{{ t('versioniq', 'Security advisory checks') }}</h3>
 								<p :class="$style.hint">
-									{{ t('app_versions', 'App Versions checks published Nextcloud security advisories against your installed versions and notifies administrators immediately when an installed version is affected.') }}
+									{{ t('versioniq', 'Versioniq checks published Nextcloud security advisories against your installed versions and notifies administrators immediately when an installed version is affected.') }}
 								</p>
 								<label :class="$style.filterField" for="advisory-interval">
 									<span :class="$style.filterFieldLabel">
-										{{ t('app_versions', 'Check every (hours, {min}-{max})', { min: advisoryMinInterval, max: advisoryMaxInterval }) }}
+										{{ t('versioniq', 'Check every (hours, {min}-{max})', { min: advisoryMinInterval, max: advisoryMaxInterval }) }}
 									</span>
 									<input
 										id="advisory-interval"
@@ -1770,7 +1805,7 @@ watch(dryRunEnabled, () => {
 										:disabled="isSavingAdvisorySettings">
 								</label>
 								<p v-if="!isAdvisoryIntervalValid" :class="$style.autoUpdateWindowError" data-testid="advisory-interval-error">
-									{{ t('app_versions', 'Enter a whole number of hours between {min} and {max}.', { min: advisoryMinInterval, max: advisoryMaxInterval }) }}
+									{{ t('versioniq', 'Enter a whole number of hours between {min} and {max}.', { min: advisoryMinInterval, max: advisoryMaxInterval }) }}
 								</p>
 								<label :class="$style.safeMode">
 									<input
@@ -1778,7 +1813,7 @@ watch(dryRunEnabled, () => {
 										type="checkbox"
 										data-testid="advisory-digest-enabled"
 										:disabled="isSavingAdvisorySettings">
-									<span>{{ t('app_versions', 'Send a weekly digest of non-urgent advisories') }}</span>
+									<span>{{ t('versioniq', 'Send a weekly digest of non-urgent advisories') }}</span>
 								</label>
 								<p v-if="advisorySettingsError" :class="$style.autoUpdateWindowError" data-testid="advisory-settings-error">
 									{{ advisorySettingsError }}
@@ -1791,7 +1826,7 @@ watch(dryRunEnabled, () => {
 									data-testid="advisory-settings-save"
 									:disabled="isSavingAdvisorySettings || !isAdvisorySettingsDirty || !isAdvisoryIntervalValid"
 									@click="saveAdvisorySettings">
-									{{ t('app_versions', 'Save') }}
+									{{ t('versioniq', 'Save') }}
 								</NcButton>
 							</div>
 						</div>
@@ -1845,7 +1880,7 @@ watch(dryRunEnabled, () => {
 																:class="$style.pinBadge"
 																data-testid="pin-badge"
 																:title="pinTooltip(pinFor(app.id))">
-																📌 {{ t('app_versions', 'Pinned {version}', { version: pinFor(app.id)?.version ?? '' }) }}
+																📌 {{ t('versioniq', 'Pinned {version}', { version: pinFor(app.id)?.version ?? '' }) }}
 															</span>
 															<span
 																v-if="advisoryFor(app.id)?.state && advisoryFor(app.id)?.state !== 'none'"
@@ -1862,7 +1897,7 @@ watch(dryRunEnabled, () => {
 															:class="$style.advisoryDetail">
 															{{ advisoryFor(app.id)?.advisories?.[0]?.id ?? '' }}
 															<template v-if="advisoryFor(app.id)?.recommendedVersion">
-																· {{ t('app_versions', 'safe version: {version}', { version: advisoryFor(app.id)?.recommendedVersion ?? '' }) }}
+																· {{ t('versioniq', 'safe version: {version}', { version: advisoryFor(app.id)?.recommendedVersion ?? '' }) }}
 															</template>
 														</p>
 													</div>
@@ -1906,9 +1941,9 @@ watch(dryRunEnabled, () => {
 												type="button"
 												:class="$style.appCardButton"
 												:disabled="isCheckingVersions || isInstallingVersion"
-												:title="t('app_versions', 'Roll back to the last version that finalized cleanly through App Versions')"
+												:title="t('versioniq', 'Roll back to the last version that finalized cleanly through Versioniq')"
 												@click="rollbackToLastKnownGood(app.id, app.lkg.version)">
-												{{ t('app_versions', 'Roll back to {version}', { version: app.lkg.version }) }}
+												{{ t('versioniq', 'Roll back to {version}', { version: app.lkg.version }) }}
 											</button>
 										</article>
 									</div>
@@ -1930,14 +1965,14 @@ watch(dryRunEnabled, () => {
 												@click="clearSelectedApp">
 												Choose another app
 											</button>
-											<div :class="$style.appDetailTabs" role="tablist" :aria-label="t('app_versions', 'App detail sections')">
+											<div :class="$style.appDetailTabs" role="tablist" :aria-label="t('versioniq', 'App detail sections')">
 												<button
 													type="button"
 													role="tab"
 													:aria-selected="appDetailTab === 'versions' ? 'true' : 'false'"
 													:class="[$style.appDetailTabButton, { [$style.appDetailTabButtonActive]: appDetailTab === 'versions' }]"
 													@click="appDetailTab = 'versions'">
-													{{ t('app_versions', 'Versions') }}
+													{{ t('versioniq', 'Versions') }}
 												</button>
 												<button
 													type="button"
@@ -1945,7 +1980,7 @@ watch(dryRunEnabled, () => {
 													:aria-selected="appDetailTab === 'history' ? 'true' : 'false'"
 													:class="[$style.appDetailTabButton, { [$style.appDetailTabButtonActive]: appDetailTab === 'history' }]"
 													@click="appDetailTab = 'history'">
-													{{ t('app_versions', 'History') }}
+													{{ t('versioniq', 'History') }}
 												</button>
 											</div>
 										</div>
@@ -1957,21 +1992,21 @@ watch(dryRunEnabled, () => {
 												:class="$style.pinBadge"
 												data-testid="pin-badge-detail"
 												:title="pinTooltip(pinFor(selectedApp))">
-												📌 {{ t('app_versions', 'Pinned {version}', { version: pinFor(selectedApp)?.version ?? '' }) }}
+												📌 {{ t('versioniq', 'Pinned {version}', { version: pinFor(selectedApp)?.version ?? '' }) }}
 											</span>
 											<button
 												v-if="pinFor(selectedApp)"
 												type="button"
 												:class="$style.changeAppButton"
 												@click="unpinApp(selectedApp)">
-												{{ t('app_versions', 'Unpin') }}
+												{{ t('versioniq', 'Unpin') }}
 											</button>
 											<button
 												v-else
 												type="button"
 												:class="$style.changeAppButton"
 												@click="openPinDialog(selectedApp, installedVersion)">
-												{{ t('app_versions', 'Pin this version') }}
+												{{ t('versioniq', 'Pin this version') }}
 											</button>
 										</div>
 										<PinDriftBanner
@@ -2012,7 +2047,7 @@ watch(dryRunEnabled, () => {
 												v-if="!selectedVersion"
 												v-model="versionFilter"
 												type="text"
-												:aria-label="t('app_versions', 'Filter versions')"
+												:aria-label="t('versioniq', 'Filter versions')"
 												placeholder="Filter versions"
 												:class="$style.versionFilterInput"
 												:disabled="isInstallingVersion">
@@ -2028,8 +2063,8 @@ watch(dryRunEnabled, () => {
 																v-if="version.cachedOffline"
 																:class="$style.cachedOfflineBadge"
 																data-testid="cached-offline-badge"
-																:title="t('app_versions', 'A verified copy of this version is cached locally and can be used if the source becomes unreachable.')">
-																{{ t('app_versions', 'Available offline') }}
+																:title="t('versioniq', 'A verified copy of this version is cached locally and can be used if the source becomes unreachable.')">
+																{{ t('versioniq', 'Available offline') }}
 															</span>
 															<span
 																v-if="version.recordedSha"
@@ -2092,7 +2127,7 @@ watch(dryRunEnabled, () => {
 											role="status"
 											aria-live="polite">
 											<NcLoadingIcon :size="20" />
-											<span>{{ t('app_versions', 'Fetching available versions from the source — this can take a few seconds…') }}</span>
+											<span>{{ t('versioniq', 'Fetching available versions from the source — this can take a few seconds…') }}</span>
 										</p>
 										<p v-if="availableSource" :class="$style.note">
 											Versions source: {{ availableSource }}

@@ -1,6 +1,6 @@
 <!--
 SPDX-License-Identifier: EUPL-1.2
-Confirms a downgrade before App Versions installs an older release. Names the
+Confirms a downgrade before Versioniq installs an older release. Names the
 app and the exact version transition, summarises how far the range spans, and
 — crucially — lists the database migrations the target version does NOT carry,
 because files can be rolled back and applied migrations cannot.
@@ -41,13 +41,13 @@ const choose = (accept: boolean): void => {
 
 const buttons = computed(() => [
 	{
-		label: t('app_versions', 'Cancel'),
+		label: t('versioniq', 'Cancel'),
 		type: 'tertiary' as const,
 		disabled: props.busy,
 		callback: () => choose(false),
 	},
 	{
-		label: t('app_versions', 'Downgrade'),
+		label: t('versioniq', 'Downgrade'),
 		variant: 'error' as const,
 		disabled: props.busy,
 		callback: () => choose(true),
@@ -58,7 +58,7 @@ const buttons = computed(() => [
 <template>
 	<NcDialog
 		:open="open"
-		:name="t('app_versions', 'Confirm downgrade')"
+		:name="t('versioniq', 'Confirm downgrade')"
 		:buttons="buttons"
 		@update:open="(value: boolean) => { if (!value) { choose(false) } }">
 		<p :class="$style.downgradeConfirmText">
@@ -70,13 +70,13 @@ const buttons = computed(() => [
 			<span :class="$style.versionChip">{{ toVersion }}</span>
 		</p>
 		<p v-if="rangeText" :class="$style.versionRangeSummary">
-			<strong>{{ t('app_versions', 'Downgrade info:') }}</strong> {{ rangeText }}
+			<strong>{{ t('versioniq', 'Downgrade info:') }}</strong> {{ rangeText }}
 		</p>
 		<p :class="$style.versionItemDegradeMessage">
-			{{ t('app_versions', 'Downgrading files cannot undo database migrations already applied by the installed version.') }}
+			{{ t('versioniq', 'Downgrading files cannot undo database migrations already applied by the installed version.') }}
 		</p>
 		<div v-if="orphanedMigrations && orphanedMigrations.length > 0" :class="$style.migrationDiff">
-			<p><strong>{{ t('app_versions', 'Database migrations only present in the installed version:') }}</strong></p>
+			<p><strong>{{ t('versioniq', 'Database migrations only present in the installed version:') }}</strong></p>
 			<ul :class="$style.migrationDiffList">
 				<li v-for="migration in orphanedMigrations" :key="migration">
 					{{ migration }}

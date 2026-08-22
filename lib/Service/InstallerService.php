@@ -10,25 +10,25 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service;
+namespace OCA\Versioniq\Service;
 
 use Exception;
 use InvalidArgumentException;
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Service\Cache\ArtifactCache;
-use OCA\AppVersions\Service\Installer\EnvironmentCheck;
-use OCA\AppVersions\Service\Installer\FailureClassifier;
-use OCA\AppVersions\Service\Installer\InstallFailure;
-use OCA\AppVersions\Service\Installer\ShaMismatchException;
-use OCA\AppVersions\Service\Lkg\LkgStore;
-use OCA\AppVersions\Service\Pin\Pin;
-use OCA\AppVersions\Service\Pin\PinStore;
-use OCA\AppVersions\Service\Source\SourceBinding;
-use OCA\AppVersions\Service\Source\SourceBindingStore;
-use OCA\AppVersions\Service\Source\SourceInterface;
-use OCA\AppVersions\Service\Source\SourceRegistry;
-use OCA\AppVersions\Service\Source\TrustedSourceList;
-use OCA\AppVersions\Service\Source\UntrustedSourceException;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Service\Cache\ArtifactCache;
+use OCA\Versioniq\Service\Installer\EnvironmentCheck;
+use OCA\Versioniq\Service\Installer\FailureClassifier;
+use OCA\Versioniq\Service\Installer\InstallFailure;
+use OCA\Versioniq\Service\Installer\ShaMismatchException;
+use OCA\Versioniq\Service\Lkg\LkgStore;
+use OCA\Versioniq\Service\Pin\Pin;
+use OCA\Versioniq\Service\Pin\PinStore;
+use OCA\Versioniq\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Source\SourceBindingStore;
+use OCA\Versioniq\Service\Source\SourceInterface;
+use OCA\Versioniq\Service\Source\SourceRegistry;
+use OCA\Versioniq\Service\Source\TrustedSourceList;
+use OCA\Versioniq\Service\Source\UntrustedSourceException;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -165,8 +165,8 @@ class InstallerService {
 		if (!$this->isManageableApp($appId)) {
 			return $this->errorEnvelope(
 				$this->isCoreProtectedApp($appId)
-					? 'This core app cannot be managed from App Versions.'
-					: 'This app cannot be managed from App Versions.',
+					? 'This core app cannot be managed from Versioniq.'
+					: 'This app cannot be managed from Versioniq.',
 				Http::STATUS_FORBIDDEN
 			);
 		}
@@ -297,7 +297,7 @@ class InstallerService {
 	/**
 	 * Installs a target version via the matching installer and persists the
 	 * binding on success; see "Install Specific Version", "Source binding",
-	 * and "Pins are enforced on App Versions' own install path".
+	 * and "Pins are enforced on Versioniq's own install path".
 	 *
 	 * `$overridePin` is `null` (no override requested), `repin`, or `unpin` —
 	 * any other value is rejected with 400 by the caller before this method
@@ -360,8 +360,8 @@ class InstallerService {
 					'appId' => $appId,
 					'toVersion' => $targetVersion,
 					'message' => $this->isCoreProtectedApp($appId)
-						? 'This core app cannot be installed or updated from App Versions.'
-						: 'This app cannot be installed or updated from App Versions.',
+						? 'This core app cannot be installed or updated from Versioniq.'
+						: 'This app cannot be installed or updated from Versioniq.',
 				],
 			];
 		}
@@ -421,9 +421,9 @@ class InstallerService {
 			];
 		}
 
-		// Pin guard: App Versions' own install path refuses to overwrite a
+		// Pin guard: Versioniq's own install path refuses to overwrite a
 		// pinned app without an explicit override — see "Pins are enforced on
-		// App Versions' own install path". Reinstalling the pinned version
+		// Versioniq's own install path". Reinstalling the pinned version
 		// itself is never blocked (no drift, nothing to override).
 		$pin = $this->pinStore->get($appId);
 		$isOverridingPin = $pin !== null && $targetVersion !== $pin->version;
@@ -526,7 +526,7 @@ class InstallerService {
 			}
 
 			$recordedShaMatched = null;
-			if ($source->getInstallerKind() === \OCA\AppVersions\Service\Source\SourceInterface::INSTALLER_SIGNED) {
+			if ($source->getInstallerKind() === \OCA\Versioniq\Service\Source\SourceInterface::INSTALLER_SIGNED) {
 				$result = $this->signedInstaller->installFromSelectedRelease($appId, $release, $dryRun);
 				$integrityWarning = null;
 			} else {
@@ -604,7 +604,7 @@ class InstallerService {
 			}
 
 			// Pin state changes only after a real (non-dry-run) install success;
-			// see "Pins are enforced on App Versions' own install path". Adjusting
+			// see "Pins are enforced on Versioniq's own install path". Adjusting
 			// the pin here — inside this same request, immediately after the
 			// filesystem swap and before returning — is what keeps a subsequent
 			// drift check from misreading our own override as drift.
@@ -927,8 +927,8 @@ class InstallerService {
 	}
 
 	/**
-	 * Whether `$appId` may be installed/updated/listed through App Versions —
-	 * `false` for App Versions itself (self-management) and any core /
+	 * Whether `$appId` may be installed/updated/listed through Versioniq —
+	 * `false` for Versioniq itself (self-management) and any core /
 	 * always-enabled app. Single shared predicate for the guard duplicated
 	 * across {@see getAppVersions()}, {@see installAppVersion()}, and the
 	 * `occ` commands; see "CLI trust context".

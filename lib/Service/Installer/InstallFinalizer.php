@@ -10,14 +10,14 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Installer;
+namespace OCA\Versioniq\Service\Installer;
 
 use Exception;
 use OC\AppFramework\Bootstrap\Coordinator;
 use OC\DB\Connection;
 use OC\DB\MigrationService;
-use OCA\AppVersions\Service\Lkg\Lkg;
-use OCA\AppVersions\Service\Lkg\LkgStore;
+use OCA\Versioniq\Service\Lkg\Lkg;
+use OCA\Versioniq\Service\Lkg\LkgStore;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJob;
@@ -138,7 +138,7 @@ class InstallFinalizer {
 		 *
 		 *   conflict between new type (mixed) and old type (string)
 		 *
-		 * That made every app installed through App Versions impossible to
+		 * That made every app installed through Versioniq impossible to
 		 * enable, which is most of the point of the app. Config we own stays
 		 * on the typed API; only core's keys use core's semantics.
 		 */

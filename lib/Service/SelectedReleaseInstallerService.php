@@ -10,19 +10,19 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service;
+namespace OCA\Versioniq\Service;
 
 use Exception;
 use OC\Archive\TAR;
 use OC\Files\FilenameValidator;
-use OCA\AppVersions\Service\Audit\AuditLogger;
-use OCA\AppVersions\Service\Cache\ArtifactCache;
-use OCA\AppVersions\Service\Installer\FailureClassifier;
-use OCA\AppVersions\Service\Installer\InstallFailure;
-use OCA\AppVersions\Service\Installer\InstallFinalizer;
-use OCA\AppVersions\Service\Installer\MigrationDiffer;
-use OCA\AppVersions\Service\Source\SourceBinding;
-use OCA\AppVersions\Service\Source\SourceInterface;
+use OCA\Versioniq\Service\Audit\AuditLogger;
+use OCA\Versioniq\Service\Cache\ArtifactCache;
+use OCA\Versioniq\Service\Installer\FailureClassifier;
+use OCA\Versioniq\Service\Installer\InstallFailure;
+use OCA\Versioniq\Service\Installer\InstallFinalizer;
+use OCA\Versioniq\Service\Installer\MigrationDiffer;
+use OCA\Versioniq\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Source\SourceInterface;
 use OCP\App\AppPathNotFoundException;
 use OCP\App\IAppManager;
 use OCP\Http\Client\IClientService;

@@ -2,24 +2,24 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Controller;
+namespace OCA\Versioniq\Tests\Unit\Controller;
 
-use OCA\AppVersions\Controller\ApiController;
-use OCA\AppVersions\Db\AuditEntry;
-use OCA\AppVersions\Db\AuditEntryMapper;
-use OCA\AppVersions\Db\PatMapper;
-use OCA\AppVersions\Service\Advisory\AdvisoryResultStore;
-use OCA\AppVersions\Service\Advisory\AdvisorySettingsStore;
-use OCA\AppVersions\Service\AutoUpdate\AutoUpdateSettingsStore;
-use OCA\AppVersions\Service\Cache\ArtifactCache;
-use OCA\AppVersions\Service\Discovery\DiscoveryAggregator;
-use OCA\AppVersions\Service\InstallerService;
-use OCA\AppVersions\Service\Pat\PatDeeplinkBuilder;
-use OCA\AppVersions\Service\Pat\PatExpiryEvaluator;
-use OCA\AppVersions\Service\Pat\PatManager;
-use OCA\AppVersions\Service\Pat\PatValidator;
-use OCA\AppVersions\Service\Pin\PinStore;
-use OCA\AppVersions\Service\Policy\PolicyStore;
+use OCA\Versioniq\Controller\ApiController;
+use OCA\Versioniq\Db\AuditEntry;
+use OCA\Versioniq\Db\AuditEntryMapper;
+use OCA\Versioniq\Db\PatMapper;
+use OCA\Versioniq\Service\Advisory\AdvisoryResultStore;
+use OCA\Versioniq\Service\Advisory\AdvisorySettingsStore;
+use OCA\Versioniq\Service\AutoUpdate\AutoUpdateSettingsStore;
+use OCA\Versioniq\Service\Cache\ArtifactCache;
+use OCA\Versioniq\Service\Discovery\DiscoveryAggregator;
+use OCA\Versioniq\Service\InstallerService;
+use OCA\Versioniq\Service\Pat\PatDeeplinkBuilder;
+use OCA\Versioniq\Service\Pat\PatExpiryEvaluator;
+use OCA\Versioniq\Service\Pat\PatManager;
+use OCA\Versioniq\Service\Pat\PatValidator;
+use OCA\Versioniq\Service\Pin\PinStore;
+use OCA\Versioniq\Service\Policy\PolicyStore;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IGroupManager;
@@ -55,7 +55,7 @@ final class ApiTest extends TestCase {
 		?ArtifactCache $artifactCache = null,
 	): ApiController {
 		return new ApiController(
-			'app_versions',
+			'versioniq',
 			$request ?? $this->createMock(IRequest::class),
 			$this->createMock(InstallerService::class),
 			$this->createMock(IGroupManager::class),
@@ -102,7 +102,7 @@ final class ApiTest extends TestCase {
 		$groupManager->method('isAdmin')->with($uid)->willReturn(true);
 
 		return new ApiController(
-			'app_versions',
+			'versioniq',
 			$request,
 			$installer,
 			$groupManager,
@@ -427,7 +427,7 @@ final class ApiTest extends TestCase {
 
 		$pinStore = $this->createMock(PinStore::class);
 		$pinStore->method('all')->willReturn([
-			'openregister' => new \OCA\AppVersions\Service\Pin\Pin('2.3.0', 'alice', '2026-06-11T12:00:00+00:00'),
+			'openregister' => new \OCA\Versioniq\Service\Pin\Pin('2.3.0', 'alice', '2026-06-11T12:00:00+00:00'),
 		]);
 
 		$appManager = $this->createMock(IAppManager::class);
@@ -475,7 +475,7 @@ final class ApiTest extends TestCase {
 
 		$policyStore = $this->createMock(PolicyStore::class);
 		$policyStore->method('all')->willReturn([
-			'openregister' => new \OCA\AppVersions\Service\Policy\Policy('patch', 'alice', '2026-07-23T00:00:00+00:00'),
+			'openregister' => new \OCA\Versioniq\Service\Policy\Policy('patch', 'alice', '2026-07-23T00:00:00+00:00'),
 		]);
 
 		$settingsStore = $this->createMock(AutoUpdateSettingsStore::class);

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Lkg;
+namespace OCA\Versioniq\Tests\Unit\Service\Lkg;
 
 use InvalidArgumentException;
-use OCA\AppVersions\Service\Lkg\Lkg;
+use OCA\Versioniq\Service\Lkg\Lkg;
 use PHPUnit\Framework\TestCase;
 
 final class LkgTest extends TestCase {

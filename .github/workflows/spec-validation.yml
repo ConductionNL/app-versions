@@ -47,7 +47,7 @@ jobs:
       #
       # Count the subject matter before deciding. Zero artefacts is a real skip
       # and says so; artefacts without a validator is a wiring gap and FAILS,
-      # so this can never go quiet the day app-versions grows a manifest.
+      # so this can never go quiet the day this app grows a manifest.
       - name: Validate specs (json-strict + manifest + register)
         run: |
           set -uo pipefail

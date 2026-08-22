@@ -10,17 +10,17 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Tests\Unit\Service\Advisory;
+namespace OCA\Versioniq\Tests\Unit\Service\Advisory;
 
-use OCA\AppVersions\Service\Advisory\AdvisoryService;
-use OCA\AppVersions\Service\Advisory\BranchAwareRange;
-use OCA\AppVersions\Service\Advisory\NextcloudAdvisoryFeed;
-use OCA\AppVersions\Service\Advisory\AdvisorySourceInterface;
-use OCA\AppVersions\Service\Source\SourceBinding;
-use OCA\AppVersions\Service\Source\SourceBindingStore;
-use OCA\AppVersions\Service\Source\SourceInterface;
-use OCA\AppVersions\Service\Source\SourceRegistry;
-use OCA\AppVersions\Service\Advisory\ServerVersionProvider;
+use OCA\Versioniq\Service\Advisory\AdvisoryService;
+use OCA\Versioniq\Service\Advisory\AdvisorySourceInterface;
+use OCA\Versioniq\Service\Advisory\BranchAwareRange;
+use OCA\Versioniq\Service\Advisory\NextcloudAdvisoryFeed;
+use OCA\Versioniq\Service\Advisory\ServerVersionProvider;
+use OCA\Versioniq\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Source\SourceBindingStore;
+use OCA\Versioniq\Service\Source\SourceInterface;
+use OCA\Versioniq\Service\Source\SourceRegistry;
 use OCP\App\IAppManager;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
-// Shared OCS request helpers for the App Versions admin UI panels.
+// Shared OCS request helpers for the Versioniq admin UI panels.
 //
 // App.vue keeps its own inline copies of the install flow; these helpers are
 // used by the settings panels (Sources / Tokens / Trusted sources) so each

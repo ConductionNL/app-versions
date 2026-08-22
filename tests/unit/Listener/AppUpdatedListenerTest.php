@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Listener;
+namespace OCA\Versioniq\Tests\Unit\Listener;
 
-use OCA\AppVersions\Listener\AppUpdatedListener;
-use OCA\AppVersions\Service\Pin\PinDriftHandler;
+use OCA\Versioniq\Listener\AppUpdatedListener;
+use OCA\Versioniq\Service\Pin\PinDriftHandler;
 use OCP\App\Events\AppUpdateEvent;
 use OCP\App\IAppManager;
 use OCP\EventDispatcher\Event;

@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
 /**
- * Playwright end-to-end configuration for App Versions.
+ * Playwright end-to-end configuration for Versioniq.
  *
  * The suite drives the real admin UI against a running Nextcloud instance with
  * this app enabled. Point it at a disposable instance (see docs/e2e.md) — the

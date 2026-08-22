@@ -6,7 +6,7 @@
 		failOnWarning="true"
 		failOnRisky="true"
 		xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.4/phpunit.xsd">
-	<testsuite name="App Versions Unit Tests (no Nextcloud bootstrap)">
+	<testsuite name="Versioniq Unit Tests (no Nextcloud bootstrap)">
 		<!--
 			Every subdirectory below is verified to run clean against mocked OCP
 			interfaces under bootstrap-unit-only.php (no live Nextcloud server

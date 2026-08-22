@@ -1,4 +1,4 @@
-// Fixture forge — a Forgejo/Gitea-shaped HTTP double for App Versions e2e tests.
+// Fixture forge — a Forgejo/Gitea-shaped HTTP double for Versioniq e2e tests.
 //
 // It answers the three endpoints ForgeReleaseSource / PatValidator hit
 // (`/api/v1/repos/{owner}/{repo}/releases`, `.../security-advisories`,

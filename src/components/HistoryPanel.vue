@@ -25,7 +25,7 @@ type AuditEntry = {
 const props = defineProps<{ appId?: string }>()
 
 const PAGE_SIZE = 50
-const AUDIT_ENDPOINT = '/ocs/v2.php/apps/app_versions/api/audit'
+const AUDIT_ENDPOINT = '/ocs/v2.php/apps/versioniq/api/audit'
 
 const entries = ref<AuditEntry[]>([])
 const offset = ref(0)
@@ -77,7 +77,7 @@ const load = async (reset: boolean): Promise<void> => {
 		offset.value = (reset ? 0 : offset.value) + page.length
 		hasMore.value = page.length === PAGE_SIZE
 	} catch (e) {
-		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not load the history.')
+		error.value = e instanceof Error ? e.message : t('versioniq', 'Could not load the history.')
 	} finally {
 		isLoading.value = false
 		isLoadingMore.value = false
@@ -99,12 +99,12 @@ const isEmpty = computed(() => hasLoadedOnce.value && !isLoading.value && entrie
 <template>
 	<div :class="$style.panel">
 		<h3 v-if="!appId">
-			{{ t('app_versions', 'History') }}
+			{{ t('versioniq', 'History') }}
 		</h3>
 		<p :class="$style.hint">
 			{{ appId
-				? t('app_versions', 'Every install and source-binding change recorded for this app, newest first.')
-				: t('app_versions', 'Every install and source-binding change App Versions has performed, across all apps, newest first.') }}
+				? t('versioniq', 'Every install and source-binding change recorded for this app, newest first.')
+				: t('versioniq', 'Every install and source-binding change Versioniq has performed, across all apps, newest first.') }}
 		</p>
 
 		<NcNoteCard v-if="error" type="error">
@@ -116,11 +116,11 @@ const isEmpty = computed(() => hasLoadedOnce.value && !isLoading.value && entrie
 			role="status"
 			aria-live="polite">
 			<NcLoadingIcon :size="20" />
-			<span>{{ t('app_versions', 'Loading history…') }}</span>
+			<span>{{ t('versioniq', 'Loading history…') }}</span>
 		</p>
 
 		<p v-else-if="isEmpty" data-testid="history-empty" :class="$style.empty">
-			{{ t('app_versions', 'No audit entries yet.') }}
+			{{ t('versioniq', 'No audit entries yet.') }}
 		</p>
 
 		<div v-else-if="entries.length > 0" :class="$style.tableWrapper">
@@ -133,15 +133,15 @@ const isEmpty = computed(() => hasLoadedOnce.value && !isLoading.value && entrie
 						     announced against the wrong header, which is worse than
 						     silence because it is confidently mislabelled (WCAG 2.2 AA
 						     1.3.1 Info and Relationships). -->
-						<th scope="col">{{ t('app_versions', 'When') }}</th>
-						<th scope="col">{{ t('app_versions', 'Who') }}</th>
+						<th scope="col">{{ t('versioniq', 'When') }}</th>
+						<th scope="col">{{ t('versioniq', 'Who') }}</th>
 						<th v-if="!appId" scope="col">
-							{{ t('app_versions', 'App') }}
+							{{ t('versioniq', 'App') }}
 						</th>
-						<th scope="col">{{ t('app_versions', 'Operation') }}</th>
-						<th scope="col">{{ t('app_versions', 'From → to') }}</th>
-						<th scope="col">{{ t('app_versions', 'Source') }}</th>
-						<th scope="col">{{ t('app_versions', 'Status') }}</th>
+						<th scope="col">{{ t('versioniq', 'Operation') }}</th>
+						<th scope="col">{{ t('versioniq', 'From → to') }}</th>
+						<th scope="col">{{ t('versioniq', 'Source') }}</th>
+						<th scope="col">{{ t('versioniq', 'Status') }}</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -178,7 +178,7 @@ const isEmpty = computed(() => hasLoadedOnce.value && !isLoading.value && entrie
 				type="tertiary"
 				:disabled="isLoadingMore"
 				@click="loadMore">
-				{{ isLoadingMore ? t('app_versions', 'Loading…') : t('app_versions', 'Load more') }}
+				{{ isLoadingMore ? t('versioniq', 'Loading…') : t('versioniq', 'Load more') }}
 			</NcButton>
 		</div>
 	</div>

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Advisory;
+namespace OCA\Versioniq\Tests\Unit\Service\Advisory;
 
-use OCA\AppVersions\Service\Advisory\AdvisoryPackageMap;
-use OCA\AppVersions\Service\Advisory\NextcloudAdvisoryFeed;
+use OCA\Versioniq\Service\Advisory\AdvisoryPackageMap;
+use OCA\Versioniq\Service\Advisory\NextcloudAdvisoryFeed;
 use OCP\App\IAppManager;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
