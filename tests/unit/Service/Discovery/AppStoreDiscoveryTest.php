@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Discovery;
+namespace OCA\Versioniq\Tests\Unit\Service\Discovery;
 
-use OCA\AppVersions\Service\Discovery\AppStoreDiscovery;
+use OCA\Versioniq\Service\Discovery\AppStoreDiscovery;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;

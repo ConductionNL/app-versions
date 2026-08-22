@@ -11,7 +11,7 @@
 #
 # So the fixture never started in CI, `fixtureAvailable()` answered false, and
 # 66 specs across ten files skipped with "forge fixture not running". Measured
-# 2026-08-19 on the first run in which app-versions' E2E job executed at all:
+# 2026-08-19 on the first run in which versioniq' E2E job executed at all:
 #
 #     7 failed · 3 flaky · 66 skipped · 22 passed
 #
@@ -37,7 +37,7 @@
 set -euo pipefail
 
 NC_ROOT="$(pwd)"
-APP_DIR="${NC_ROOT}/apps/app_versions"
+APP_DIR="${NC_ROOT}/apps/versioniq"
 FX="${APP_DIR}/tests/e2e/fixtures/forge"
 PORT="${FORGE_FIXTURE_PORT:-9099}"
 BASE="http://localhost:${PORT}"
@@ -89,10 +89,10 @@ occ() { php "${NC_ROOT}/occ" "$@"; }
 # Point both forge adapters at the fixture, and allow the fetch: Nextcloud
 # refuses requests to local addresses unless told otherwise, which would make
 # every fixture install fail as a network error rather than as a finding.
-occ config:app:set app_versions forge.codeberg.api_base --value="${BASE}/api/v1" > /dev/null
-occ config:app:set app_versions forge.codeberg.web_base --value="${BASE}" > /dev/null
-occ config:app:set app_versions forge.github.api_base --value="${BASE}" > /dev/null
-occ config:app:set app_versions forge.github.web_base --value="${BASE}" > /dev/null
+occ config:app:set versioniq forge.codeberg.api_base --value="${BASE}/api/v1" > /dev/null
+occ config:app:set versioniq forge.codeberg.web_base --value="${BASE}" > /dev/null
+occ config:app:set versioniq forge.github.api_base --value="${BASE}" > /dev/null
+occ config:app:set versioniq forge.github.web_base --value="${BASE}" > /dev/null
 occ config:system:set allow_local_remote_servers --value=true --type=boolean > /dev/null
 
 # Point the App Store at the fixture too. Reaching the real catalogue
@@ -100,8 +100,8 @@ occ config:system:set allow_local_remote_servers --value=true --type=boolean > /
 # listing timing out at 20s while every other endpoint answered in 60ms — the
 # forge double already removed that dependency for forge sources, and this
 # removes the last one, so the suite stops asserting on somebody else's uptime.
-occ config:app:set app_versions appstore.api_base --value="${BASE}/appstore/api/v1" > /dev/null
-occ config:app:set app_versions trusted_sources \
+occ config:app:set versioniq appstore.api_base --value="${BASE}/appstore/api/v1" > /dev/null
+occ config:app:set versioniq trusted_sources \
 	--value='["github:ConductionNL/*","codeberg:Conduction/*","codeberg:fixtureowner/*","github:fixtureowner/*"]' > /dev/null
 
 # Install the baseline fixture app (1.0.0) and bind it to the fixture source, so
@@ -118,7 +118,7 @@ rm -rf "${tmp}"
 occ config:app:set fixtureapp installed_version --value=1.0.0 > /dev/null
 occ app:enable fixtureapp > /dev/null
 occ maintenance:mode --off > /dev/null 2>&1 || true
-occ config:app:set app_versions source.fixtureapp \
+occ config:app:set versioniq source.fixtureapp \
 	--value='{"kind":"github-release","forge":"codeberg","owner":"fixtureowner","repo":"fixtureapp","assetPattern":"*.tar.gz"}' > /dev/null
 
 # PROVE THE APP CAN SEE THE FIXTURE, not merely that both are running. The specs
@@ -158,7 +158,7 @@ occ config:system:set ratelimit.protection.enabled --value=false --type=boolean 
 # the discover specs still fail, and they should — this only stops a cold cache
 # from being mistaken for a broken endpoint.
 echo "Warming the App Store catalogue…"
-if ! timeout 180 php "${NC_ROOT}/occ" app_versions:versions dashboard > /dev/null 2>&1; then
+if ! timeout 180 php "${NC_ROOT}/occ" versioniq:versions dashboard > /dev/null 2>&1; then
 	echo "::warning::App Store warm-up did not complete in 180s; the discover specs may still time out."
 fi
 
@@ -184,7 +184,7 @@ fi
 # basic-auth curl pays a bcrypt hash on every request and inflates every
 # timing, which would turn this from a measurement into a misleading number.
 echo "Timing the endpoints the e2e suite times out on…"
-for ep in "ocs/v2.php/apps/app_versions/api/pats?format=json" "ocs/v2.php/apps/app_versions/api/discover?q=calendar&format=json"; do
+for ep in "ocs/v2.php/apps/versioniq/api/pats?format=json" "ocs/v2.php/apps/versioniq/api/discover?q=calendar&format=json"; do
 	for call in 1 2; do
 		t=$(curl -s -o /dev/null -m 60 -w '%{time_total} http=%{http_code}' \
 			-H 'OCS-APIRequest: true' "http://localhost:8080/${ep}" 2>/dev/null || echo "TIMEOUT")
@@ -193,7 +193,7 @@ for ep in "ocs/v2.php/apps/app_versions/api/pats?format=json" "ocs/v2.php/apps/a
 done
 
 echo "Verifying the app resolves versions through the fixture…"
-versions="$(occ app_versions:versions fixtureapp 2>&1 || true)"
+versions="$(occ versioniq:versions fixtureapp 2>&1 || true)"
 if ! printf '%s' "${versions}" | grep -q '1\.'; then
 	echo "::warning::the app listed no fixture versions; forge specs will fail rather than skip."
 	printf '%s\n' "${versions}"

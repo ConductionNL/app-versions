@@ -14,12 +14,12 @@ use Symfony\Component\Console\Tester\CommandTester;
 final class InstallVersionTest extends TestCase {
 	public function testSelfManagementIsRefusedWithoutCallingInstallAppVersion(): void {
 		$installer = $this->createMock(InstallerService::class);
-		$installer->method('isManageableApp')->with('app_versions')->willReturn(false);
+		$installer->method('isManageableApp')->with('versioniq')->willReturn(false);
 		$installer->expects(self::never())->method('installAppVersion');
 
 		$tester = new CommandTester(new InstallVersion($installer));
 		$exitCode = $tester->execute(
-			['appId' => 'app_versions', 'version' => '1.0.0'],
+			['appId' => 'versioniq', 'version' => '1.0.0'],
 			['capture_stderr_separately' => true]
 		);
 

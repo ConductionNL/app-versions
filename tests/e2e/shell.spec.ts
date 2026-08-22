@@ -9,7 +9,7 @@ test.describe('admin settings shell', () => {
 	test('renders every capability tab in the settings section', async ({ page }) => {
 		await openSettings(page)
 
-		const tablist = page.getByRole('tablist', { name: 'App Versions sections' })
+		const tablist = page.getByRole('tablist', { name: 'Versioniq sections' })
 		for (const name of ['Apps', 'History', 'Sources', 'Tokens', 'Trusted sources', 'Discover', 'Artifact cache']) {
 			await expect(tablist.getByRole('tab', { name, exact: true })).toBeVisible()
 		}
@@ -19,7 +19,7 @@ test.describe('admin settings shell', () => {
 
 	test('tabs are keyboard navigable and expose correct ARIA state', async ({ page }) => {
 		await openSettings(page)
-		const tablist = page.getByRole('tablist', { name: 'App Versions sections' })
+		const tablist = page.getByRole('tablist', { name: 'Versioniq sections' })
 
 		await tablist.getByRole('tab', { name: 'Apps', exact: true }).focus()
 		await page.keyboard.press('ArrowRight')
@@ -31,7 +31,7 @@ test.describe('admin settings shell', () => {
 		await openSettings(page)
 
 		// Buttons inside our settings section must never be nameless.
-		const section = page.locator('#app_versions-panel, [role=tabpanel]').first()
+		const section = page.locator('#versioniq-panel, [role=tabpanel]').first()
 		await expect(section).toBeVisible()
 		const buttons = await page.getByRole('tabpanel').getByRole('button').all()
 		for (const button of buttons) {
@@ -52,7 +52,7 @@ test.describe('admin settings shell', () => {
 		// A fresh context — the default `request` fixture carries the stored admin
 		// session, which would make this assertion vacuously pass.
 		const anon = await playwright.request.newContext({ baseURL, storageState: undefined })
-		const res = await anon.get('/ocs/v2.php/apps/app_versions/api/apps?format=json', {
+		const res = await anon.get('/ocs/v2.php/apps/versioniq/api/apps?format=json', {
 			headers: { 'OCS-APIRequest': 'true' },
 		})
 		// Nextcloud answers unauthenticated OCS calls with 401 (or a 200 envelope

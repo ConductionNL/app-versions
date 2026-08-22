@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Source;
+namespace OCA\Versioniq\Tests\Unit\Service\Source;
 
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Service\Source\TrustedSourceList;
-use OCA\AppVersions\Service\Source\UntrustedSourceException;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Service\Source\TrustedSourceList;
+use OCA\Versioniq\Service\Source\UntrustedSourceException;
 use OCP\IAppConfig;
 use PHPUnit\Framework\TestCase;
 

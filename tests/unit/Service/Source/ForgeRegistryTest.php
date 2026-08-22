@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Source;
+namespace OCA\Versioniq\Tests\Unit\Service\Source;
 
 use InvalidArgumentException;
-use OCA\AppVersions\Service\Source\Forge;
-use OCA\AppVersions\Service\Source\ForgeRegistry;
+use OCA\Versioniq\Service\Source\Forge;
+use OCA\Versioniq\Service\Source\ForgeRegistry;
 use OCP\IConfig;
 use PHPUnit\Framework\TestCase;
 

@@ -116,7 +116,7 @@ test.describe('forge installs (fixture-backed)', () => {
 	test('a rate-limited forge surfaces an error in the version list', async ({ page }) => {
 		await fixtureControl(page, 'repo', { repo: 'fixtureowner/fixtureapp', status: 429 })
 		const res = await page.request.get(
-			`/ocs/v2.php/apps/app_versions/api/app/${FIXTURE_APP}/versions?source=${encodeURIComponent(FIXTURE_SOURCE)}&format=json`,
+			`/ocs/v2.php/apps/versioniq/api/app/${FIXTURE_APP}/versions?source=${encodeURIComponent(FIXTURE_SOURCE)}&format=json`,
 			{ headers: { 'OCS-APIRequest': 'true' } },
 		)
 		const data = (await res.json())?.ocs?.data

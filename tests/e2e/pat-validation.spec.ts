@@ -11,14 +11,14 @@ test.describe('PAT validation & lifecycle', () => {
 	test.beforeEach(async ({ page }) => {
 		test.skip(!(await fixtureAvailable(page)), 'forge fixture not running')
 		// Clear PATs owned by admin so listings are deterministic.
-		const list = (await (await page.request.get('/ocs/v2.php/apps/app_versions/api/pats?format=json', { headers: { 'OCS-APIRequest': 'true' } })).json())?.ocs?.data?.pats ?? []
+		const list = (await (await page.request.get('/ocs/v2.php/apps/versioniq/api/pats?format=json', { headers: { 'OCS-APIRequest': 'true' } })).json())?.ocs?.data?.pats ?? []
 		for (const p of list) {
-			await page.request.delete(`/ocs/v2.php/apps/app_versions/api/pats/${p.id}?format=json`, { headers: { 'OCS-APIRequest': 'true' } }).catch(() => undefined)
+			await page.request.delete(`/ocs/v2.php/apps/versioniq/api/pats/${p.id}?format=json`, { headers: { 'OCS-APIRequest': 'true' } }).catch(() => undefined)
 		}
 	})
 
 	function addPat(page: import('@playwright/test').Page, data: object) {
-		return page.request.post('/ocs/v2.php/apps/app_versions/api/pats?format=json', {
+		return page.request.post('/ocs/v2.php/apps/versioniq/api/pats?format=json', {
 			headers: { 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' },
 			data: { targetPattern: 'fixtureowner/*', ...data },
 		})
@@ -56,7 +56,7 @@ test.describe('PAT validation & lifecycle', () => {
 
 		// Without a token: the private repo 404s → no versions.
 		const noauth = await page.request.get(
-			`/ocs/v2.php/apps/app_versions/api/app/${FIXTURE_APP}/versions?source=codeberg:fixtureowner/fixtureapp&format=json`,
+			`/ocs/v2.php/apps/versioniq/api/app/${FIXTURE_APP}/versions?source=codeberg:fixtureowner/fixtureapp&format=json`,
 			{ headers: { 'OCS-APIRequest': 'true' } },
 		)
 		expect(((await noauth.json())?.ocs?.data?.availableVersions ?? []).length).toBe(0)
@@ -64,7 +64,7 @@ test.describe('PAT validation & lifecycle', () => {
 		// With a matching codeberg PAT: the token is attached and versions list.
 		await addPat(page, { forge: 'codeberg', label: 'private', token: 'codeberg-private-repo-token-000' })
 		const withauth = await page.request.get(
-			`/ocs/v2.php/apps/app_versions/api/app/${FIXTURE_APP}/versions?source=codeberg:fixtureowner/fixtureapp&format=json`,
+			`/ocs/v2.php/apps/versioniq/api/app/${FIXTURE_APP}/versions?source=codeberg:fixtureowner/fixtureapp&format=json`,
 			{ headers: { 'OCS-APIRequest': 'true' } },
 		)
 		expect(((await withauth.json())?.ocs?.data?.availableVersions ?? []).length).toBeGreaterThan(0)
@@ -79,7 +79,7 @@ test.describe('PAT validation & lifecycle', () => {
 
 		// The expired PAT must not be attached → the private repo 404s → no versions.
 		const res = await page.request.get(
-			`/ocs/v2.php/apps/app_versions/api/app/${FIXTURE_APP}/versions?source=codeberg:fixtureowner/fixtureapp&format=json`,
+			`/ocs/v2.php/apps/versioniq/api/app/${FIXTURE_APP}/versions?source=codeberg:fixtureowner/fixtureapp&format=json`,
 			{ headers: { 'OCS-APIRequest': 'true' } },
 		)
 		expect(((await res.json())?.ocs?.data?.availableVersions ?? []).length, 'expired PAT skipped → unauthenticated → private repo hidden').toBe(0)
@@ -98,11 +98,11 @@ test.describe('PAT validation & lifecycle', () => {
 		const id = (await sql("SELECT id FROM oc_app_versions_pats WHERE label='theirs'")).trim()
 
 		// admin does not see a non-shared PAT owned by someone else.
-		const list = (await (await page.request.get('/ocs/v2.php/apps/app_versions/api/pats?format=json', { headers: { 'OCS-APIRequest': 'true' } })).json())?.ocs?.data?.pats ?? []
+		const list = (await (await page.request.get('/ocs/v2.php/apps/versioniq/api/pats?format=json', { headers: { 'OCS-APIRequest': 'true' } })).json())?.ocs?.data?.pats ?? []
 		expect(list.find((p: any) => String(p.id) === id), 'not listed to a non-owner').toBeFalsy()
 
 		// admin cannot delete it.
-		const del = await page.request.delete(`/ocs/v2.php/apps/app_versions/api/pats/${id}?format=json`, { headers: { 'OCS-APIRequest': 'true' } })
+		const del = await page.request.delete(`/ocs/v2.php/apps/versioniq/api/pats/${id}?format=json`, { headers: { 'OCS-APIRequest': 'true' } })
 		expect([403, 404]).toContain(del.status())
 		expect(Number(await sql(`SELECT count(*) FROM oc_app_versions_pats WHERE id=${id}`)), 'still present').toBe(1)
 

@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Pat;
+namespace OCA\Versioniq\Tests\Unit\Service\Pat;
 
 use Exception;
-use OCA\AppVersions\Db\Pat;
-use OCA\AppVersions\Service\Pat\PatValidator;
-use OCA\AppVersions\Service\Source\ForgeRegistry;
+use OCA\Versioniq\Db\Pat;
+use OCA\Versioniq\Service\Pat\PatValidator;
+use OCA\Versioniq\Service\Source\ForgeRegistry;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;

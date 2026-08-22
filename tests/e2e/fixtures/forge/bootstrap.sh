@@ -27,12 +27,12 @@ done
 occ() { docker exec -u www-data "$CT" php occ "$@"; }
 
 # Point the codeberg forge at the fixture and allow local-address fetches.
-occ config:app:set app_versions forge.codeberg.api_base --value="http://forge-fixture:9099/api/v1" >/dev/null
-occ config:app:set app_versions forge.codeberg.web_base --value="http://forge-fixture:9099" >/dev/null
-occ config:app:set app_versions forge.github.api_base --value="http://forge-fixture:9099" >/dev/null
-occ config:app:set app_versions forge.github.web_base --value="http://forge-fixture:9099" >/dev/null
+occ config:app:set versioniq forge.codeberg.api_base --value="http://forge-fixture:9099/api/v1" >/dev/null
+occ config:app:set versioniq forge.codeberg.web_base --value="http://forge-fixture:9099" >/dev/null
+occ config:app:set versioniq forge.github.api_base --value="http://forge-fixture:9099" >/dev/null
+occ config:app:set versioniq forge.github.web_base --value="http://forge-fixture:9099" >/dev/null
 occ config:system:set allow_local_remote_servers --value=true --type=boolean >/dev/null
-occ config:app:set app_versions trusted_sources \
+occ config:app:set versioniq trusted_sources \
 	--value='["github:ConductionNL/*","codeberg:Conduction/*","codeberg:fixtureowner/*","github:fixtureowner/*"]' >/dev/null
 
 # Install a baseline fixture app (1.0.0) and bind it to the fixture source.
@@ -46,7 +46,7 @@ rm -rf "$tmp"
 occ config:app:set fixtureapp installed_version --value=1.0.0 >/dev/null
 occ app:enable fixtureapp >/dev/null
 occ maintenance:mode --off >/dev/null 2>&1 || true
-occ config:app:set app_versions source.fixtureapp \
+occ config:app:set versioniq source.fixtureapp \
 	--value='{"kind":"github-release","forge":"codeberg","owner":"fixtureowner","repo":"fixtureapp","assetPattern":"*.tar.gz"}' >/dev/null
 
 echo "forge fixture bootstrapped for $CT (fixtureapp bound to codeberg:fixtureowner/fixtureapp)"

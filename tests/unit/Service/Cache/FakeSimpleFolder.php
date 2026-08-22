@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Cache;
+namespace OCA\Versioniq\Tests\Unit\Service\Cache;
 
 use OCP\Files\NotFoundException;
 use OCP\Files\SimpleFS\ISimpleFile;

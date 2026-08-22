@@ -11,26 +11,26 @@ test.describe('PAT management', () => {
 	test.beforeEach(async ({ page }) => {
 		test.skip(!(await fixtureAvailable(page)), 'forge fixture not running')
 		// Start from a clean slate: remove any PATs left by a prior test.
-		const res = await page.request.get('/ocs/v2.php/apps/app_versions/api/pats?format=json', {
+		const res = await page.request.get('/ocs/v2.php/apps/versioniq/api/pats?format=json', {
 			headers: { 'OCS-APIRequest': 'true' },
 		})
 		const pats = (await res.json())?.ocs?.data?.pats ?? []
 		for (const p of pats) {
-			await page.request.delete(`/ocs/v2.php/apps/app_versions/api/pats/${p.id}?format=json`, {
+			await page.request.delete(`/ocs/v2.php/apps/versioniq/api/pats/${p.id}?format=json`, {
 				headers: { 'OCS-APIRequest': 'true' },
 			}).catch(() => undefined)
 		}
 	})
 
 	async function pats(page: import('@playwright/test').Page) {
-		const res = await page.request.get('/ocs/v2.php/apps/app_versions/api/pats?format=json', {
+		const res = await page.request.get('/ocs/v2.php/apps/versioniq/api/pats?format=json', {
 			headers: { 'OCS-APIRequest': 'true' },
 		})
 		return (await res.json())?.ocs?.data?.pats ?? []
 	}
 
 	async function addToken(page: import('@playwright/test').Page, data: object) {
-		return page.request.post('/ocs/v2.php/apps/app_versions/api/pats?format=json', {
+		return page.request.post('/ocs/v2.php/apps/versioniq/api/pats?format=json', {
 			headers: { 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' },
 			data: { forge: 'codeberg', label: 'fixture token', targetPattern: 'fixtureowner/*', ...data },
 		})
@@ -64,14 +64,14 @@ test.describe('PAT management', () => {
 		const created = (await (await addToken(page, { token: 'codeberg-editable-token', label: 'before' })).json())?.ocs?.data
 		const id = created.id ?? (await pats(page))[0].id
 
-		const patch = await page.request.patch(`/ocs/v2.php/apps/app_versions/api/pats/${id}?format=json`, {
+		const patch = await page.request.patch(`/ocs/v2.php/apps/versioniq/api/pats/${id}?format=json`, {
 			headers: { 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' },
 			data: { label: 'after' },
 		})
 		expect(patch.ok()).toBeTruthy()
 		expect((await pats(page))[0].label).toBe('after')
 
-		const del = await page.request.delete(`/ocs/v2.php/apps/app_versions/api/pats/${id}?format=json`, {
+		const del = await page.request.delete(`/ocs/v2.php/apps/versioniq/api/pats/${id}?format=json`, {
 			headers: { 'OCS-APIRequest': 'true' },
 		})
 		expect(del.ok()).toBeTruthy()
@@ -85,7 +85,7 @@ test.describe('PAT management', () => {
 			['codeberg', 'forge-token', 'codeberg.org'],
 		] as const) {
 			const res = await page.request.get(
-				`/ocs/v2.php/apps/app_versions/api/pats/deeplink?forge=${forge}&kind=${kind}&format=json`,
+				`/ocs/v2.php/apps/versioniq/api/pats/deeplink?forge=${forge}&kind=${kind}&format=json`,
 				{ headers: { 'OCS-APIRequest': 'true' } },
 			)
 			const data = (await res.json())?.ocs?.data
@@ -103,7 +103,7 @@ test.describe('PAT management', () => {
 
 	test('unauthenticated callers cannot list tokens', async ({ playwright, baseURL }) => {
 		const anon = await playwright.request.newContext({ baseURL, storageState: undefined })
-		const res = await anon.get('/ocs/v2.php/apps/app_versions/api/pats?format=json', {
+		const res = await anon.get('/ocs/v2.php/apps/versioniq/api/pats?format=json', {
 			headers: { 'OCS-APIRequest': 'true' },
 		})
 		expect(await res.text()).not.toContain('"pats"')
@@ -112,6 +112,6 @@ test.describe('PAT management', () => {
 
 	test.afterAll(async () => {
 		// Best-effort: clear PATs via occ so no fixture token lingers.
-		await occ('config:app:delete', 'app_versions', 'noop').catch(() => undefined)
+		await occ('config:app:delete', 'versioniq', 'noop').catch(() => undefined)
 	})
 })

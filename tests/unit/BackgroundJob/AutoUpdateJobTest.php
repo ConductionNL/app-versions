@@ -110,7 +110,7 @@ final class AutoUpdateJobTest extends TestCase {
 		$mocks['settingsStore']->method('isEnabled')->willReturn(true);
 		$mocks['settingsStore']->method('getWindow')->willReturn('01:00-05:00');
 		$mocks['policyStore']->method('all')->willReturn([
-			'app_versions' => new Policy(Policy::LEVEL_ALL, 'admin', '2026-07-01T00:00:00+00:00'),
+			'versioniq' => new Policy(Policy::LEVEL_ALL, 'admin', '2026-07-01T00:00:00+00:00'),
 		]);
 		$mocks['pinStore']->method('get')->willReturn(null);
 		$mocks['installerService']->method('isManageableApp')->willReturn(false);

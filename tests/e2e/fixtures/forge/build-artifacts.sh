@@ -15,7 +15,7 @@ infoxml() { # appid version
 	<id>$1</id>
 	<name>Forge Fixture App</name>
 	<summary>Fixture app served by the e2e forge double</summary>
-	<description>A minimal, valid Nextcloud app used only by the App Versions e2e suite to exercise forge installs.</description>
+	<description>A minimal, valid Nextcloud app used only by the Versioniq e2e suite to exercise forge installs.</description>
 	<version>$2</version>
 	<licence>EUPL-1.2</licence>
 	<author>Conduction B.V.</author>

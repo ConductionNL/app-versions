@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service;
+namespace OCA\Versioniq\Tests\Unit\Service;
 
-use OCA\AppVersions\Service\Cache\ArtifactCache;
-use OCA\AppVersions\Service\ExternalReleaseInstallerService;
-use OCA\AppVersions\Service\Installer\EnvironmentCheck;
-use OCA\AppVersions\Service\Installer\FailureClassifier;
-use OCA\AppVersions\Service\InstallerService;
-use OCA\AppVersions\Service\Pin\PinStore;
-use OCA\AppVersions\Service\SelectedReleaseInstallerService;
-use OCA\AppVersions\Service\Source\SourceBinding;
-use OCA\AppVersions\Service\Source\SourceBindingStore;
-use OCA\AppVersions\Service\Source\SourceInterface;
-use OCA\AppVersions\Service\Source\SourceRegistry;
-use OCA\AppVersions\Service\Source\TrustedSourceList;
+use OCA\Versioniq\Service\Cache\ArtifactCache;
+use OCA\Versioniq\Service\ExternalReleaseInstallerService;
+use OCA\Versioniq\Service\Installer\EnvironmentCheck;
+use OCA\Versioniq\Service\Installer\FailureClassifier;
+use OCA\Versioniq\Service\InstallerService;
+use OCA\Versioniq\Service\Pin\PinStore;
+use OCA\Versioniq\Service\SelectedReleaseInstallerService;
+use OCA\Versioniq\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Source\SourceBindingStore;
+use OCA\Versioniq\Service\Source\SourceInterface;
+use OCA\Versioniq\Service\Source\SourceRegistry;
+use OCA\Versioniq\Service\Source\TrustedSourceList;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -102,7 +102,7 @@ final class InstallerServiceCacheTest extends TestCase {
 			$this->createMock(PinStore::class),
 			$this->userSession,
 			$this->createMock(ITimeFactory::class),
-			$this->createMock(\OCA\AppVersions\Service\Lkg\LkgStore::class),
+			$this->createMock(\OCA\Versioniq\Service\Lkg\LkgStore::class),
 			$this->artifactCache,
 		);
 	}

@@ -58,7 +58,7 @@ test.describe('app discovery', () => {
 		// The Discover tab exposes an installed-only toggle backed by the API's
 		// `installedOnly` param; assert the contract at the API the UI calls.
 		const res = await page.request.get(
-			'/ocs/v2.php/apps/app_versions/api/discover?q=files&installedOnly=1&format=json',
+			'/ocs/v2.php/apps/versioniq/api/discover?q=files&installedOnly=1&format=json',
 			{ headers: { 'OCS-APIRequest': 'true' } },
 		)
 		const data = (await res.json())?.ocs?.data ?? {}

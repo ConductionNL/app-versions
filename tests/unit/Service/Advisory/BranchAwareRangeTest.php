@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Advisory;
+namespace OCA\Versioniq\Tests\Unit\Service\Advisory;
 
-use OCA\AppVersions\Service\Advisory\BranchAwareRange;
+use OCA\Versioniq\Service\Advisory\BranchAwareRange;
 use PHPUnit\Framework\TestCase;
 
 final class BranchAwareRangeTest extends TestCase {

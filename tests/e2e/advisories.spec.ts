@@ -45,7 +45,7 @@ test.describe('security advisories', () => {
 		// inline correlation, without being tight enough to flake on a loaded
 		// CI box.
 		const started = Date.now()
-		const response = await page.request.get('/ocs/v2.php/apps/app_versions/api/advisories?format=json', {
+		const response = await page.request.get('/ocs/v2.php/apps/versioniq/api/advisories?format=json', {
 			headers: { 'OCS-APIRequest': 'true' },
 		})
 		const elapsedMs = Date.now() - started
@@ -79,7 +79,7 @@ test.describe('security advisories', () => {
 		// The bounds come from the server, so assert the control reflects them
 		// rather than hardcoding 1..24 here as well — a test that pins its own
 		// copy of the range stops catching a server-side change.
-		const settings = await page.request.get('/ocs/v2.php/apps/app_versions/api/advisory/settings?format=json', {
+		const settings = await page.request.get('/ocs/v2.php/apps/versioniq/api/advisory/settings?format=json', {
 			headers: { 'OCS-APIRequest': 'true' },
 		})
 		expect(settings.ok(), 'GET /api/advisory/settings should answer 200').toBeTruthy()
@@ -99,7 +99,7 @@ test.describe('security advisories', () => {
 	test('an out-of-range interval is refused rather than silently clamped', async ({ page }) => {
 		await openSettings(page)
 
-		const settings = await page.request.get('/ocs/v2.php/apps/app_versions/api/advisory/settings?format=json', {
+		const settings = await page.request.get('/ocs/v2.php/apps/versioniq/api/advisory/settings?format=json', {
 			headers: { 'OCS-APIRequest': 'true' },
 		})
 		const before = (await settings.json())?.ocs?.data
@@ -107,7 +107,7 @@ test.describe('security advisories', () => {
 		// A UI told "200 OK" while the server stored something else has been
 		// lied to. The store still clamps for values arriving via occ; the API
 		// must say no.
-		const rejected = await page.request.put('/ocs/v2.php/apps/app_versions/api/advisory/settings?format=json', {
+		const rejected = await page.request.put('/ocs/v2.php/apps/versioniq/api/advisory/settings?format=json', {
 			headers: { 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' },
 			data: { intervalHours: String(before.maxIntervalHours + 24) },
 		})
@@ -117,7 +117,7 @@ test.describe('security advisories', () => {
 		).toBe(400)
 
 		// And the stored value must be untouched by the refusal.
-		const after = await page.request.get('/ocs/v2.php/apps/app_versions/api/advisory/settings?format=json', {
+		const after = await page.request.get('/ocs/v2.php/apps/versioniq/api/advisory/settings?format=json', {
 			headers: { 'OCS-APIRequest': 'true' },
 		})
 		expect((await after.json())?.ocs?.data?.intervalHours).toBe(before.intervalHours)

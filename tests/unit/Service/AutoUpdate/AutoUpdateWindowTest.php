@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\AutoUpdate;
+namespace OCA\Versioniq\Tests\Unit\Service\AutoUpdate;
 
-use OCA\AppVersions\Service\AutoUpdate\AutoUpdateWindow;
+use OCA\Versioniq\Service\AutoUpdate\AutoUpdateWindow;
 use PHPUnit\Framework\TestCase;
 
 final class AutoUpdateWindowTest extends TestCase {

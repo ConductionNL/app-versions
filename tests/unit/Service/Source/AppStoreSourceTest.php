@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Source;
+namespace OCA\Versioniq\Tests\Unit\Service\Source;
 
-use OCA\AppVersions\Service\Source\AppStoreSource;
-use OCA\AppVersions\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Source\AppStoreSource;
+use OCA\Versioniq\Service\Source\SourceBinding;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;

@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Pin;
+namespace OCA\Versioniq\Tests\Unit\Service\Pin;
 
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Service\Audit\AuditLogger;
-use OCA\AppVersions\Service\Pin\Pin;
-use OCA\AppVersions\Service\Pin\PinStore;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Service\Audit\AuditLogger;
+use OCA\Versioniq\Service\Pin\Pin;
+use OCA\Versioniq\Service\Pin\PinStore;
 use OCP\IAppConfig;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;

@@ -22,7 +22,7 @@ test.describe('version management', () => {
 	async function versions(page: import('@playwright/test').Page, source?: string) {
 		const q = source ? `?source=${encodeURIComponent(source)}&format=json` : '?format=json'
 		const res = await page.request.get(
-			`/ocs/v2.php/apps/app_versions/api/app/${FIXTURE_APP}/versions${q}`,
+			`/ocs/v2.php/apps/versioniq/api/app/${FIXTURE_APP}/versions${q}`,
 			{ headers: { 'OCS-APIRequest': 'true' } },
 		)
 		return (await res.json())?.ocs?.data
@@ -41,7 +41,7 @@ test.describe('version management', () => {
 		})
 
 		test('installing from a forge binds the app to that source', async ({ page }) => {
-			await occ('config:app:delete', 'app_versions', `source.${FIXTURE_APP}`)
+			await occ('config:app:delete', 'versioniq', `source.${FIXTURE_APP}`)
 			await installFixture(page, '1.0.1')
 			const binding = JSON.parse((await appConfigValue(page, `source.${FIXTURE_APP}`)) ?? '{}')
 			expect(binding.forge).toBe('codeberg')
@@ -53,7 +53,7 @@ test.describe('version management', () => {
 			// Bind to a different (allowlisted) repo, then back — the stored
 			// binding reflects the most recent bind, not an accumulation.
 			const bind = (repo: string) => page.request.post(
-				`/ocs/v2.php/apps/app_versions/api/source/${FIXTURE_APP}/bind?format=json`,
+				`/ocs/v2.php/apps/versioniq/api/source/${FIXTURE_APP}/bind?format=json`,
 				{
 					headers: { 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' },
 					data: { kind: 'github-release', forge: 'codeberg', owner: 'fixtureowner', repo },
@@ -66,7 +66,7 @@ test.describe('version management', () => {
 		})
 
 		test('a manageable app reports manageable with no blocking warning', async ({ page }) => {
-			const res = await page.request.get('/ocs/v2.php/apps/app_versions/api/apps?format=json', {
+			const res = await page.request.get('/ocs/v2.php/apps/versioniq/api/apps?format=json', {
 				headers: { 'OCS-APIRequest': 'true' },
 			})
 			const apps = (await res.json())?.ocs?.data?.apps ?? []
@@ -85,7 +85,7 @@ test.describe('version management', () => {
 		test('a silent dry run reports its outcome without changing the version', async ({ page }) => {
 			const before = (await occ('config:app:get', FIXTURE_APP, 'installed_version')).trim()
 			const res = await page.request.post(
-				`/ocs/v2.php/apps/app_versions/api/app/${FIXTURE_APP}/versions/1.1.0/install?dryRun=1&format=json`,
+				`/ocs/v2.php/apps/versioniq/api/app/${FIXTURE_APP}/versions/1.1.0/install?dryRun=1&format=json`,
 				{ headers: { 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' }, data: { source: FIXTURE_SOURCE } },
 			)
 			const data = (await res.json())?.ocs?.data
@@ -114,7 +114,7 @@ test.describe('version management', () => {
 			await resetFixtureApp(page)
 			await installFixture(page, '1.1.0')
 			const res = await page.request.post(
-				`/ocs/v2.php/apps/app_versions/api/app/${FIXTURE_APP}/versions/1.0.0/install?format=json`,
+				`/ocs/v2.php/apps/versioniq/api/app/${FIXTURE_APP}/versions/1.0.0/install?format=json`,
 				{ headers: { 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' }, data: { source: FIXTURE_SOURCE } },
 			)
 			const data = (await res.json())?.ocs?.data
@@ -136,16 +136,16 @@ test.describe('version management', () => {
 	})
 
 	test.describe('settings placement', () => {
-		test('App Versions lives in Administration settings, not the top nav', async ({ page }) => {
+		test('Versioniq lives in Administration settings, not the top nav', async ({ page }) => {
 			await openSettings(page)
-			await expect(page.getByRole('heading', { name: 'App Versions', level: 2 })).toBeVisible()
+			await expect(page.getByRole('heading', { name: 'Versioniq', level: 2 })).toBeVisible()
 			// No top-level app-navigation entry.
-			const nav = page.locator('#app-menu, [data-app-id=app_versions]')
-			await expect(nav.filter({ hasText: 'App Versions' })).toHaveCount(0)
+			const nav = page.locator('#app-menu, [data-app-id=versioniq]')
+			await expect(nav.filter({ hasText: 'Versioniq' })).toHaveCount(0)
 		})
 
 		test('no standalone in-app page route remains', async ({ page }) => {
-			const res = await page.request.get('/apps/app_versions/', { maxRedirects: 0 }).catch(() => null)
+			const res = await page.request.get('/apps/versioniq/', { maxRedirects: 0 }).catch(() => null)
 			// The app registers no front-end page route; the settings section is the only surface.
 			expect(res === null || res.status() >= 300 || res.status() === 404).toBeTruthy()
 		})

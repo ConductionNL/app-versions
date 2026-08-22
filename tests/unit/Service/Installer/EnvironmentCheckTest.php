@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Installer;
+namespace OCA\Versioniq\Tests\Unit\Service\Installer;
 
-use OCA\AppVersions\Service\Installer\EnvironmentCheck;
+use OCA\Versioniq\Service\Installer\EnvironmentCheck;
 use OCP\IL10N;
 use OCP\L10N\IFactory;
 use PHPUnit\Framework\TestCase;

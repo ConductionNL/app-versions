@@ -55,7 +55,7 @@ final class ApiTest extends TestCase {
 		?ArtifactCache $artifactCache = null,
 	): ApiController {
 		return new ApiController(
-			'app_versions',
+			'versioniq',
 			$request ?? $this->createMock(IRequest::class),
 			$this->createMock(InstallerService::class),
 			$this->createMock(IGroupManager::class),
@@ -102,7 +102,7 @@ final class ApiTest extends TestCase {
 		$groupManager->method('isAdmin')->with($uid)->willReturn(true);
 
 		return new ApiController(
-			'app_versions',
+			'versioniq',
 			$request,
 			$installer,
 			$groupManager,

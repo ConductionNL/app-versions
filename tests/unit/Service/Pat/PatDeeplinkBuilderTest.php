@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Pat;
+namespace OCA\Versioniq\Tests\Unit\Service\Pat;
 
 use InvalidArgumentException;
-use OCA\AppVersions\Db\Pat;
-use OCA\AppVersions\Service\Pat\PatDeeplinkBuilder;
-use OCA\AppVersions\Service\Source\ForgeRegistry;
+use OCA\Versioniq\Db\Pat;
+use OCA\Versioniq\Service\Pat\PatDeeplinkBuilder;
+use OCA\Versioniq\Service\Source\ForgeRegistry;
 use OCP\IRequest;
 use PHPUnit\Framework\TestCase;
 

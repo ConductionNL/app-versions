@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service;
+namespace OCA\Versioniq\Tests\Unit\Service;
 
-use OCA\AppVersions\Service\Audit\AuditLogger;
-use OCA\AppVersions\Service\ExternalReleaseInstallerService;
-use OCA\AppVersions\Service\SelectedReleaseInstallerService;
-use OCA\AppVersions\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Audit\AuditLogger;
+use OCA\Versioniq\Service\ExternalReleaseInstallerService;
+use OCA\Versioniq\Service\SelectedReleaseInstallerService;
+use OCA\Versioniq\Service\Source\SourceBinding;
 use OCP\IUser;
 use OCP\IUserSession;
 use PHPUnit\Framework\TestCase;
@@ -17,7 +17,7 @@ use ReflectionClass;
  * Exercises the private audit-recording helpers on both installer services in
  * isolation (task 8 "Installer tests extended"). The full install path is
  * network- and Server::get()-dependent and not unit-reachable — see the
- * rationale in {@see \OCA\AppVersions\Tests\Unit\Service\InstallerRecoveryTest}
+ * rationale in {@see \OCA\Versioniq\Tests\Unit\Service\InstallerRecoveryTest}
  * — so, mirroring that file's approach, instances are built without their
  * constructor via reflection and the private/protected dependencies these
  * helpers touch are injected directly.
@@ -180,7 +180,7 @@ final class InstallerAuditHookTest extends TestCase {
 	/**
 	 * No PAT/Authorization material can reach the audit message: the private
 	 * helper only ever forwards the exception message it is handed, and the
-	 * external installer's PAT flows through {@see \OCA\AppVersions\Service\Pat\PatManager::useToken()}
+	 * external installer's PAT flows through {@see \OCA\Versioniq\Service\Pat\PatManager::useToken()}
 	 * — a token never becomes a variable in scope at any of the installer's
 	 * throw sites. AuditLogger additionally redacts any Bearer/Authorization
 	 * pattern defensively (see AuditLoggerTest).

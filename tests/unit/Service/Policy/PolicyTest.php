@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Policy;
+namespace OCA\Versioniq\Tests\Unit\Service\Policy;
 
 use InvalidArgumentException;
-use OCA\AppVersions\Service\Policy\Policy;
+use OCA\Versioniq\Service\Policy\Policy;
 use PHPUnit\Framework\TestCase;
 
 final class PolicyTest extends TestCase {
