@@ -38,6 +38,15 @@ class ListVersions extends Command {
 		parent::__construct();
 	}
 
+	/**
+	 * Declare the command name, arguments and options.
+	 *
+	 * The name moved from `app_versions:versions` to `versioniq:versions` with
+	 * the app id — `occ` command prefixes follow the app, so an admin script
+	 * on the old name breaks loudly rather than silently.
+	 *
+	 * @spec openspec/specs/cli-commands/spec.md
+	 */
 	protected function configure(): void {
 		$this
 			->setName('versioniq:versions')

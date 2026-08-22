@@ -98,6 +98,16 @@ class MigrateAppConfigKeys implements IRepairStep {
 	 *
 	 * @var string
 	 */
+	// gate-59 (unclosable-gate) reads this as a config GATE that is read and
+	// never written, and on the usual shape it would be right: a flag nothing
+	// persists means the setup it guards re-runs forever. Here the never-write
+	// is the entire safety property. This is the app id of the PREVIOUS app,
+	// and the two Migrate* steps read the old namespace and write only the new
+	// one, so the old rows survive a rollback. Writing anything back under it
+	// would make the migration destructive — the opposite of closing a gate.
+	// The steps are idempotent through their own "already present under the
+	// new id" check, which is what actually stops repeated work.
+	// unclosable-gate exclude 'app_versions' is the pre-rename app id: read-only by design, see above.
 	private const OLD_APP_ID = 'app_versions';
 
 	/**
