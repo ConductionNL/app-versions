@@ -9,7 +9,7 @@ import { ocsGet, ocsWrite } from '../ocs'
 type CacheApp = { appId: string, versions: string[], sizeBytes: number }
 type CacheSummary = { apps: CacheApp[], totalSizeBytes: number, keep: number }
 
-const CACHE = '/ocs/v2.php/apps/app_versions/api/cache'
+const CACHE = '/ocs/v2.php/apps/versioniq/api/cache'
 
 const summary = ref<CacheSummary>({ apps: [], totalSizeBytes: 0, keep: 3 })
 const loading = ref(false)
@@ -43,7 +43,7 @@ const loadSummary = async (): Promise<void> => {
 		}
 		summary.value = payload
 	} catch (e) {
-		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not load the artifact cache summary.')
+		error.value = e instanceof Error ? e.message : t('versioniq', 'Could not load the artifact cache summary.')
 	} finally {
 		loading.value = false
 	}
@@ -61,7 +61,7 @@ const clearCache = async (appId?: string): Promise<void> => {
 		}
 		summary.value = payload
 	} catch (e) {
-		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not clear the artifact cache.')
+		error.value = e instanceof Error ? e.message : t('versioniq', 'Could not clear the artifact cache.')
 	} finally {
 		clearing.value = null
 	}
@@ -72,9 +72,9 @@ onMounted(loadSummary)
 
 <template>
 	<div :class="$style.panel">
-		<h3>{{ t('app_versions', 'Release artifact cache') }}</h3>
+		<h3>{{ t('versioniq', 'Release artifact cache') }}</h3>
 		<p :class="$style.hint">
-			{{ t('app_versions', 'Verified archives are kept locally after a successful install so rollback still works if the source deletes or moves the release. At most {keep} versions per app are retained; installs re-verify the cached artifact before use.', { keep: summary.keep }) }}
+			{{ t('versioniq', 'Verified archives are kept locally after a successful install so rollback still works if the source deletes or moves the release. At most {keep} versions per app are retained; installs re-verify the cached artifact before use.', { keep: summary.keep }) }}
 		</p>
 
 		<NcNoteCard v-if="error" type="error">
@@ -85,7 +85,7 @@ onMounted(loadSummary)
 
 		<template v-else>
 			<p data-testid="cache-total-size" :class="$style.total">
-				{{ t('app_versions', 'Total cache size: {size}', { size: formatSize(summary.totalSizeBytes) }) }}
+				{{ t('versioniq', 'Total cache size: {size}', { size: formatSize(summary.totalSizeBytes) }) }}
 			</p>
 
 			<ul :class="$style.list">
@@ -97,15 +97,15 @@ onMounted(loadSummary)
 					<div :class="$style.rowInfo">
 						<code>{{ app.appId }}</code>
 						<span :class="$style.rowMeta">
-							{{ t('app_versions', '{count} cached — {size}', { count: app.versions.length, size: formatSize(app.sizeBytes) }) }}
+							{{ t('versioniq', '{count} cached — {size}', { count: app.versions.length, size: formatSize(app.sizeBytes) }) }}
 						</span>
 					</div>
 					<NcButton type="tertiary" :disabled="clearing !== null" @click="clearCache(app.appId)">
-						{{ clearing === app.appId ? t('app_versions', 'Clearing…') : t('app_versions', 'Clear') }}
+						{{ clearing === app.appId ? t('versioniq', 'Clearing…') : t('versioniq', 'Clear') }}
 					</NcButton>
 				</li>
 				<li v-if="!hasEntries" data-testid="cache-empty" :class="$style.empty">
-					{{ t('app_versions', 'Nothing cached yet.') }}
+					{{ t('versioniq', 'Nothing cached yet.') }}
 				</li>
 			</ul>
 
@@ -113,7 +113,7 @@ onMounted(loadSummary)
 				type="secondary"
 				:disabled="!hasEntries || clearing !== null"
 				@click="clearCache()">
-				{{ clearing === '*' ? t('app_versions', 'Clearing…') : t('app_versions', 'Clear entire cache') }}
+				{{ clearing === '*' ? t('versioniq', 'Clearing…') : t('versioniq', 'Clear entire cache') }}
 			</NcButton>
 		</template>
 	</div>
