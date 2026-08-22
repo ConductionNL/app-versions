@@ -1324,7 +1324,7 @@ const requestInstall = async (
 }
 
 // Offers Re-pin / Unpin-and-install / Cancel when the install endpoint
-// refuses to overwrite a pin (409); see "Pins are enforced on Versioniq'
+// refuses to overwrite a pin (409); see "Pins are enforced on Versioniq's
 // own install path".
 const confirmPinOverride = (appId: string, pinnedVersion: string, targetVersion: string): Promise<'repin' | 'unpin' | 'cancel'> => {
 	if (pinOverrideResolve) {

@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { FIXTURE_APP, FIXTURE_SOURCE, fixtureAvailable, installFixture, occ, resetFixtureApp } from './helpers'
 
 /**
- * Pin enforcement on Versioniq' own install path, and pin listing — driven
+ * Pin enforcement on Versioniq's own install path, and pin listing — driven
  * against the fixture forge (install-over-pin is refused; the pinned version
  * still reinstalls without an override).
  *

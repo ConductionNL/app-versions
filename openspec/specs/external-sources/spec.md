@@ -10,7 +10,7 @@ status: implemented
 
 ## Purpose
 
-External sources allow App Versions to install Nextcloud apps from origins outside the Nextcloud App Store — most importantly GitHub releases — while keeping the App Store install path with its full code-signing chain unchanged. The trade-off (no Nextcloud-issued certificate) is made visible through a trusted-source allowlist, archive-content integrity checks, and clear UI labelling.
+External sources allow Versioniq to install Nextcloud apps from origins outside the Nextcloud App Store — most importantly GitHub releases — while keeping the App Store install path with its full code-signing chain unchanged. The trade-off (no Nextcloud-issued certificate) is made visible through a trusted-source allowlist, archive-content integrity checks, and clear UI labelling.
 ## Requirements
 ### Requirement: Source abstraction [MVP]
 
@@ -67,7 +67,7 @@ The system MUST support querying public releases from any registered forge throu
 
 ### Requirement: Trusted-source allowlist [MVP]
 
-The system MUST reject external installs from sources not in the configured allowlist. Allowlist patterns are **forge-qualified** globs of the form `{forge}:owner/repo` (e.g. `github:ConductionNL/*`, `codeberg:Conduction/*`), stored in `app_versions.trusted_sources` as a JSON array. Matching is performed against the binding's `{forge}:owner/repo` id. A stored pattern with **no** forge prefix (legacy bare `owner/repo`) MUST be treated as `github:owner/repo`. When unset, the default is `["github:ConductionNL/*", "codeberg:Conduction/*"]`. The existing fnmatch and owner/repo path-traversal protections MUST be preserved.
+The system MUST reject external installs from sources not in the configured allowlist. Allowlist patterns are **forge-qualified** globs of the form `{forge}:owner/repo` (e.g. `github:ConductionNL/*`, `codeberg:Conduction/*`), stored in `versioniq.trusted_sources` as a JSON array. Matching is performed against the binding's `{forge}:owner/repo` id. A stored pattern with **no** forge prefix (legacy bare `owner/repo`) MUST be treated as `github:owner/repo`. When unset, the default is `["github:ConductionNL/*", "codeberg:Conduction/*"]`. The existing fnmatch and owner/repo path-traversal protections MUST be preserved.
 
 #### Scenario: Forge-qualified source in allowlist
 
@@ -110,7 +110,7 @@ The system MUST reject external installs from sources not in the configured allo
 
 @e2e exclude the default-allowlist fallback is unit-tested.
 
-- **GIVEN** `app_versions.trusted_sources` has never been set
+- **GIVEN** `versioniq.trusted_sources` has never been set
 - **WHEN** the system reads the allowlist
 - **THEN** the default `["github:ConductionNL/*", "codeberg:Conduction/*"]` MUST be used
 
@@ -271,7 +271,7 @@ The system MUST provide HTTP endpoints for listing registered sources and the tr
 
 - **GIVEN** an admin calls `POST /api/source/openregister/bind` with body `{forge: "github", kind: "github-release", owner: "ConductionNL", repo: "openregister"}`
 - **THEN** the system MUST validate the source against the trusted-source allowlist
-- **AND** persist the binding in `app_versions.source.openregister`
+- **AND** persist the binding in `versioniq.source.openregister`
 - **AND** future version queries for `openregister` MUST go to that forge source
 
 #### Scenario: Bind rejects untrusted source

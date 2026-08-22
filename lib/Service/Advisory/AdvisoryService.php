@@ -97,8 +97,8 @@ class AdvisoryService {
 	 *
 	 * @spec openspec/specs/security-advisory-correlation/spec.md
 	 * @param list<array{id: string, severity: string, summary: string, affected: list<string>, firstPatchedVersion: ?string, patchedVersions?: list<string>}> $feedAdvisories
-	 *   Advisories the central feed already resolved to this app. Passed in
-	 *   rather than fetched here because the feed is read ONCE per sweep.
+	 *                                                                                                                                                                         Advisories the central feed already resolved to this app. Passed in
+	 *                                                                                                                                                                         rather than fetched here because the feed is read ONCE per sweep.
 	 * @return array{appId: string, installedVersion: ?string, state: string, advisories: list<array{id: string, severity: string, summary: string}>, recommendedVersion: ?string, error: ?string}
 	 */
 	public function correlate(string $appId, array $feedAdvisories = []): array {
@@ -150,10 +150,10 @@ class AdvisoryService {
 	 *
 	 * @spec openspec/specs/security-advisory-correlation/spec.md
 	 * @param ?float $budgetSeconds Wall-clock ceiling for the sweep. Callers a
-	 *   user is waiting on should leave this null (see the default). The
-	 *   background refresh passes its own, much larger budget so that moving
-	 *   the work off the request path does not silently shrink what the
-	 *   feature covers.
+	 *                              user is waiting on should leave this null (see the default). The
+	 *                              background refresh passes its own, much larger budget so that moving
+	 *                              the work off the request path does not silently shrink what the
+	 *                              feature covers.
 	 * @return array<string, array{appId: string, installedVersion: ?string, state: string, advisories: list<array{id: string, severity: string, summary: string}>, recommendedVersion: ?string, error: ?string}>
 	 */
 	public function correlateAll(?float $budgetSeconds = null): array {
@@ -235,10 +235,10 @@ class AdvisoryService {
 	 *
 	 * @spec openspec/specs/security-advisory-correlation/spec.md
 	 * @param list<array{id: string, severity: string, summary: string, affected: list<string>, firstPatchedVersion: ?string, patchedVersions?: list<string>}> $advisories
-	 *   `patchedVersions` is present on records from the central Nextcloud
-	 *   feed and absent on the older per-source shape. Its presence is what
-	 *   selects branch-aware evaluation over clause evaluation, so it is part
-	 *   of the contract rather than an optional extra.
+	 *                                                                                                                                                                     `patchedVersions` is present on records from the central Nextcloud
+	 *                                                                                                                                                                     feed and absent on the older per-source shape. Its presence is what
+	 *                                                                                                                                                                     selects branch-aware evaluation over clause evaluation, so it is part
+	 *                                                                                                                                                                     of the contract rather than an optional extra.
 	 * @param list<string> $availableVersions
 	 * @return array{appId: string, installedVersion: ?string, state: string, advisories: list<array{id: string, severity: string, summary: string}>, recommendedVersion: ?string, error: ?string}
 	 */

@@ -16,7 +16,7 @@ use InvalidArgumentException;
 
 /**
  * Immutable representation of the last-known-good version record: the last
- * version of an app that finalized cleanly through Versioniq' own install
+ * version of an app that finalized cleanly through Versioniq's own install
  * path. Persisted as a JSON blob under app config key `lkg.{appId}`,
  * mirroring the {@see \OCA\Versioniq\Service\Pin\Pin} /
  * {@see \OCA\Versioniq\Service\Source\SourceBinding} pattern; see

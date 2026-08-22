@@ -10,7 +10,7 @@ status: implemented
 
 ## Purpose
 
-Pinning holds an installed app at a chosen version. Because Nextcloud core offers no cancellable pre-update hook (`OCP\App\Events\AppUpdateEvent` is post-hoc only), a pin is **enforced inside App Versions and monitored everywhere else**: App Versions' own install path refuses to overwrite a pin without an explicit override, while drift caused by any other update path (NC web updater, `occ app:update`, manual file replacement) is detected, audited, notified, and one-click reversible via re-pin. The UI states this trust model explicitly.
+Pinning holds an installed app at a chosen version. Because Nextcloud core offers no cancellable pre-update hook (`OCP\App\Events\AppUpdateEvent` is post-hoc only), a pin is **enforced inside Versioniq and monitored everywhere else**: Versioniq's own install path refuses to overwrite a pin without an explicit override, while drift caused by any other update path (NC web updater, `occ app:update`, manual file replacement) is detected, audited, notified, and one-click reversible via re-pin. The UI states this trust model explicitly.
 
 ## Requirements
 
@@ -24,7 +24,7 @@ The system MUST let an admin pin an app to its **currently installed** version v
 
 - GIVEN `openregister` is installed at 2.3.0
 - WHEN admin `alice` calls `PUT /api/app/openregister/pin` with `{reason: "2.5.0 breaks LDAP sync"}` and confirms her password
-- THEN `app_versions.pin.openregister` MUST be set to `{version: "2.3.0", pinnedBy: "alice", pinnedAt: ISO-8601, reason: "2.5.0 breaks LDAP sync"}`
+- THEN `versioniq.pin.openregister` MUST be set to `{version: "2.3.0", pinnedBy: "alice", pinnedAt: ISO-8601, reason: "2.5.0 breaks LDAP sync"}`
 - AND the response MUST echo the pin record
 
 #### Scenario: Pin requires password confirmation
@@ -66,12 +66,12 @@ The system MUST let an admin remove a pin via `DELETE /api/app/{appId}/pin`, wit
 
 - GIVEN `pin.openregister` exists for version 2.3.0
 - WHEN the admin calls `DELETE /api/app/openregister/pin` and confirms their password
-- THEN `app_versions.pin.openregister` MUST be removed
+- THEN `versioniq.pin.openregister` MUST be removed
 - AND `openregister` MUST remain installed at its current version
 
 ---
 
-### Requirement: Pins are enforced on App Versions' own install path [MVP]
+### Requirement: Pins are enforced on Versioniq's own install path [MVP]
 
 When an app is pinned, `installVersion` for any version other than the pinned one MUST fail with HTTP 409 naming the pinned version, unless the request carries an explicit `overridePin` parameter with value `repin` or `unpin`. With `overridePin=repin` the pin MUST be moved to the newly installed version; with `overridePin=unpin` the pin MUST be removed. In both override cases the pin state MUST only change if the install succeeds, and the pin MUST be adjusted such that the subsequent `AppUpdateEvent` for this install does not register as drift.
 
@@ -114,7 +114,7 @@ When an app is pinned, `installVersion` for any version other than the pinned on
 
 ### Requirement: Drift detection [MVP]
 
-The system MUST detect when a pinned app's installed version no longer matches its pin. Detection MUST happen (a) immediately via a listener on `OCP\App\Events\AppUpdateEvent`, and (b) at least daily via a reconciliation background job comparing every pin against `IAppManager` versions (catching updates that bypassed the event, e.g. performed while App Versions was disabled). Detected drift MUST be recorded on the pin (`driftedTo`, `driftedAt`) and MUST be acted on only once per drifted version (idempotent).
+The system MUST detect when a pinned app's installed version no longer matches its pin. Detection MUST happen (a) immediately via a listener on `OCP\App\Events\AppUpdateEvent`, and (b) at least daily via a reconciliation background job comparing every pin against `IAppManager` versions (catching updates that bypassed the event, e.g. performed while Versioniq was disabled). Detected drift MUST be recorded on the pin (`driftedTo`, `driftedAt`) and MUST be acted on only once per drifted version (idempotent).
 
 #### Scenario: NC updater updates a pinned app
 
@@ -129,7 +129,7 @@ The system MUST detect when a pinned app's installed version no longer matches i
 
 @e2e tests/e2e/jobs.spec.ts
 
-- GIVEN `openregister` is pinned at 2.3.0 and was updated to 2.5.0 while App Versions was disabled
+- GIVEN `openregister` is pinned at 2.3.0 and was updated to 2.5.0 while Versioniq was disabled
 - WHEN the daily reconciliation job runs
 - THEN the drift MUST be detected and recorded exactly as in the listener path
 
@@ -162,7 +162,7 @@ On newly detected drift the system MUST notify admin-group members via `OCP\Noti
 - GIVEN drift of `openregister` from pinned 2.3.0 to installed 2.5.0 is newly detected
 - WHEN the drift handler runs
 - THEN every member of the `admin` group MUST receive a Nextcloud notification naming `openregister`, 2.3.0, and 2.5.0
-- AND the notification MUST link into App Versions
+- AND the notification MUST link into Versioniq
 
 #### Scenario: Re-pin reinstalls the pinned version
 
@@ -194,7 +194,7 @@ On newly detected drift the system MUST notify admin-group members via `OCP\Noti
 
 ### Requirement: Honest pin presentation [MVP]
 
-Pinned apps MUST be visibly badged in the app list and version picker (pinned version, who, when, reason). The pin UI MUST state that pins are enforced inside App Versions and monitored elsewhere — Nextcloud's own updater can still update the app, in which case the admin is notified. `GET /api/pins` MUST list all pins joined with the live installed version and current drift status.
+Pinned apps MUST be visibly badged in the app list and version picker (pinned version, who, when, reason). The pin UI MUST state that pins are enforced inside Versioniq and monitored elsewhere — Nextcloud's own updater can still update the app, in which case the admin is notified. `GET /api/pins` MUST list all pins joined with the live installed version and current drift status.
 
 #### Scenario: Pinned badge
 
@@ -224,7 +224,7 @@ Pinned apps MUST be visibly badged in the app list and version picker (pinned ve
 
 ## User Stories
 
-1. As a Nextcloud admin, I want to pin an app after rolling it back so that App Versions never lets me (or a colleague using App Versions) accidentally overwrite the rollback.
+1. As a Nextcloud admin, I want to pin an app after rolling it back so that Versioniq never lets me (or a colleague using Versioniq) accidentally overwrite the rollback.
 2. As an on-call admin, I want to be notified when anything else updates a pinned app so that a silent updater click doesn't reintroduce the bug I rolled back from.
 3. As a Nextcloud admin, I want one-click re-pin so that recovering from unwanted drift is as easy as causing it was.
 4. As a cautious admin, I want the UI to tell me exactly what a pin does and does not guarantee.

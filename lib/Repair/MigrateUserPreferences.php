@@ -13,7 +13,7 @@ declare(strict_types=1);
 namespace OCA\Versioniq\Repair;
 
 use OCA\Versioniq\AppInfo\Application;
-use OCP\IConfig;
+use OCP\Config\IUserConfig;
 use OCP\IUser;
 use OCP\IUserManager;
 use OCP\Migration\IOutput;
@@ -25,15 +25,15 @@ use Throwable;
  * Carries this app's per-user preferences across the `app_versions` ->
  * `versioniq` app-id rename.
  *
- * WHY THIS EXISTS SEPARATELY FROM MigrateAppConfigKeys. `IAppConfig` and
- * `IConfig`'s user values are different stores: the former is `oc_appconfig`,
- * the latter `oc_preferences`. Both are namespaced by app id, so both are cut
- * off by the rename, but copying one does nothing for the other.
+ * WHY THIS EXISTS SEPARATELY FROM MigrateAppConfigKeys. App config and user
+ * config are different stores: the former is `oc_appconfig`, the latter
+ * `oc_preferences`. Both are namespaced by app id, so both are cut off by the
+ * rename, but copying one does nothing for the other.
  *
  * WHY IT IS HERE EVEN THOUGH TODAY'S CODE WRITES NO USER VALUE. Grepping this
- * app at the time of the rename finds no `setUserValue()` call: the per-user
- * state it does keep — PATs — lives in the `app_versions_pats` table, which
- * the rename does not touch, and PAT ownership is a `uid` column rather than a
+ * app at the time of the rename finds no user-config write: the per-user state
+ * it does keep — PATs — lives in the `app_versions_pats` table, which the
+ * rename does not touch, and PAT ownership is a `uid` column rather than a
  * preference. That is an argument for the step being CHEAP, not for it being
  * absent:
  *   - `oc_preferences` is written by more than this app's own code. Nextcloud
@@ -48,14 +48,14 @@ use Throwable;
  *     "nothing to do"), so the cost of keeping it is a single user walk on
  *     install, and the cost of omitting it is unbounded.
  *
- * WHY IT ENUMERATES BY USER RATHER THAN BY VALUE. `IConfig` has no "list every
- * key for every user", and `getUsersForUserValue(app, key, value)` needs both
- * the key and the VALUE up front. That is exhaustive only for a closed value
- * set — a boolean opt-out — and this app has no such guarantee: anything it
- * might store is keyed by a managed app's id or holds a free-form string. Used
- * against an open-valued key it migrates NOTHING while reporting success.
+ * WHY IT ENUMERATES BY USER RATHER THAN BY VALUE. There is no "list every key
+ * for every user" call, and searching by value needs both the key and the
+ * VALUE up front. That is exhaustive only for a closed value set — a boolean
+ * opt-out — and this app has no such guarantee: anything it might store is
+ * keyed by a managed app's id or holds a free-form string. Used against an
+ * open-valued key, a value search migrates NOTHING while reporting success.
  * Walking `IUserManager::callForSeenUsers()` and asking
- * `IConfig::getUserKeys()` what that user actually stored is exhaustive by
+ * `IUserConfig::getKeys()` what that user actually stored is exhaustive by
  * construction, for open and closed value sets alike, and — like
  * MigrateAppConfigKeys' use of `getKeys()` — cannot drift when a future
  * release adds a preference.
@@ -65,6 +65,13 @@ use Throwable;
  * for this app has necessarily been seen. The seen-user walk reads the same
  * table and avoids a full backend enumeration (LDAP included) on every
  * install.
+ *
+ * LAZINESS IS PRESERVED PER KEY. `getKeys()` deliberately ignores lazy
+ * filtering and returns lazy and non-lazy keys alike, but `getValueString()`
+ * reads only the one it is asked for and returns the DEFAULT for the other.
+ * Copying every key as non-lazy would therefore read a lazy value as empty and
+ * skip it — the same silent loss this step exists to prevent — so each key is
+ * probed with `isLazy()` and re-written under the laziness it was stored with.
  *
  * SAFETY. Idempotent and non-destructive, matching MigrateAppConfigKeys:
  *   - a value is copied only when the user has nothing stored under the new
@@ -95,26 +102,8 @@ class MigrateUserPreferences implements IRepairStep {
 	 */
 	private const OLD_APP_ID = 'app_versions';
 
-	/**
-	 * Number of preferences copied during this run.
-	 *
-	 * Held as state rather than passed around because the walk happens inside
-	 * a closure handed to IUserManager::callForSeenUsers(), which returns
-	 * nothing and cannot thread a running total back out.
-	 *
-	 * @var int
-	 */
-	private int $migrated = 0;
-
-	/**
-	 * Number of preferences already present under the new app id.
-	 *
-	 * @var int
-	 */
-	private int $alreadyPresent = 0;
-
 	public function __construct(
-		private IConfig $config,
+		private IUserConfig $userConfig,
 		private IUserManager $userManager,
 		private LoggerInterface $logger,
 	) {
@@ -141,16 +130,19 @@ class MigrateUserPreferences implements IRepairStep {
 	 *       openspec/specs/pat-management/spec.md.
 	 */
 	public function run(IOutput $output): void {
-		$this->migrated = 0;
-		$this->alreadyPresent = 0;
+		// Counted through by-reference locals rather than instance state: the
+		// walk happens inside a closure handed to callForSeenUsers(), which
+		// returns nothing and cannot thread a running total back out.
+		$migrated = 0;
+		$alreadyPresent = 0;
 
 		try {
 			// The callback returns null rather than void: IUserManager treats a
 			// `false` return as "stop iterating", so the contract is
 			// Closure(IUser): (bool|null) and null means "keep going".
 			$this->userManager->callForSeenUsers(
-				function (IUser $user): ?bool {
-					$this->migrateUser($user->getUID());
+				function (IUser $user) use (&$migrated, &$alreadyPresent): ?bool {
+					$this->migrateUser($user->getUID(), $migrated, $alreadyPresent);
 					return null;
 				},
 			);
@@ -163,14 +155,14 @@ class MigrateUserPreferences implements IRepairStep {
 			return;
 		}
 
-		if ($this->migrated === 0 && $this->alreadyPresent === 0) {
+		if ($migrated === 0 && $alreadyPresent === 0) {
 			$output->info('MigrateUserPreferences: no stored app_versions user preferences on this install; nothing to do.');
 			return;
 		}
 
 		$output->info(
-			'MigrateUserPreferences: migrated ' . $this->migrated . ' preference(s); '
-			. $this->alreadyPresent . ' already set under versioniq.',
+			'MigrateUserPreferences: migrated ' . $migrated . ' preference(s); '
+			. $alreadyPresent . ' already set under versioniq.',
 		);
 	}
 
@@ -178,23 +170,33 @@ class MigrateUserPreferences implements IRepairStep {
 	 * Copy one user's stored preferences from the old app id to the new one.
 	 *
 	 * @param string $userId The Nextcloud user ID.
+	 * @param int $migrated Running count of copied preferences, by reference.
+	 * @param int $alreadyPresent Running count of preferences already set, by reference.
 	 */
-	private function migrateUser(string $userId): void {
+	private function migrateUser(string $userId, int &$migrated, int &$alreadyPresent): void {
 		foreach ($this->oldKeysFor($userId) as $key) {
 			try {
-				$old = $this->config->getUserValue($userId, self::OLD_APP_ID, $key, '');
+				$lazy = $this->userConfig->isLazy($userId, self::OLD_APP_ID, $key);
+
+				$old = $this->userConfig->getValueString($userId, self::OLD_APP_ID, $key, '', $lazy);
 				if ($old === '') {
 					continue;
 				}
 
-				$existing = $this->config->getUserValue($userId, Application::APP_ID, $key, '');
-				if ($existing !== '') {
-					$this->alreadyPresent++;
+				// Both laziness modes are probed explicitly rather than passing
+				// the nullable "either" argument, whose meaning the OCP
+				// docblock does not state. Getting this wrong in the
+				// permissive direction would OVERWRITE a preference the admin
+				// set after the rename, so it is checked the unambiguous way.
+				$present = $this->userConfig->hasKey($userId, Application::APP_ID, $key, false)
+					|| $this->userConfig->hasKey($userId, Application::APP_ID, $key, true);
+				if ($present) {
+					$alreadyPresent++;
 					continue;
 				}
 
-				$this->config->setUserValue($userId, Application::APP_ID, $key, $old);
-				$this->migrated++;
+				$this->userConfig->setValueString($userId, Application::APP_ID, $key, $old, $lazy);
+				$migrated++;
 			} catch (Throwable $e) {
 				$this->logger->warning(
 					'Versioniq: could not migrate one user preference; leaving it under the old app id',
@@ -209,11 +211,11 @@ class MigrateUserPreferences implements IRepairStep {
 	 *
 	 * @param string $userId The Nextcloud user ID.
 	 *
-	 * @return array<int, string> The stored key names, empty when unreadable.
+	 * @return list<string> The stored key names, empty when unreadable.
 	 */
 	private function oldKeysFor(string $userId): array {
 		try {
-			return $this->config->getUserKeys($userId, self::OLD_APP_ID);
+			return $this->userConfig->getKeys($userId, self::OLD_APP_ID);
 		} catch (Throwable $e) {
 			$this->logger->warning(
 				'Versioniq: could not enumerate app_versions preference keys for a user; skipping that user',

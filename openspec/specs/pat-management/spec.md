@@ -10,7 +10,7 @@ status: implemented
 
 ## Purpose
 
-Encrypted Personal Access Token storage for the App Versions app, so admins can install apps from private GitHub repositories. Tokens are validated for least-privilege scope on upload, encrypted at rest, never returned over the API in plaintext, and automatically picked up by `GithubReleaseSource` when the bound `owner/repo` matches a stored PAT.
+Encrypted Personal Access Token storage for the Versioniq app, so admins can install apps from private GitHub repositories. Tokens are validated for least-privilege scope on upload, encrypted at rest, never returned over the API in plaintext, and automatically picked up by `GithubReleaseSource` when the bound `owner/repo` matches a stored PAT.
 ## Requirements
 ### Requirement: PAT storage [MVP]
 
@@ -63,7 +63,7 @@ PATs MUST be encrypted via `\OCP\Security\ICrypto::encrypt()` before persistence
 
 ### Requirement: PAT validation on upload [MVP]
 
-The system MUST probe a PAT against `GET {forge.apiBaseUrl}/user` (using the forge's auth scheme — `Bearer` for GitHub, `token` for Codeberg) before persisting, with the SSRF guard `nextcloud: ['allow_local_address' => false]`. For forges that expose token scopes (GitHub), the system MUST reject tokens with broader scope than App Versions needs. For forges that do NOT expose token scopes (Codeberg/Forgejo, `exposesScopeHeader = false`), the system MUST accept a valid token with an `unverifiable_scope` best-effort warning. GitHub token-kind prefix detection (`ghp_` / `github_pat_`) remains GitHub-specific; Codeberg tokens are treated as opaque.
+The system MUST probe a PAT against `GET {forge.apiBaseUrl}/user` (using the forge's auth scheme — `Bearer` for GitHub, `token` for Codeberg) before persisting, with the SSRF guard `nextcloud: ['allow_local_address' => false]`. For forges that expose token scopes (GitHub), the system MUST reject tokens with broader scope than Versioniq needs. For forges that do NOT expose token scopes (Codeberg/Forgejo, `exposesScopeHeader = false`), the system MUST accept a valid token with an `unverifiable_scope` best-effort warning. GitHub token-kind prefix detection (`ghp_` / `github_pat_`) remains GitHub-specific; Codeberg tokens are treated as opaque.
 
 #### Scenario: Classic PAT with `repo` scope only — accepted
 
@@ -190,7 +190,7 @@ The system MUST expose endpoints for listing, creating, updating, deleting, and 
 
 - **GIVEN** an admin requests a Codeberg token-creation deeplink
 - **THEN** the response MUST contain `url = https://codeberg.org/user/settings/applications`
-- **AND** an `instructions` array describing creating a least-privilege access token and pasting it back into App Versions
+- **AND** an `instructions` array describing creating a least-privilege access token and pasting it back into Versioniq
 
 #### Scenario: Delete restricted to owner
 
@@ -328,7 +328,7 @@ A daily background job MUST, for every PAT with a known `expiresAt`, notify the 
 ## User Stories
 
 1. As an admin, I want to install apps from private ConductionNL repos so I can deploy customer-specific builds without leaving Nextcloud.
-2. As a security-conscious admin, I want App Versions to refuse PATs with more rights than it needs so I cannot accidentally grant write access.
+2. As a security-conscious admin, I want Versioniq to refuse PATs with more rights than it needs so I cannot accidentally grant write access.
 3. As an admin who left a team, I want my uploaded PATs to disappear when my account is removed so they don't outlive my access.
 
 ## Acceptance Criteria

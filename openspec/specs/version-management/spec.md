@@ -10,7 +10,7 @@ status: implemented
 
 ## Purpose
 
-Version management is the core capability of App Versions. It allows Nextcloud administrators to view all available versions of any installed app, select a specific version (older or newer), and install it — replacing the currently installed version. This enables rollback after broken updates, testing compatibility with specific versions, and controlled upgrades.
+Version management is the core capability of Versioniq. It allows Nextcloud administrators to view all available versions of any installed app, select a specific version (older or newer), and install it — replacing the currently installed version. This enables rollback after broken updates, testing compatibility with specific versions, and controlled upgrades.
 
 Each app may be bound to a single source (App Store or external such as GitHub releases) that is authoritative for its version listings. See the companion [external-sources spec](../external-sources/spec.md) for how external sources are validated and installed.
 ## Requirements
@@ -22,12 +22,12 @@ The system MUST display all currently installed Nextcloud apps with their name, 
 
 @e2e tests/e2e/shell.spec.ts
 
-- GIVEN an admin user opens App Versions via Settings → Administration → App Versions
+- GIVEN an admin user opens Versioniq via Settings → Administration → Versioniq
 - WHEN the app list loads
 - THEN all installed apps MUST be displayed as selectable cards
 - AND each card MUST show: app name, current version, icon, and summary
 - AND apps MUST be sorted alphabetically
-- AND the App Versions app itself MUST be excluded from the list
+- AND the Versioniq app itself MUST be excluded from the list
 
 #### Scenario: Non-admin user is blocked
 
@@ -35,9 +35,9 @@ The system MUST display all currently installed Nextcloud apps with their name, 
 
 - GIVEN a non-admin user
 - WHEN they open Settings
-- THEN the Administration section (and therefore App Versions) SHALL NOT be visible to them at the framework level
+- THEN the Administration section (and therefore Versioniq) SHALL NOT be visible to them at the framework level
 - AND there MUST be no top-level navigation entry or page route through which they could reach the UI
-- AND if the user calls any App Versions API endpoint directly
+- AND if the user calls any Versioniq API endpoint directly
 - THEN the system MUST return a "Forbidden" response
 - AND no app data MUST be returned from the API
 
@@ -94,15 +94,15 @@ The system MUST query the **bound source** for an app to retrieve all available 
 
 ### Requirement: Source binding [MVP]
 
-When an app is installed via the version manager, the source it was installed from MUST be persisted as a binding under app config key `source.{appId}`. Future version queries for that app MUST default to the bound source. Apps installed via Nextcloud's normal app-install flow (outside App Versions) have no binding and default to App Store.
+When an app is installed via the version manager, the source it was installed from MUST be persisted as a binding under app config key `source.{appId}`. Future version queries for that app MUST default to the bound source. Apps installed via Nextcloud's normal app-install flow (outside Versioniq) have no binding and default to App Store.
 
 #### Scenario: Install from App Store leaves no GitHub binding
 
 @e2e exclude the signed App Store install path is not driven in e2e (see version-management notes); binding-write logic is unit-tested.
 
-- GIVEN an admin installs `someapp@1.2.0` from the App Store via App Versions
+- GIVEN an admin installs `someapp@1.2.0` from the App Store via Versioniq
 - WHEN the install completes
-- THEN `app_versions.source.someapp` MUST either be unset or set to `{kind: "appstore"}`
+- THEN `versioniq.source.someapp` MUST either be unset or set to `{kind: "appstore"}`
 - AND future version queries for `someapp` MUST hit the App Store
 
 #### Scenario: Install from GitHub binds to that source
@@ -111,16 +111,16 @@ When an app is installed via the version manager, the source it was installed fr
 
 - GIVEN an admin installs `openregister@2.5.0` from `github:ConductionNL/openregister`
 - WHEN the install completes
-- THEN `app_versions.source.openregister` MUST be set to `{kind: "github-release", owner: "ConductionNL", repo: "openregister", assetPattern: "*.tar.gz", boundAt: ISO-8601-timestamp}`
+- THEN `versioniq.source.openregister` MUST be set to `{kind: "github-release", owner: "ConductionNL", repo: "openregister", assetPattern: "*.tar.gz", boundAt: ISO-8601-timestamp}`
 - AND the next call to `GET /api/app/openregister/versions` MUST query the GitHub source, not the App Store
 
 #### Scenario: Re-binding overwrites previous binding
 
 @e2e tests/e2e/version-management.spec.ts
 
-- GIVEN `app_versions.source.openregister` is currently bound to `github:ConductionNL/openregister`
+- GIVEN `versioniq.source.openregister` is currently bound to `github:ConductionNL/openregister`
 - WHEN the admin installs `openregister@2.5.0` from the App Store via the source-picker
-- THEN `app_versions.source.openregister` MUST be updated to `{kind: "appstore"}`
+- THEN `versioniq.source.openregister` MUST be updated to `{kind: "appstore"}`
 - AND the next version query MUST hit the App Store
 
 ---
@@ -136,7 +136,7 @@ The version-list and install endpoints MUST accept an optional `source` paramete
 - GIVEN `openregister` is bound to `github:ConductionNL/openregister`
 - WHEN the admin calls `GET /api/app/openregister/versions?source=appstore`
 - THEN the response MUST contain App Store versions
-- AND `app_versions.source.openregister` MUST remain unchanged
+- AND `versioniq.source.openregister` MUST remain unchanged
 
 ---
 
@@ -329,22 +329,22 @@ The install result MUST report one of three outcomes via `installStatus`: `insta
 
 @e2e exclude explicitly out of scope per the spec — the app cannot detect an installed app that hides its own init failure.
 
-- GIVEN an installed app catches and logs its own initialization/boot exception (no exception propagates to App Versions)
+- GIVEN an installed app catches and logs its own initialization/boot exception (no exception propagates to Versioniq)
 - WHEN the install otherwise completes the file swap and finalize successfully
-- THEN App Versions MUST report `installed`
-- AND App Versions is NOT required to detect the app's internal init failure (this is explicitly out of scope and undetectable)
+- THEN Versioniq MUST report `installed`
+- AND Versioniq is NOT required to detect the app's internal init failure (this is explicitly out of scope and undetectable)
 
 ### Requirement: Admin Settings Placement [MVP]
 
-The App Versions UI MUST be surfaced exclusively as a section in the Nextcloud Administration settings panel, registered via `appinfo/info.xml` `<settings>` using an `OCP\Settings\IIconSection` (the sidebar section) and an `OCP\Settings\ISettings` (the form body). The previous top-level `<navigations>` entry MUST be removed, and the standalone page route (`PageController` / `FrontpageRoute`) MUST be removed so the only entry point is the admin settings section. The section name and any user-facing strings MUST be translatable.
+The Versioniq UI MUST be surfaced exclusively as a section in the Nextcloud Administration settings panel, registered via `appinfo/info.xml` `<settings>` using an `OCP\Settings\IIconSection` (the sidebar section) and an `OCP\Settings\ISettings` (the form body). The previous top-level `<navigations>` entry MUST be removed, and the standalone page route (`PageController` / `FrontpageRoute`) MUST be removed so the only entry point is the admin settings section. The section name and any user-facing strings MUST be translatable.
 
-#### Scenario: Admin sees App Versions in Administration settings
+#### Scenario: Admin sees Versioniq in Administration settings
 
 @e2e tests/e2e/version-management.spec.ts
 
 - GIVEN a Nextcloud administrator opens Settings
 - WHEN the administrator navigates to the Administration area
-- THEN an "App Versions" entry MUST appear in the Administration sidebar
+- THEN an "Versioniq" entry MUST appear in the Administration sidebar
 - AND the entry MUST display the translated section name and the app icon
 
 #### Scenario: Top-level navigation entry is absent
@@ -353,7 +353,7 @@ The App Versions UI MUST be surfaced exclusively as a section in the Nextcloud A
 
 - GIVEN any logged-in Nextcloud user
 - WHEN they view the top-level application navigation menu
-- THEN no "App Versions" entry MUST appear in the menu
+- THEN no "Versioniq" entry MUST appear in the menu
 
 #### Scenario: No standalone page route remains
 
@@ -362,19 +362,19 @@ The App Versions UI MUST be surfaced exclusively as a section in the Nextcloud A
 - GIVEN the move to admin settings is complete
 - WHEN any user requests the former front-page route of the app
 - THEN no `FrontpageRoute`/page controller MUST serve the UI
-- AND the UI MUST be reachable only through Settings → Administration → App Versions
+- AND the UI MUST be reachable only through Settings → Administration → Versioniq
 
 ### Requirement: Settings Form Renders the Existing SPA [MVP]
 
-The admin settings form MUST render the existing App Versions Vue SPA inside the settings panel, reusing the existing template and JS/CSS bundle without modification. The SPA MUST be fully functional (app list, version picker, install) within the embedded settings context.
+The admin settings form MUST render the existing Versioniq Vue SPA inside the settings panel, reusing the existing template and JS/CSS bundle without modification. The SPA MUST be fully functional (app list, version picker, install) within the embedded settings context.
 
 #### Scenario: SPA loads and functions inside the settings panel
 
 @e2e tests/e2e/shell.spec.ts
 
-- GIVEN an administrator opens Settings → Administration → App Versions
+- GIVEN an administrator opens Settings → Administration → Versioniq
 - WHEN the settings panel loads
-- THEN the App Versions Vue SPA MUST render within the settings page
+- THEN the Versioniq Vue SPA MUST render within the settings page
 - AND its JavaScript and CSS bundles MUST be loaded (via `Util::addScript` / `Util::addStyle`)
 - AND the installed-apps list MUST populate and version management MUST be usable without leaving the settings panel
 
@@ -386,7 +386,7 @@ The admin UI MUST present a tab/section switcher with at least the sections Apps
 
 @e2e tests/e2e/shell.spec.ts
 
-- **GIVEN** an admin opens Settings → Administration → App Versions
+- **GIVEN** an admin opens Settings → Administration → Versioniq
 - **WHEN** the panel loads
 - **THEN** the UI MUST display a tab/section switcher with Apps, Sources, Tokens, and Trusted sources
 - **AND** the Apps tab (the existing apps → versions → install view) MUST be selected by default
@@ -446,7 +446,7 @@ The admin UI MUST present a tab/section switcher with at least the sections Apps
 - [ ] Graceful error handling when app store is unreachable
 - [ ] Graceful error handling when download/install fails
 - [ ] Debug mode returns detailed logs
-- [ ] App Versions itself is excluded from the manageable apps list
+- [ ] Versioniq itself is excluded from the manageable apps list
 
 ## Notes
 

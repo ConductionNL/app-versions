@@ -19,7 +19,7 @@ use InvalidArgumentException;
  * version". Persisted as a JSON blob under app config key `pin.{appId}`,
  * mirroring the {@see \OCA\Versioniq\Service\Source\SourceBinding} pattern.
  *
- * `driftedTo`/`driftedAt` are set once something other than Versioniq'
+ * `driftedTo`/`driftedAt` are set once something other than Versioniq's
  * own install path changes the installed version; they make drift state
  * durable and idempotent (notify once per drifted version, not on every
  * reconcile run). Both are null on a pin with no known drift.

@@ -1,7 +1,7 @@
 # End-to-end tests
 
 The Playwright suite in `tests/e2e/` drives the real admin UI against a running
-Nextcloud instance with App Versions enabled. It covers every capability the app
+Nextcloud instance with Versioniq enabled. It covers every capability the app
 ships: the settings shell, version listing and release notes, safe mode and the
 downgrade guard, pinning (including its audit entries), auto-update policies,
 discovery, and the history / artifact-cache / tokens / trusted-source panels.
@@ -31,13 +31,13 @@ provides it):
 composer install --no-dev
 npm ci && npm run build
 
-docker cp . av-e2e:/var/www/html/custom_apps/app_versions
-docker exec av-e2e rm -rf /var/www/html/custom_apps/app_versions/{node_modules,.git}
-docker exec av-e2e chown -R www-data:www-data /var/www/html/custom_apps/app_versions
+docker cp . av-e2e:/var/www/html/custom_apps/versioniq
+docker exec av-e2e rm -rf /var/www/html/custom_apps/versioniq/{node_modules,.git}
+docker exec av-e2e chown -R www-data:www-data /var/www/html/custom_apps/versioniq
 docker exec av-e2e php occ config:system:set apps_paths 1 path --value=/var/www/html/custom_apps
 docker exec av-e2e php occ config:system:set apps_paths 1 url --value=/custom_apps
 docker exec av-e2e php occ config:system:set apps_paths 1 writable --value=true --type=boolean
-docker exec -u www-data av-e2e php occ app:enable app_versions
+docker exec -u www-data av-e2e php occ app:enable versioniq
 
 # The first-run wizard is a modal that covers the page and swallows clicks.
 docker exec -u www-data av-e2e php occ app:disable firstrunwizard
@@ -60,9 +60,9 @@ warm them once before running the suite to keep it fast and predictable:
 
 ```bash
 docker exec av-e2e curl -s -o /dev/null -u admin:adminadmin123 -H 'OCS-APIRequest: true' \
-  'http://localhost/ocs/v2.php/apps/app_versions/api/app/notes/versions?format=json'
+  'http://localhost/ocs/v2.php/apps/versioniq/api/app/notes/versions?format=json'
 docker exec av-e2e curl -s -o /dev/null -u admin:adminadmin123 -H 'OCS-APIRequest: true' \
-  'http://localhost/ocs/v2.php/apps/app_versions/api/discover?q=calendar&format=json'
+  'http://localhost/ocs/v2.php/apps/versioniq/api/discover?q=calendar&format=json'
 ```
 
 ## Running
@@ -122,7 +122,7 @@ with Nextcloud, points the codeberg forge at it, enables local-address fetches,
 allowlists `codeberg:fixtureowner/*`, and installs+binds a baseline
 `fixtureapp`. The forge specs skip themselves when the fixture is unreachable.
 
-> Forge **installs** in these specs are driven through `occ app_versions:install`,
+> Forge **installs** in these specs are driven through `occ versioniq:install`,
 > not the HTTP API: an install calls `opcache_reset()`, which under the test
 > image's mod_php poisons the shared web opcache. `occ` runs with opcache off
 > (`opcache.enable_cli=Off`). Both paths call the same `InstallerService`.

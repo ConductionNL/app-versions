@@ -216,7 +216,7 @@ final class InstallerServiceTest extends TestCase {
 		self::assertNotSame('', $result['payload']['hint']);
 	}
 
-	// --- Pin guard matrix (see "Pins are enforced on Versioniq' own install path") ---
+	// --- Pin guard matrix (see "Pins are enforced on Versioniq's own install path") ---
 
 	private function stubSuccessfulSignedInstall(string $resultingVersion): void {
 		$this->appManager->method('getAppPath')->willReturn('/writable/app');

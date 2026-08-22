@@ -10,9 +10,9 @@ The core workflow: a recent update broke something, and you want the
 previous version back without waiting for the upstream maintainer to
 ship a fix.
 
-> **This guide is being written as App Versions approaches feature-completeness.**
+> **This guide is being written as Versioniq approaches feature-completeness.**
 > Bodies and screenshots fill in once the admin UI lands. Follow the
-> [Codeberg repository](https://codeberg.org/Conduction/app-versions) for
+> [GitHub repository](https://github.com/ConductionNL/versioniq) for
 > milestones.
 
 ## Goal
@@ -23,8 +23,8 @@ confirmed that the app is now running the older version.
 
 ## Prerequisites
 
-- App Versions is installed, enabled, and reachable as an admin (see
-  [Open App Versions for the first time](./01-admin-settings.md)).
+- Versioniq is installed, enabled, and reachable as an admin (see
+  [Open Versioniq for the first time](./01-admin-settings.md)).
 - The app you want to roll back was installed from the Nextcloud App
   Store. (For GitHub-hosted apps, see [Connect a GitHub release source](./03-github-source.md).)
 - A few minutes of maintenance window — the rollback replaces the
@@ -33,13 +33,13 @@ confirmed that the app is now running the older version.
 ## Steps
 
 The numbered steps land here once the UI is built. The flow follows the
-spec scenarios in [`version-management`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/version-management):
+spec scenarios in [`version-management`](https://github.com/ConductionNL/versioniq/blob/development/openspec/specs/version-management):
 open the app card → version picker → pick a version → confirm →
 install → return to the list, the card now shows the older version.
 
 ## Verification
 
-You are set up correctly when: the app's card in App Versions shows the
+You are set up correctly when: the app's card in Versioniq shows the
 new (older) version number, the app's own About / Settings panel shows
 the same version, and the rollback is recorded in the audit log.
 
@@ -53,5 +53,5 @@ the same version, and the rollback is recorded in the audit log.
 
 ## Reference
 
-- [`version-management`](https://codeberg.org/Conduction/app-versions/src/branch/development/openspec/specs/version-management) spec — every scenario the UI implements.
+- [`version-management`](https://github.com/ConductionNL/versioniq/blob/development/openspec/specs/version-management) spec — every scenario the UI implements.
 - [Connect a GitHub release source](./03-github-source.md) — for apps that live outside the App Store.

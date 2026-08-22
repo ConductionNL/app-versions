@@ -13,14 +13,14 @@ declare(strict_types=1);
 namespace OCA\Versioniq\Tests\Unit\Service\Advisory;
 
 use OCA\Versioniq\Service\Advisory\AdvisoryService;
+use OCA\Versioniq\Service\Advisory\AdvisorySourceInterface;
 use OCA\Versioniq\Service\Advisory\BranchAwareRange;
 use OCA\Versioniq\Service\Advisory\NextcloudAdvisoryFeed;
-use OCA\Versioniq\Service\Advisory\AdvisorySourceInterface;
+use OCA\Versioniq\Service\Advisory\ServerVersionProvider;
 use OCA\Versioniq\Service\Source\SourceBinding;
 use OCA\Versioniq\Service\Source\SourceBindingStore;
 use OCA\Versioniq\Service\Source\SourceInterface;
 use OCA\Versioniq\Service\Source\SourceRegistry;
-use OCA\Versioniq\Service\Advisory\ServerVersionProvider;
 use OCP\App\IAppManager;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
