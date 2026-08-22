@@ -12,8 +12,8 @@ App Versions gives Nextcloud administrators the ability to roll back apps to pre
 	<author mail="info@conduction.nl" homepage="https://conduction.nl">Conduction B.V.</author>
 	<namespace>AppVersions</namespace>
 	<category>tools</category>
-	<bugs>https://codeberg.org/Conduction/app-versions/issues</bugs>
-	<repository>https://codeberg.org/Conduction/app-versions</repository>
+	<bugs>https://github.com/ConductionNL/versioniq/issues</bugs>
+	<repository>https://github.com/ConductionNL/versioniq</repository>
 	<dependencies>
 		<!-- Floor raised 31 -> 32 with the fleet. composer.json requires php ^8.3
 		     and nextcloud/ocp dev-master, so this app has never been analysed
