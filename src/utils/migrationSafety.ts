@@ -40,8 +40,9 @@ export function shouldOfferLkgRollback(app: AppLkgInfo): boolean {
  * - `null` — the diff could not be computed; degrade to a generic warning.
  * - `[]` — no schema steps differ between the versions.
  * - non-empty — the target version lacks these migration steps.
+ *
+ * @spec openspec/specs/migration-safety/spec.md
  */
-// @spec openspec/specs/migration-safety/spec.md
 export function orphanedMigrationsSummary(orphanedMigrations: string[] | null): string {
 	if (orphanedMigrations === null) {
 		return t('versioniq', 'Could not determine which database migrations differ between these versions. Downgrading can break database schema assumptions if migrations were already applied in the newer version.')
