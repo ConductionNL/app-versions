@@ -266,7 +266,7 @@ export default function Home() {
           title="Versioniq"
           tagline={TAGLINE}
           primaryCta={{
-            label: 'View on Codeberg',
+            label: 'View on GitHub',
             href: 'https://github.com/ConductionNL/versioniq',
             tone: 'orange',
           }}
