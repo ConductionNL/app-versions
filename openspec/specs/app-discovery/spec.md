@@ -256,4 +256,4 @@ From a hit, the admin MUST be able to: (a) for an installed app, jump to the App
 
 - The frontend search bar + result cards UI (`src/components/DiscoverPanel.vue`, the Discover tab in `App.vue`) shipped in `add-discovery-search-ui`; see "Discover tab surfaces multi-source search" and "Hits route into existing flows" above.
 - Federation (asking another Nextcloud's Versioniq for its search results) is future work.
-- Software Catalogus integration is tracked in [issue #24](https://codeberg.org/Conduction/app-versions/issues/24).
+- Software Catalogus integration is tracked in issue #24 (Codeberg numbering, pre-migration; the same request is tracked on GitHub as ConductionNL/versioniq#24).
