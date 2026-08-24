@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="img/app-store.svg" alt="App Versions logo" width="80" height="80">
+  <img src="img/app-store.svg" alt="Versioniq logo" width="80" height="80">
 </p>
 
-# App Versions
+# Versioniq
 
 A template to get started with Nextcloud app development.
 

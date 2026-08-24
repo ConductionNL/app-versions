@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
-// Shared OCS request helpers for the App Versions admin UI panels.
+// SPDX-License-Identifier: EUPL-1.2
+// Shared OCS request helpers for the Versioniq admin UI panels.
 //
 // App.vue keeps its own inline copies of the install flow; these helpers are
 // used by the settings panels (Sources / Tokens / Trusted sources) so each
@@ -81,10 +81,18 @@ export const ensurePasswordConfirmation = async (): Promise<void> => {
 
 /**
  * GET an OCS endpoint and return the unwrapped payload (+ optional error).
+ * An optional AbortSignal lets callers cancel in-flight requests (e.g. a
+ * debounced search superseded by newer input) without special-casing every
+ * caller — a request cancelled via `signal` rejects with the fetch
+ * implementation's standard AbortError.
+ * @param path
+ * @param query
+ * @param signal
  */
-export const ocsGet = async <T>(path: string, query: Record<string, string | number | boolean> = {}): Promise<OcsResult<T>> => {
+export const ocsGet = async <T>(path: string, query: Record<string, string | number | boolean> = {}, signal?: AbortSignal): Promise<OcsResult<T>> => {
 	const response = await fetch(apiUrl(withOcsJson(path, query)), {
 		headers: { ...ocsHeaders, Accept: 'application/json' },
+		signal,
 	})
 	return unwrap<T>(response)
 }
@@ -92,9 +100,12 @@ export const ocsGet = async <T>(path: string, query: Record<string, string | num
 /**
  * Send a write (POST/PATCH/DELETE) to an OCS endpoint after password
  * confirmation, with a JSON body. Returns the unwrapped payload (+ error).
+ * @param method
+ * @param path
+ * @param body
  */
 export const ocsWrite = async <T>(
-	method: 'POST' | 'PATCH' | 'DELETE',
+	method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
 	path: string,
 	body: Record<string, unknown> = {},
 ): Promise<OcsResult<T>> => {

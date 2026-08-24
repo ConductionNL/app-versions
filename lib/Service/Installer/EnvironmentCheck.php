@@ -2,14 +2,17 @@
 
 declare(strict_types=1);
 /**
- * @license AGPL-3.0-or-later
+ * @license EUPL-1.2
  * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
  */
 
 
-namespace OCA\AppVersions\Service\Installer;
+namespace OCA\Versioniq\Service\Installer;
 
-use OCA\AppVersions\AppInfo\Application;
+use OCA\Versioniq\AppInfo\Application;
 use OCP\IL10N;
 use OCP\L10N\IFactory;
 

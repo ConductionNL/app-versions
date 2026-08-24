@@ -2,17 +2,21 @@
 
 declare(strict_types=1);
 /**
- * @license AGPL-3.0-or-later
+ * @license EUPL-1.2
  * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
  */
 
 
-namespace OCA\AppVersions\Service\Pat;
+namespace OCA\Versioniq\Service\Pat;
 
 use Exception;
-use OCA\AppVersions\Db\Pat;
-use OCA\AppVersions\Service\Source\ForgeRegistry;
+use OCA\Versioniq\Db\Pat;
+use OCA\Versioniq\Service\Source\ForgeRegistry;
 use OCP\Http\Client\IClientService;
+use OCP\IConfig;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -29,7 +33,7 @@ use Psr\Log\LoggerInterface;
  * @psalm-api
  */
 class PatValidator {
-	private const USER_AGENT = 'Nextcloud-AppVersions';
+	private const USER_AGENT = 'Nextcloud-Versioniq';
 
 	/** @var list<string> */
 	public const ALLOWED_CLASSIC_SCOPES = ['repo', 'public_repo'];
@@ -38,6 +42,7 @@ class PatValidator {
 		private IClientService $clientService,
 		private LoggerInterface $logger,
 		private ForgeRegistry $forgeRegistry,
+		private IConfig $config,
 	) {
 	}
 
@@ -93,7 +98,7 @@ class PatValidator {
 				// IClient (Guzzle) throws on 4xx by default; we want to inspect
 				// the status ourselves so we can produce a useful error message.
 				'http_errors' => false,
-				'nextcloud' => ['allow_local_address' => false],
+				'nextcloud' => ['allow_local_address' => $this->config->getSystemValueBool('allow_local_remote_servers', false)],
 			]);
 		} catch (Exception $error) {
 			$this->logger->warning('PatValidator: probe failed', ['forge' => $f->id, 'errorMessage' => $error->getMessage()]);
@@ -135,7 +140,7 @@ class PatValidator {
 			));
 			if ($disallowed !== []) {
 				return ValidationResult::rejected(sprintf(
-					'PAT has scopes beyond what App Versions needs (%s). Recreate with %s only.',
+					'PAT has scopes beyond what Versioniq needs (%s). Recreate with %s only.',
 					implode(', ', $disallowed),
 					implode(' or ', self::ALLOWED_CLASSIC_SCOPES)
 				));

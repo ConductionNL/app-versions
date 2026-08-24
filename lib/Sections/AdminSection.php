@@ -2,20 +2,23 @@
 
 declare(strict_types=1);
 /**
- * @license AGPL-3.0-or-later
+ * @license EUPL-1.2
  * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
  */
 
 
-namespace OCA\AppVersions\Sections;
+namespace OCA\Versioniq\Sections;
 
-use OCA\AppVersions\AppInfo\Application;
+use OCA\Versioniq\AppInfo\Application;
 use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\Settings\IIconSection;
 
 /**
- * Registers the App Versions section in the Nextcloud Administration settings
+ * Registers the Versioniq section in the Nextcloud Administration settings
  * sidebar. The app lives here (admin settings) rather than in the top-level
  * navigation menu.
  *
@@ -34,7 +37,7 @@ class AdminSection implements IIconSection {
 	}
 
 	public function getName(): string {
-		return $this->l->t('App Versions');
+		return $this->l->t('Versioniq');
 	}
 
 	public function getPriority(): int {

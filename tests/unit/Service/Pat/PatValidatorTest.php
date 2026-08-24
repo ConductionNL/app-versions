@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Pat;
+namespace OCA\Versioniq\Tests\Unit\Service\Pat;
 
 use Exception;
-use OCA\AppVersions\Db\Pat;
-use OCA\AppVersions\Service\Pat\PatValidator;
-use OCA\AppVersions\Service\Source\ForgeRegistry;
+use OCA\Versioniq\Db\Pat;
+use OCA\Versioniq\Service\Pat\PatValidator;
+use OCA\Versioniq\Service\Source\ForgeRegistry;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
@@ -32,7 +32,7 @@ final class PatValidatorTest extends TestCase {
 
 		$logger = $this->createMock(LoggerInterface::class);
 
-		return new PatValidator($clientService, $logger, new ForgeRegistry());
+		return new PatValidator($clientService, $logger, new ForgeRegistry($this->createMock(\OCP\IConfig::class)), $this->createMock(\OCP\IConfig::class));
 	}
 
 	private function buildValidatorWithException(Exception $error): PatValidator {
@@ -42,7 +42,7 @@ final class PatValidatorTest extends TestCase {
 		$clientService = $this->createMock(IClientService::class);
 		$clientService->method('newClient')->willReturn($client);
 
-		return new PatValidator($clientService, $this->createMock(LoggerInterface::class), new ForgeRegistry());
+		return new PatValidator($clientService, $this->createMock(LoggerInterface::class), new ForgeRegistry($this->createMock(\OCP\IConfig::class)), $this->createMock(\OCP\IConfig::class));
 	}
 
 	public function testDetectKindClassic(): void {

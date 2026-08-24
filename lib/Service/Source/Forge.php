@@ -2,12 +2,15 @@
 
 declare(strict_types=1);
 /**
- * @license AGPL-3.0-or-later
+ * @license EUPL-1.2
  * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
  */
 
 
-namespace OCA\AppVersions\Service\Source;
+namespace OCA\Versioniq\Service\Source;
 
 /**
  * Immutable description of a git forge (GitHub, Codeberg/Forgejo, …).
@@ -55,5 +58,14 @@ final class Forge {
 	 */
 	public function userEndpoint(): string {
 		return $this->apiBaseUrl . '/user';
+	}
+
+	/**
+	 * Repository security-advisories endpoint for an `owner/repo`. GitHub and
+	 * Forgejo both expose `/repos/{owner}/{repo}/security-advisories`; the JSON
+	 * shape (ghsa_id / severity / summary / vulnerabilities[]) is compatible.
+	 */
+	public function advisoriesEndpoint(string $ownerRepo): string {
+		return sprintf('%s/repos/%s/security-advisories?per_page=100', $this->apiBaseUrl, $ownerRepo);
 	}
 }

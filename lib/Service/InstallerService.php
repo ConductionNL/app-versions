@@ -2,29 +2,39 @@
 
 declare(strict_types=1);
 /**
- * @license AGPL-3.0-or-later
+ * @license EUPL-1.2
  * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
  */
 
 
-namespace OCA\AppVersions\Service;
+namespace OCA\Versioniq\Service;
 
 use Exception;
 use InvalidArgumentException;
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Service\Installer\EnvironmentCheck;
-use OCA\AppVersions\Service\Installer\FailureClassifier;
-use OCA\AppVersions\Service\Installer\InstallFailure;
-use OCA\AppVersions\Service\Source\SourceBinding;
-use OCA\AppVersions\Service\Source\SourceBindingStore;
-use OCA\AppVersions\Service\Source\SourceInterface;
-use OCA\AppVersions\Service\Source\SourceRegistry;
-use OCA\AppVersions\Service\Source\TrustedSourceList;
-use OCA\AppVersions\Service\Source\UntrustedSourceException;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Service\Cache\ArtifactCache;
+use OCA\Versioniq\Service\Installer\EnvironmentCheck;
+use OCA\Versioniq\Service\Installer\FailureClassifier;
+use OCA\Versioniq\Service\Installer\InstallFailure;
+use OCA\Versioniq\Service\Installer\ShaMismatchException;
+use OCA\Versioniq\Service\Lkg\LkgStore;
+use OCA\Versioniq\Service\Pin\Pin;
+use OCA\Versioniq\Service\Pin\PinStore;
+use OCA\Versioniq\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Source\SourceBindingStore;
+use OCA\Versioniq\Service\Source\SourceInterface;
+use OCA\Versioniq\Service\Source\SourceRegistry;
+use OCA\Versioniq\Service\Source\TrustedSourceList;
+use OCA\Versioniq\Service\Source\UntrustedSourceException;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;
 use OCP\IConfig;
+use OCP\IUserSession;
 
 /**
  * Coordinates the version-management flow:
@@ -37,6 +47,13 @@ use OCP\IConfig;
  * @psalm-api
  */
 class InstallerService {
+	/** Server-side changelog size cap; see "Version listings carry release notes". */
+	private const CHANGELOG_MAX_BYTES = 8192;
+	private const CHANGELOG_TRUNCATION_MARKER = ' …[truncated]';
+
+	public const OVERRIDE_PIN_REPIN = 'repin';
+	public const OVERRIDE_PIN_UNPIN = 'unpin';
+
 	public function __construct(
 		private IAppManager $appManager,
 		private IConfig $config,
@@ -48,14 +65,22 @@ class InstallerService {
 		private ExternalReleaseInstallerService $externalInstaller,
 		private FailureClassifier $failureClassifier,
 		private EnvironmentCheck $environmentCheck,
+		private PinStore $pinStore,
+		private IUserSession $userSession,
+		private ITimeFactory $timeFactory,
+		private LkgStore $lkgStore,
+		private ArtifactCache $artifactCache,
 	) {
 	}
 
 	/**
-	 * Returns installed apps enriched with metadata for frontend cards; see "List Installed Apps".
+	 * Returns installed apps enriched with metadata for frontend cards, including
+	 * the last-known-good version record; see "List Installed Apps" and
+	 * "Last-known-good version record".
 	 *
 	 * @spec openspec/specs/version-management/spec.md
-	 * @return list<array{id:string,label:string,description:string,summary:string,preview:string,isCore:bool,isShipped:bool,boundSourceId:?string,manageable:bool,warning:?string}>
+	 * @spec openspec/specs/migration-safety/spec.md
+	 * @return list<array{id:string,label:string,description:string,summary:string,preview:string,isCore:bool,isShipped:bool,boundSourceId:?string,manageable:bool,warning:?string,installedVersion:?string,lkg:?array{version:string,recordedAt:string,sourceId:?string}}>
 	 */
 	public function getInstalledApps(): array {
 		$installedApps = array_values(array_filter(
@@ -75,9 +100,10 @@ class InstallerService {
 		$bindingStore = $this->bindingStore;
 		$appManager = $this->appManager;
 		$environmentCheck = $this->environmentCheck;
+		$lkgStore = $this->lkgStore;
 
 		return array_map(
-			static function (string $appId) use ($appList, $alwaysEnabledApps, $bindingStore, $appManager, $environmentCheck): array {
+			static function (string $appId) use ($appList, $alwaysEnabledApps, $bindingStore, $appManager, $environmentCheck, $lkgStore): array {
 				$app = $appList[$appId] ?? [];
 				$name = isset($app['name']) && is_string($app['name']) && trim($app['name']) !== ''
 					? trim($app['name'])
@@ -96,6 +122,12 @@ class InstallerService {
 					// Path unknown — leave defaults; install-time guard still applies.
 				}
 
+				try {
+					$installedVersion = $appManager->getAppVersion($appId, false);
+				} catch (Exception) {
+					$installedVersion = '';
+				}
+
 				return [
 					'id' => $appId,
 					'label' => $name,
@@ -107,6 +139,8 @@ class InstallerService {
 					'boundSourceId' => $binding?->getId(),
 					'manageable' => $env['manageable'],
 					'warning' => $env['warning'],
+					'installedVersion' => $installedVersion === '' ? null : $installedVersion,
+					'lkg' => $lkgStore->get($appId)?->toArray(),
 				];
 			},
 			$installedApps
@@ -114,21 +148,25 @@ class InstallerService {
 	}
 
 	/**
-	 * Resolves the active source and lists versions for an app; see "Fetch Available Versions" and "Explicit source override".
+	 * Resolves the active source and lists versions for an app; see "Fetch Available Versions", "Explicit source
+	 * override" and "Version listings carry release notes".
 	 *
 	 * @spec openspec/specs/version-management/spec.md
-	 * @return array{installedVersion: ?string, availableVersions: list<array{version:string}>, versions: list<array{version:string}>, source: string, sourceId: string, statusCode: int, hasError: bool, error?: string}
+	 * @spec openspec/specs/changelog-visibility/spec.md
+	 * @spec openspec/specs/external-sources/spec.md
+	 * @spec openspec/specs/artifact-cache/spec.md
+	 * @return array{installedVersion: ?string, availableVersions: list<array{version:string, changelog:?string, recordedSha:?string, cachedOffline:bool}>, versions: list<array{version:string, changelog:?string, recordedSha:?string, cachedOffline:bool}>, source: string, sourceId: string, statusCode: int, hasError: bool, error?: string}
 	 */
 	public function getAppVersions(string $appId, ?string $sourceOverride = null): array {
 		$appId = trim($appId);
 		if ($appId === '') {
 			return $this->errorEnvelope('Missing app id.', Http::STATUS_BAD_REQUEST);
 		}
-		if ($this->isSelfManagedApp($appId) || $this->isCoreProtectedApp($appId)) {
+		if (!$this->isManageableApp($appId)) {
 			return $this->errorEnvelope(
 				$this->isCoreProtectedApp($appId)
-					? 'This core app cannot be managed from App Versions.'
-					: 'This app cannot be managed from App Versions.',
+					? 'This core app cannot be managed from Versioniq.'
+					: 'This app cannot be managed from Versioniq.',
 				Http::STATUS_FORBIDDEN
 			);
 		}
@@ -163,10 +201,14 @@ class InstallerService {
 			$installedVersion = null;
 		}
 
+		$versions = $this->applyChangelogTruncation($result['versions']);
+		$versions = $this->applyRecordedSha($versions, $binding);
+		$versions = $this->applyCachedOffline($versions, $appId);
+
 		$envelope = [
 			'installedVersion' => $installedVersion,
-			'availableVersions' => $result['versions'],
-			'versions' => $result['versions'],
+			'availableVersions' => $versions,
+			'versions' => $versions,
 			'source' => $binding->kind,
 			'sourceId' => $binding->getId(),
 			'statusCode' => Http::STATUS_OK,
@@ -180,9 +222,112 @@ class InstallerService {
 	}
 
 	/**
-	 * Installs a target version via the matching installer and persists the binding on success; see "Install Specific Version" and "Source binding".
+	 * Truncates each version entry's changelog to at most `CHANGELOG_MAX_BYTES`
+	 * bytes (UTF-8-safe), appending a truncation marker when it was cut. This
+	 * is the single shared code path both source kinds' envelopes pass
+	 * through, so truncation behaviour is identical regardless of origin.
+	 *
+	 * @spec openspec/specs/changelog-visibility/spec.md
+	 * @param list<array{version:string, changelog?:?string}> $versions
+	 * @return list<array{version:string, changelog:?string}>
+	 */
+	private function applyChangelogTruncation(array $versions): array {
+		return array_map(
+			function (array $entry): array {
+				/** @var mixed $changelog */
+				$changelog = $entry['changelog'] ?? null;
+				$entry['changelog'] = is_string($changelog) ? $this->truncateChangelog($changelog) : null;
+
+				return $entry;
+			},
+			$versions
+		);
+	}
+
+	private function truncateChangelog(string $changelog): string {
+		if (strlen($changelog) <= self::CHANGELOG_MAX_BYTES) {
+			return $changelog;
+		}
+
+		return mb_strcut($changelog, 0, self::CHANGELOG_MAX_BYTES, 'UTF-8') . self::CHANGELOG_TRUNCATION_MARKER;
+	}
+
+	/**
+	 * Attaches the binding's recorded SHA-256 (if any) to each version entry
+	 * so the picker can badge versions with a first-install checksum on
+	 * record; see "Recorded digests are binding-scoped and surfaced".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 * @param list<array{version:string, changelog:?string}> $versions
+	 * @return list<array{version:string, changelog:?string, recordedSha:?string}>
+	 */
+	private function applyRecordedSha(array $versions, SourceBinding $binding): array {
+		return array_map(
+			static function (array $entry) use ($binding): array {
+				$entry['recordedSha'] = $binding->getRecordedSha($entry['version']);
+
+				return $entry;
+			},
+			$versions
+		);
+	}
+
+	/**
+	 * Stamps `cachedOffline` on each version entry from a single cached-version
+	 * query for `$appId` (no per-version IO); see "Cache visibility and
+	 * management".
+	 *
+	 * @spec openspec/specs/artifact-cache/spec.md
+	 * @param list<array<string, mixed>> $versions
+	 * @return list<array<string, mixed>>
+	 */
+	private function applyCachedOffline(array $versions, string $appId): array {
+		$cachedVersions = array_flip($this->artifactCache->cachedVersionsFor($appId));
+
+		return array_map(
+			static function (array $entry) use ($cachedVersions): array {
+				$entry['cachedOffline'] = isset($cachedVersions[$entry['version']]);
+
+				return $entry;
+			},
+			$versions
+		);
+	}
+
+	/**
+	 * Installs a target version via the matching installer and persists the
+	 * binding on success; see "Install Specific Version", "Source binding",
+	 * and "Pins are enforced on Versioniq's own install path".
+	 *
+	 * `$overridePin` is `null` (no override requested), `repin`, or `unpin` —
+	 * any other value is rejected with 400 by the caller before this method
+	 * is reached in the normal flow, but is defensively rejected here too.
+	 * `$pinRequested` pins the resulting version after a successful install
+	 * when the app was not already pinned (atomic install-then-pin).
+	 *
+	 * `$acceptNewSha` bypasses, for this one request, a recorded-SHA-256
+	 * mismatch on an external install and replaces the recorded digest on
+	 * success — see "Recorded SHA-256 enforced on reinstall". Ignored for
+	 * App Store (signed) installs, which do not record digests.
+	 *
+	 * `$allowDowngrade` acknowledges a downgrade (target version older than
+	 * installed); without it a real (non-dry-run) downgrade is refused with
+	 * a structured 409 before any download — see "Server-side downgrade
+	 * guard". Dry-run requests evaluate the same condition but are never
+	 * blocked by it.
+	 *
+	 * `$dryRun` is the explicit dry-run trigger, independent of
+	 * `$includeDebug` (which now controls diagnostic verbosity only); see
+	 * MODIFIED "Debug Mode". `null` (the default) preserves the legacy
+	 * behavior of every caller that predates this parameter: falls back to
+	 * `$includeDebug`, so `debug=1` alone still implies a dry-run.
 	 *
 	 * @spec openspec/specs/version-management/spec.md
+	 * @spec openspec/specs/version-pinning/spec.md
+	 * @spec openspec/specs/external-sources/spec.md
+	 * @spec openspec/specs/migration-safety/spec.md
+	 * @spec openspec/specs/cli-commands/spec.md
+	 * @spec openspec/specs/artifact-cache/spec.md
 	 * @return array{statusCode:int, payload:array<string, mixed>}
 	 */
 	public function installAppVersion(
@@ -190,7 +335,16 @@ class InstallerService {
 		string $targetVersion,
 		bool $includeDebug,
 		?string $sourceOverride = null,
+		?string $overridePin = null,
+		bool $pinRequested = false,
+		bool $acceptNewSha = false,
+		bool $allowDowngrade = false,
+		?bool $dryRun = null,
 	): array {
+		// Independent of $includeDebug (deprecation-preserving fallback only
+		// when the caller does not pass $dryRun at all); see MODIFIED "Debug
+		// Mode" — "Legacy behavior preserved".
+		$dryRun = $dryRun ?? $includeDebug;
 		$appId = trim($appId);
 		$targetVersion = trim($targetVersion);
 		if ($appId === '' || $targetVersion === '') {
@@ -199,15 +353,25 @@ class InstallerService {
 				'payload' => ['message' => 'Missing app id or version.'],
 			];
 		}
-		if ($this->isSelfManagedApp($appId) || $this->isCoreProtectedApp($appId)) {
+		if (!$this->isManageableApp($appId)) {
 			return [
 				'statusCode' => Http::STATUS_FORBIDDEN,
 				'payload' => [
 					'appId' => $appId,
 					'toVersion' => $targetVersion,
 					'message' => $this->isCoreProtectedApp($appId)
-						? 'This core app cannot be installed or updated from App Versions.'
-						: 'This app cannot be installed or updated from App Versions.',
+						? 'This core app cannot be installed or updated from Versioniq.'
+						: 'This app cannot be installed or updated from Versioniq.',
+				],
+			];
+		}
+		if ($overridePin !== null && $overridePin !== self::OVERRIDE_PIN_REPIN && $overridePin !== self::OVERRIDE_PIN_UNPIN) {
+			return [
+				'statusCode' => Http::STATUS_BAD_REQUEST,
+				'payload' => [
+					'appId' => $appId,
+					'toVersion' => $targetVersion,
+					'message' => 'overridePin must be "repin" or "unpin".',
 				],
 			];
 		}
@@ -228,7 +392,65 @@ class InstallerService {
 			$installedVersion = '';
 		}
 
+		// Server-side downgrade guard: refuse a real (non-dry-run) downgrade
+		// before any download unless explicitly acknowledged — see "Server-side
+		// downgrade guard". Dry-run requests evaluate this same condition but
+		// are never blocked by it (they report via updateType/orphanedMigrations
+		// instead) — see "Dry-run requests MUST evaluate and report the guard
+		// without requiring the flag".
+		$isDowngradeRequest = $installedVersion !== '' && version_compare($targetVersion, $installedVersion, '<');
+		if ($isDowngradeRequest && !$dryRun && !$allowDowngrade) {
+			$category = FailureClassifier::CATEGORY_DOWNGRADE_GUARD;
+
+			// $dryRun is false here (the guard above only fires when
+			// !$dryRun), so this is a real install refusal; $includeDebug is
+			// independent and may still be true, but there is no debug
+			// branch to attach — nothing was attempted.
+			return [
+				'statusCode' => $this->failureClassifier->httpStatusFor($category),
+				'payload' => [
+					'appId' => $appId,
+					'fromVersion' => $installedVersion,
+					'toVersion' => $targetVersion,
+					'message' => $this->failureClassifier->messageFor($category),
+					'category' => $category,
+					'hint' => $this->failureClassifier->downgradeGuardHint($installedVersion, $targetVersion),
+					'installStatus' => 'failed',
+					'sourceId' => $binding->getId(),
+				],
+			];
+		}
+
+		// Pin guard: Versioniq's own install path refuses to overwrite a
+		// pinned app without an explicit override — see "Pins are enforced on
+		// Versioniq's own install path". Reinstalling the pinned version
+		// itself is never blocked (no drift, nothing to override).
+		$pin = $this->pinStore->get($appId);
+		$isOverridingPin = $pin !== null && $targetVersion !== $pin->version;
+		if ($isOverridingPin && $overridePin === null) {
+			return [
+				'statusCode' => Http::STATUS_CONFLICT,
+				'payload' => [
+					'appId' => $appId,
+					'fromVersion' => $installedVersion === '' ? null : $installedVersion,
+					'toVersion' => $targetVersion,
+					'message' => sprintf('This app is pinned to version %s. Pass overridePin=repin or overridePin=unpin to proceed.', $pin->version),
+					'category' => 'pinned',
+					'pinnedVersion' => $pin->version,
+					'sourceId' => $binding->getId(),
+				] + ($includeDebug ? ['debug' => []] : []),
+			];
+		}
+
 		if ($installedVersion !== '' && version_compare($targetVersion, $installedVersion, '=')) {
+			// Reinstalling the currently-installed pinned version with a stale
+			// drift marker (e.g. the app was separately restored to the pinned
+			// version) clears that marker — see "Re-pin reinstalls the pinned
+			// version".
+			if ($pin !== null && $targetVersion === $pin->version && $pin->hasDrifted()) {
+				$this->pinStore->set($appId, new Pin($pin->version, $pin->pinnedBy, $pin->pinnedAt, $pin->reason));
+			}
+
 			return [
 				'statusCode' => Http::STATUS_OK,
 				'payload' => [
@@ -295,19 +517,27 @@ class InstallerService {
 		}
 
 		$maintenanceWasSet = false;
-		$dryRun = $includeDebug;
+		// $dryRun was already resolved (independent of $includeDebug) at the
+		// top of this method — see MODIFIED "Debug Mode".
 		try {
 			if (!$this->config->getSystemValueBool('maintenance', false)) {
 				$maintenanceWasSet = true;
 				$this->config->setSystemValue('maintenance', true);
 			}
 
-			if ($source->getInstallerKind() === \OCA\AppVersions\Service\Source\SourceInterface::INSTALLER_SIGNED) {
+			$recordedShaMatched = null;
+			if ($source->getInstallerKind() === \OCA\Versioniq\Service\Source\SourceInterface::INSTALLER_SIGNED) {
 				$result = $this->signedInstaller->installFromSelectedRelease($appId, $release, $dryRun);
 				$integrityWarning = null;
 			} else {
-				$result = $this->externalInstaller->installFromExternalRelease($appId, $targetVersion, $release, $binding, $dryRun);
+				$result = $this->externalInstaller->installFromExternalRelease($appId, $targetVersion, $release, $binding, $dryRun, $acceptNewSha);
 				$integrityWarning = $result['integrityWarning'] ?? null;
+				$recordedShaMatched = $result['recordedShaMatched'] ?? null;
+				// The external installer may have recorded/replaced a SHA-256 on
+				// the binding — persist that updated binding, not the pre-install
+				// one, so the digest is not lost; see "SHA-256 recorded on first
+				// successful external install".
+				$binding = $result['binding'];
 			}
 
 			if (!$dryRun) {
@@ -344,12 +574,58 @@ class InstallerService {
 				'dryRun' => $dryRun,
 				'installStatus' => $result['status'] ?? 'unknown',
 				'sourceId' => $binding->getId(),
+				// See "Cached fallback with full re-verification" — the outcome
+				// states when the download step fell back to a locally cached
+				// artifact instead of the source.
+				'servedFromCache' => (bool)($result['servedFromCache'] ?? false),
 			];
 			if ($integrityWarning !== null) {
 				$payload['integrityWarning'] = $integrityWarning;
 			}
+			if ($recordedShaMatched !== null) {
+				// See "Recorded SHA-256 enforced on reinstall" — Scenario
+				// "Matching digest proceeds": the response indicates the
+				// artifact matched the first-install checksum.
+				$payload['recordedShaMatched'] = $recordedShaMatched;
+			}
+			if (array_key_exists('orphanedMigrations', $result)) {
+				// Present only for a downgrade (acknowledged or dry-run); see
+				// "Migration diff on downgrade". `null` means the diff could not
+				// be computed (degrades to a generic warning), `[]` means no
+				// schema steps differ. The signed installer's return type is
+				// loosely typed (array<string, mixed>), so the value is
+				// explicitly annotated here rather than inferred.
+				/** @var list<string>|null $orphanedMigrations */
+				$orphanedMigrations = $result['orphanedMigrations'];
+				$payload['orphanedMigrations'] = $orphanedMigrations;
+			}
 			if ($includeDebug) {
 				$payload['debug'] = (array)($result['debug'] ?? []);
+			}
+
+			// Pin state changes only after a real (non-dry-run) install success;
+			// see "Pins are enforced on Versioniq's own install path". Adjusting
+			// the pin here — inside this same request, immediately after the
+			// filesystem swap and before returning — is what keeps a subsequent
+			// drift check from misreading our own override as drift.
+			if (!$dryRun) {
+				// $isOverridingPin implies $pin !== null and, having reached this
+				// point, $overridePin !== null (the guard above already returned
+				// 409 otherwise) — so $overridePin is exactly 'repin' or 'unpin'.
+				if ($isOverridingPin) {
+					if ($overridePin === self::OVERRIDE_PIN_REPIN) {
+						$this->pinStore->set($appId, new Pin($appVersion, $this->currentActorUid(), $this->nowIso(), $pin->reason));
+					} else {
+						$this->pinStore->clear($appId, $this->currentActorUid());
+					}
+				} elseif ($pin === null && $pinRequested) {
+					$this->pinStore->set($appId, new Pin($appVersion, $this->currentActorUid(), $this->nowIso()));
+				} elseif ($pin !== null && $targetVersion === $pin->version && $pin->hasDrifted()) {
+					// Re-pin after drift (Re-pin button reinstalls the pinned
+					// version) — clear the drift markers; see "Re-pin reinstalls
+					// the pinned version".
+					$this->pinStore->set($appId, new Pin($pin->version, $pin->pinnedBy, $pin->pinnedAt, $pin->reason));
+				}
 			}
 
 			return ['statusCode' => Http::STATUS_OK, 'payload' => $payload];
@@ -363,6 +639,31 @@ class InstallerService {
 					'sourceId' => $binding->getId(),
 				] + ($includeDebug ? ['debug' => []] : []),
 			];
+		} catch (ShaMismatchException $error) {
+			// Recorded-digest mismatch: no filesystem change happened (thrown
+			// before extraction/backup). Machine-readable `code` lets the
+			// frontend render the explicit "accept new checksum" escape hatch;
+			// see "Recorded SHA-256 enforced on reinstall".
+			$classification = $this->failureClassifier->classify($error, FailureClassifier::STAGE_CHECKSUM, FailureClassifier::CATEGORY_SHA_MISMATCH);
+			$payload = [
+				'appId' => $appId,
+				'fromVersion' => $installedVersion === '' ? null : $installedVersion,
+				'toVersion' => $targetVersion,
+				'message' => $error->getMessage(),
+				'category' => $classification['category'],
+				'code' => 'sha_mismatch',
+				'stage' => FailureClassifier::STAGE_CHECKSUM,
+				'hint' => $classification['hint'],
+				'installStatus' => 'failed',
+				'sourceId' => $binding->getId(),
+				'expectedSha' => $error->expectedSha,
+				'actualSha' => $error->actualSha,
+			];
+			if ($includeDebug) {
+				$payload['debug'] = $this->installerDebugLog($source);
+			}
+
+			return ['statusCode' => $classification['statusCode'], 'payload' => $payload];
 		} catch (InstallFailure $failure) {
 			// The installer already handled filesystem recovery; report the
 			// honest outcome (reverted / installed-but-broken) instead of a 500.
@@ -556,6 +857,16 @@ class InstallerService {
 				$this->trustedSources->assertBindingAllowed($binding);
 			}
 
+			// A one-off override that names the *same* source as the stored
+			// binding must still honour that binding's recorded SHA-256 digests —
+			// otherwise trust-on-first-use is silently bypassed by passing the
+			// current source id explicitly. Only a genuine rebind to a different
+			// source discards the digests (handled by SourceBindingStore).
+			$stored = $this->bindingStore->get($appId);
+			if ($stored !== null && $stored->getId() === $binding->getId()) {
+				$binding = $binding->withRecordedShaMap($stored->getRecordedShaMap());
+			}
+
 			return $binding;
 		}
 
@@ -600,7 +911,7 @@ class InstallerService {
 	}
 
 	/**
-	 * @return array{installedVersion: ?string, availableVersions: list<array{version:string}>, versions: list<array{version:string}>, source: string, sourceId: string, statusCode: int, hasError: bool, error: string}
+	 * @return array{installedVersion: ?string, availableVersions: list<array{version:string, changelog:?string, recordedSha:?string}>, versions: list<array{version:string, changelog:?string, recordedSha:?string}>, source: string, sourceId: string, statusCode: int, hasError: bool, error: string}
 	 */
 	private function errorEnvelope(string $message, int $statusCode): array {
 		return [
@@ -615,11 +926,33 @@ class InstallerService {
 		];
 	}
 
+	/**
+	 * Whether `$appId` may be installed/updated/listed through Versioniq —
+	 * `false` for Versioniq itself (self-management) and any core /
+	 * always-enabled app. Single shared predicate for the guard duplicated
+	 * across {@see getAppVersions()}, {@see installAppVersion()}, and the
+	 * `occ` commands; see "CLI trust context".
+	 *
+	 * @spec openspec/specs/cli-commands/spec.md
+	 * @spec openspec/specs/version-management/spec.md
+	 */
+	public function isManageableApp(string $appId): bool {
+		return !$this->isSelfManagedApp($appId) && !$this->isCoreProtectedApp($appId);
+	}
+
 	private function isSelfManagedApp(string $appId): bool {
 		return trim($appId) === Application::APP_ID;
 	}
 
 	private function isCoreProtectedApp(string $appId): bool {
 		return in_array(trim($appId), $this->appManager->getAlwaysEnabledApps(), true);
+	}
+
+	private function currentActorUid(): string {
+		return $this->userSession->getUser()?->getUID() ?? 'system';
+	}
+
+	private function nowIso(): string {
+		return $this->timeFactory->getDateTime('now', new \DateTimeZone('UTC'))->format(\DateTimeInterface::ATOM);
 	}
 }

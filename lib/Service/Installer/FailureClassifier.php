@@ -2,14 +2,17 @@
 
 declare(strict_types=1);
 /**
- * @license AGPL-3.0-or-later
+ * @license EUPL-1.2
  * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
  */
 
 
-namespace OCA\AppVersions\Service\Installer;
+namespace OCA\Versioniq\Service\Installer;
 
-use OCA\AppVersions\AppInfo\Application;
+use OCA\Versioniq\AppInfo\Application;
 use OCP\AppFramework\Http;
 use OCP\IL10N;
 use OCP\L10N\IFactory;
@@ -31,12 +34,26 @@ class FailureClassifier {
 	public const CATEGORY_PREFLIGHT_PERMISSION = 'preflight_permission';
 	public const CATEGORY_DOWNLOAD = 'download';
 	public const CATEGORY_CHECKSUM_MISMATCH = 'checksum_mismatch';
+	/**
+	 * A recorded (trust-on-first-use) SHA-256 mismatch — distinct from
+	 * {@see CATEGORY_CHECKSUM_MISMATCH} (the source-published sibling
+	 * checksum): this is a history check the source cannot rewrite. See
+	 * "Recorded SHA-256 enforced on reinstall".
+	 */
+	public const CATEGORY_SHA_MISMATCH = 'sha_mismatch';
 	public const CATEGORY_EXTRACT = 'extract';
 	public const CATEGORY_APPID_MISMATCH = 'appid_mismatch';
 	public const CATEGORY_VERSION_MISMATCH = 'version_mismatch';
 	public const CATEGORY_INCOMPATIBLE = 'incompatible';
 	public const CATEGORY_FILESYSTEM = 'filesystem';
 	public const CATEGORY_FINALIZE = 'finalize';
+	/**
+	 * A downgrade requested without `allowDowngrade: true` — see "Server-side
+	 * downgrade guard". Distinct from every other category: nothing was
+	 * attempted (no download, no filesystem change), the request is simply
+	 * refused pending acknowledgement.
+	 */
+	public const CATEGORY_DOWNGRADE_GUARD = 'downgrade_guard';
 	public const CATEGORY_UNKNOWN = 'unknown';
 
 	/**
@@ -81,11 +98,13 @@ class FailureClassifier {
 	 */
 	public function httpStatusFor(string $category): int {
 		return match ($category) {
-			self::CATEGORY_PREFLIGHT_PERMISSION => Http::STATUS_CONFLICT,
+			self::CATEGORY_PREFLIGHT_PERMISSION,
+			self::CATEGORY_DOWNGRADE_GUARD => Http::STATUS_CONFLICT,
 			self::CATEGORY_INCOMPATIBLE,
 			self::CATEGORY_VERSION_MISMATCH,
 			self::CATEGORY_APPID_MISMATCH,
-			self::CATEGORY_CHECKSUM_MISMATCH => Http::STATUS_UNPROCESSABLE_ENTITY,
+			self::CATEGORY_CHECKSUM_MISMATCH,
+			self::CATEGORY_SHA_MISMATCH => Http::STATUS_UNPROCESSABLE_ENTITY,
 			self::CATEGORY_DOWNLOAD => Http::STATUS_BAD_GATEWAY,
 			default => Http::STATUS_INTERNAL_SERVER_ERROR,
 		};
@@ -149,6 +168,7 @@ class FailureClassifier {
 			self::CATEGORY_PREFLIGHT_PERMISSION => $l->t('The app folder is not writable by the web-server user. If this is a bind-mounted dev checkout, fix the folder ownership/permissions (or install the app into a writable apps directory).'),
 			self::CATEGORY_DOWNLOAD => $l->t('The release could not be downloaded from its source. Check connectivity to the source and that the release asset still exists.'),
 			self::CATEGORY_CHECKSUM_MISMATCH => $l->t('The downloaded archive failed its integrity check. The release may be corrupted or tampered with; do not install it.'),
+			self::CATEGORY_SHA_MISMATCH => $l->t('The downloaded artifact does not match the SHA-256 recorded the first time this version was installed. The upstream release may have been rewritten. Only proceed if you are certain the new artifact is legitimate, then explicitly accept the new checksum to install it.'),
 			self::CATEGORY_EXTRACT => $l->t('The release archive could not be extracted. The downloaded file may be incomplete or not a valid app archive.'),
 			self::CATEGORY_APPID_MISMATCH => $l->t('The downloaded archive is for a different app than requested. Verify the source binding points at the correct repository.'),
 			self::CATEGORY_VERSION_MISMATCH => $l->t('The downloaded archive declares a different version than requested. The source metadata and asset may be out of sync.'),
@@ -183,6 +203,24 @@ class FailureClassifier {
 	}
 
 	/**
+	 * Hint for the downgrade guard, naming both versions concretely; see
+	 * "Server-side downgrade guard".
+	 *
+	 * @spec openspec/specs/migration-safety/spec.md
+	 */
+	public function downgradeGuardHint(string $installedVersion, string $targetVersion): string {
+		// The versions MUST go through `t()`'s parameter array: L10NString
+		// vsprintf()s the translated text against exactly these parameters, so
+		// a placeholder-bearing string passed without them throws a ValueError
+		// ("The arguments array must contain 2 items, 0 given") the moment the
+		// string is cast — i.e. on every downgrade refusal.
+		return (string)$this->l10n()->t(
+			'%1$s is installed; %2$s is older. Downgrading cannot undo database migrations already applied by %1$s — pass allowDowngrade to proceed anyway.',
+			[$installedVersion, $targetVersion],
+		);
+	}
+
+	/**
 	 * A short human description for a category, used when there is no underlying
 	 * exception message to surface (e.g. the pre-flight guard).
 	 */
@@ -191,6 +229,7 @@ class FailureClassifier {
 
 		return match ($category) {
 			self::CATEGORY_PREFLIGHT_PERMISSION => $l->t('The app folder is not writable by the web-server user.'),
+			self::CATEGORY_DOWNGRADE_GUARD => $l->t('The requested version is older than the installed version. Pass allowDowngrade to proceed.'),
 			default => $l->t('Installation failed.'),
 		};
 	}

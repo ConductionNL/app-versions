@@ -33,4 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- App Versions UI moved from the top-level navigation to Settings → Administration (admin-only). Non-admin users who previously had the app in their navigation will no longer see it there.
+- Versioniq UI moved from the top-level navigation to Settings → Administration (admin-only). Non-admin users who previously had the app in their navigation will no longer see it there.
+- **Renamed from "App Versions" to "Versioniq"** with the rest of the Conduction
+  fleet. The Nextcloud app id changes from `app_versions` to `versioniq`, which
+  also moves the API routes (`/apps/app_versions/...` → `/apps/versioniq/...`)
+  and the `occ` command prefix (`occ app_versions:*` → `occ versioniq:*`).
+  Nextcloud has no in-place app-id upgrade, so two repair steps run on install
+  to copy stored settings from the old id to the new one; nothing has to be
+  reconfigured by hand. Stored personal access tokens and the audit trail are
+  unaffected — they live in tables the rename does not touch.

@@ -2,21 +2,28 @@
 
 declare(strict_types=1);
 /**
- * @license AGPL-3.0-or-later
+ * @license EUPL-1.2
  * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
  */
 
 
-namespace OCA\AppVersions\Service\Installer;
+namespace OCA\Versioniq\Service\Installer;
 
 use Exception;
 use OC\AppFramework\Bootstrap\Coordinator;
 use OC\DB\Connection;
 use OC\DB\MigrationService;
+use OCA\Versioniq\Service\Lkg\Lkg;
+use OCA\Versioniq\Service\Lkg\LkgStore;
 use OCP\App\IAppManager;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJob;
 use OCP\BackgroundJob\IJobList;
 use OCP\IAppConfig;
+use OCP\IConfig;
 use OCP\Migration\IOutput;
 use OCP\Server;
 use Psr\Log\LoggerInterface;
@@ -36,21 +43,35 @@ use Psr\Log\LoggerInterface;
 class InstallFinalizer {
 	public function __construct(
 		private IAppConfig $appConfig,
+		/**
+		 * Only for the handful of keys Nextcloud core owns and writes itself.
+		 * IConfig::setAppValue() is deprecated, but it is the sole public way
+		 * to store a value untyped (VALUE_MIXED), and matching core's own type
+		 * is the entire point. See the comment on the writes below.
+		 */
+		private IConfig $config,
 		private IAppManager $appManager,
 		private IJobList $jobList,
 		private LoggerInterface $logger,
+		private LkgStore $lkgStore,
+		private ITimeFactory $timeFactory,
 	) {
 	}
 
 	/**
 	 * Runs migrations, repair steps, job + route registration, and version/enabled writes after extraction;
-	 * see "Install Specific Version" ("any database migrations for the new version MUST be triggered").
+	 * see "Install Specific Version" ("any database migrations for the new version MUST be triggered") and
+	 * "Last-known-good version record" (the last statement here — reached only on success — is the single
+	 * choke point that writes `lkg.{appId}` for both installers).
 	 *
 	 * @spec openspec/specs/version-management/spec.md
+	 * @spec openspec/specs/migration-safety/spec.md
 	 * @param array<string, mixed> $info Parsed `appinfo/info.xml` for the just-extracted version.
+	 * @param string $sourceId The source binding id (e.g. `appstore`, `github:owner/repo`) this version was
+	 *                         installed from, recorded alongside the last-known-good version.
 	 * @throws Exception
 	 */
-	public function finalize(string $appPath, array $info, string $enabled, ?IOutput $output = null): string {
+	public function finalize(string $appPath, array $info, string $enabled, ?IOutput $output = null, string $sourceId = 'appstore'): string {
 		$appId = (string)($info['id'] ?? '');
 
 		// Lazy registration must run before autoload + migrations so app-registered
@@ -104,24 +125,75 @@ class InstallFinalizer {
 		$installedVersion = $infoVersion !== ''
 			? $infoVersion
 			: $this->appManager->getAppVersion($appId, false);
-		$this->appConfig->setValueString($appId, 'installed_version', $installedVersion);
-		$this->appConfig->setValueString($appId, 'enabled', $enabled);
+		/**
+		 * setAppValue, not setValueString, for the keys core owns.
+		 *
+		 * Since Nextcloud 29 every appconfig row carries a type, and core only
+		 * tolerates a write whose type differs from the stored one when the
+		 * stored type is VALUE_MIXED. Core writes installed_version, enabled
+		 * and its own remote_/public_ routes through the untyped
+		 * IConfig::setAppValue(), so they land as MIXED. Writing them as
+		 * VALUE_STRING here left a typed row that core could no longer update,
+		 * and the next `occ app:enable` died with
+		 *
+		 *   conflict between new type (mixed) and old type (string)
+		 *
+		 * That made every app installed through Versioniq impossible to
+		 * enable, which is most of the point of the app. Config we own stays
+		 * on the typed API; only core's keys use core's semantics.
+		 */
+		/** @psalm-suppress DeprecatedMethod Deliberate — see the block comment above. */
+		$this->config->setAppValue($appId, 'installed_version', $installedVersion);
+		/** @psalm-suppress DeprecatedMethod Deliberate — see the block comment above. */
+		$this->config->setAppValue($appId, 'enabled', $enabled);
 
 		/** @var array<string, string> $remote */
 		$remote = (array)($info['remote'] ?? []);
 		foreach ($remote as $name => $path) {
-			$this->appConfig->setValueString('core', 'remote_' . $name, $appId . '/' . $path);
+			/** @psalm-suppress DeprecatedMethod Deliberate — see the block comment above. */
+			$this->config->setAppValue('core', 'remote_' . $name, $appId . '/' . $path);
 		}
 		/** @var array<string, string> $public */
 		$public = (array)($info['public'] ?? []);
 		foreach ($public as $name => $path) {
-			$this->appConfig->setValueString('core', 'public_' . $name, $appId . '/' . $path);
+			/** @psalm-suppress DeprecatedMethod Deliberate — see the block comment above. */
+			$this->config->setAppValue('core', 'public_' . $name, $appId . '/' . $path);
 		}
 
-		\OC_App::setAppTypes($appId);
+		$this->persistAppTypes($appId);
 		$this->appManager->clearAppsCache();
 
+		// Reached only on success: every earlier step throws on failure and
+		// aborts before this line, so a failed or reverted install never
+		// touches the record — see "Last-known-good version record".
+		$this->lkgStore->set($appId, new Lkg(
+			$installedVersion,
+			$this->timeFactory->getDateTime('now', new \DateTimeZone('UTC'))->format(\DateTimeInterface::ATOM),
+			$sourceId,
+		));
+
 		return $appId;
+	}
+
+	/**
+	 * Stores the app's declared `<types>` as the comma-joined `types` app-config
+	 * value that `AppManager` reads (`AppManager::getAppTypes()` loads the
+	 * `types` config key across all apps). This replicates the removed
+	 * `OC_App::setAppTypes()` — gone from Nextcloud 34 — using public API. Without
+	 * it, an app declaring e.g. `<types>filesystem</types>` is not recognised as
+	 * that type after an install through this app, and the finalize phase would
+	 * fatal on the missing static method (which every install path shares).
+	 */
+	private function persistAppTypes(string $appId): void {
+		$appInfo = $this->appManager->getAppInfo($appId);
+		$types = '';
+		if (is_array($appInfo) && isset($appInfo['types']) && is_array($appInfo['types'])) {
+			$types = implode(',', array_map('strval', $appInfo['types']));
+		}
+		// Core-owned key as well: OC_App writes app types untyped, so a typed
+		// row here would collide the same way installed_version did.
+		/** @psalm-suppress DeprecatedMethod Deliberate — core owns this key and writes it untyped. */
+		$this->config->setAppValue($appId, 'types', $types);
 	}
 
 	private static function includeAppScript(string $script): void {

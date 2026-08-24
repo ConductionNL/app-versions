@@ -2,12 +2,15 @@
 
 declare(strict_types=1);
 /**
- * @license AGPL-3.0-or-later
+ * @license EUPL-1.2
  * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
  */
 
 
-namespace OCA\AppVersions\Db;
+namespace OCA\Versioniq\Db;
 
 use OCP\AppFramework\Db\Entity;
 
@@ -44,6 +47,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setCreatedAt(string $value)
  * @method string getForge()
  * @method void setForge(string $value)
+ * @method string getWarnedThresholds()
+ * @method void setWarnedThresholds(string $value)
  */
 class Pat extends Entity {
 	public const KIND_CLASSIC = 'classic';
@@ -63,6 +68,8 @@ class Pat extends Entity {
 	protected ?string $expiresAt = null;
 	protected ?string $lastUsedAt = null;
 	protected string $createdAt = '';
+	/** JSON array of expiry-warning thresholds already notified, e.g. `["14d","3d"]`. */
+	protected string $warnedThresholds = '[]';
 
 	public function __construct() {
 		$this->addType('ownerUid', 'string');
@@ -77,6 +84,59 @@ class Pat extends Entity {
 		$this->addType('expiresAt', 'string');
 		$this->addType('lastUsedAt', 'string');
 		$this->addType('createdAt', 'string');
+		$this->addType('warnedThresholds', 'string');
+	}
+
+	/**
+	 * Decodes the persisted threshold ledger; see "PAT expiry warnings".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 * @return list<string>
+	 */
+	public function getWarnedThresholdsList(): array {
+		$raw = $this->warnedThresholds;
+		if (!is_string($raw) || $raw === '') {
+			return [];
+		}
+		/** @var mixed $decoded */
+		$decoded = json_decode($raw, true);
+		if (!is_array($decoded)) {
+			return [];
+		}
+
+		return array_values(array_filter($decoded, static fn (mixed $v): bool => is_string($v)));
+	}
+
+	/**
+	 * Whether a given threshold has already been notified for this token; see "PAT expiry warnings".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
+	public function hasWarnedThreshold(string $threshold): bool {
+		return in_array($threshold, $this->getWarnedThresholdsList(), true);
+	}
+
+	/**
+	 * Records a threshold as notified (idempotent); see "PAT expiry warnings".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
+	public function addWarnedThreshold(string $threshold): void {
+		$thresholds = $this->getWarnedThresholdsList();
+		if (in_array($threshold, $thresholds, true)) {
+			return;
+		}
+		$thresholds[] = $threshold;
+		$this->setWarnedThresholds(json_encode(array_values($thresholds), JSON_THROW_ON_ERROR));
+	}
+
+	/**
+	 * Resets the threshold ledger, e.g. when a token is renewed with a new expiry; see "PAT expiry warnings".
+	 *
+	 * @spec openspec/specs/pat-management/spec.md
+	 */
+	public function clearWarnedThresholds(): void {
+		$this->setWarnedThresholds('[]');
 	}
 
 	/**

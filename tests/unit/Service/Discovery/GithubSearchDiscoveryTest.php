@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Discovery;
+namespace OCA\Versioniq\Tests\Unit\Service\Discovery;
 
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Service\Discovery\GithubSearchDiscovery;
-use OCA\AppVersions\Service\Source\TrustedSourceList;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Service\Discovery\GithubSearchDiscovery;
+use OCA\Versioniq\Service\Source\TrustedSourceList;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;

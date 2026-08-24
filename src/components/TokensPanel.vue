@@ -7,6 +7,8 @@ import NcSelect from '@nextcloud/vue/components/NcSelect'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { ocsGet, ocsWrite } from '../ocs'
 
+type ExpiryState = 'ok' | 'expiring' | 'expired' | 'unknown'
+
 type Pat = {
 	id: number
 	label: string
@@ -15,10 +17,12 @@ type Pat = {
 	kind?: string
 	tokenHint?: string
 	sharedWithAdmins?: boolean
+	expiryState?: ExpiryState
+	daysRemaining?: number | null
 }
 type SelectOption = { id: string, label: string }
 
-const PATS = '/ocs/v2.php/apps/app_versions/api/pats'
+const PATS = '/ocs/v2.php/apps/versioniq/api/pats'
 
 const pats = ref<Pat[]>([])
 const forge = ref('github')
@@ -41,8 +45,28 @@ const loadPats = async (): Promise<void> => {
 		const { payload } = await ocsGet<{ pats?: Pat[] }>(PATS)
 		pats.value = Array.isArray(payload.pats) ? payload.pats : []
 	} catch (e) {
-		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not load tokens.')
+		error.value = e instanceof Error ? e.message : t('versioniq', 'Could not load tokens.')
 	}
+}
+
+/**
+ * Badge label for a token's derived expiry state; see "Expiry state in the
+ * PAT API and UI" ("Badges reflect state").
+ * @param pat
+ * @spec openspec/specs/pat-management/spec.md
+ */
+const expiryBadgeLabel = (pat: Pat): string => {
+	if (pat.expiryState === 'expiring') {
+		const days = pat.daysRemaining ?? 0
+		return t('versioniq', 'Expires in {days} days', { days })
+	}
+	if (pat.expiryState === 'expired') {
+		return t('versioniq', 'Expired')
+	}
+	if (pat.expiryState === 'unknown') {
+		return t('versioniq', 'Expiry unknown')
+	}
+	return ''
 }
 
 const derivedTargetPattern = (): string => {
@@ -55,7 +79,7 @@ const addToken = async (): Promise<void> => {
 	error.value = ''
 	notice.value = ''
 	if (!label.value.trim() || !owner.value.trim() || !token.value.trim()) {
-		error.value = t('app_versions', 'Label, owner and token are required.')
+		error.value = t('versioniq', 'Label, owner and token are required.')
 		return
 	}
 	loading.value = true
@@ -70,14 +94,14 @@ const addToken = async (): Promise<void> => {
 			error.value = apiError
 			return
 		}
-		notice.value = t('app_versions', 'Token added.')
+		notice.value = t('versioniq', 'Token added.')
 		label.value = ''
 		owner.value = ''
 		repo.value = ''
 		token.value = ''
 		await loadPats()
 	} catch (e) {
-		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not add the token.')
+		error.value = e instanceof Error ? e.message : t('versioniq', 'Could not add the token.')
 	} finally {
 		loading.value = false
 	}
@@ -96,7 +120,7 @@ const toggleShare = async (pat: Pat): Promise<void> => {
 		}
 		await loadPats()
 	} catch (e) {
-		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not update the token.')
+		error.value = e instanceof Error ? e.message : t('versioniq', 'Could not update the token.')
 	} finally {
 		loading.value = false
 	}
@@ -113,7 +137,7 @@ const deleteToken = async (pat: Pat): Promise<void> => {
 		}
 		await loadPats()
 	} catch (e) {
-		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not delete the token.')
+		error.value = e instanceof Error ? e.message : t('versioniq', 'Could not delete the token.')
 	} finally {
 		loading.value = false
 	}
@@ -124,14 +148,14 @@ const fetchDeeplink = async (): Promise<void> => {
 	deeplink.value = null
 	try {
 		const { payload } = await ocsGet<{ url?: string, instructions?: string[] }>(
-			'/ocs/v2.php/apps/app_versions/api/pats/deeplink',
+			'/ocs/v2.php/apps/versioniq/api/pats/deeplink',
 			{ forge: forge.value },
 		)
 		if (payload.url) {
 			deeplink.value = { url: payload.url, instructions: payload.instructions ?? [] }
 		}
 	} catch (e) {
-		error.value = e instanceof Error ? e.message : t('app_versions', 'Could not build the token-creation link.')
+		error.value = e instanceof Error ? e.message : t('versioniq', 'Could not build the token-creation link.')
 	}
 }
 
@@ -140,53 +164,76 @@ onMounted(loadPats)
 
 <template>
 	<div :class="$style.panel">
-		<h3>{{ t('app_versions', 'Access tokens') }}</h3>
+		<h3>{{ t('versioniq', 'Access tokens') }}</h3>
 		<p :class="$style.hint">
-			{{ t('app_versions', 'Personal access tokens let App Versions read private repositories. Tokens are encrypted at rest and never shown again after creation.') }}
+			{{ t('versioniq', 'Personal access tokens let Versioniq read private repositories. Tokens are encrypted at rest and never shown again after creation.') }}
 		</p>
 
-		<NcNoteCard v-if="error" type="error">{{ error }}</NcNoteCard>
-		<NcNoteCard v-if="notice" type="success">{{ notice }}</NcNoteCard>
+		<NcNoteCard v-if="error" type="error">
+			{{ error }}
+		</NcNoteCard>
+		<NcNoteCard v-if="notice" type="success">
+			{{ notice }}
+		</NcNoteCard>
 
 		<ul :class="$style.list">
 			<li v-for="pat in pats" :key="pat.id" :class="$style.row">
 				<span>
 					<strong>{{ pat.label }}</strong>
 					<code>{{ pat.forge || 'github' }}:{{ pat.targetPattern }}</code>
+					<span
+						v-if="pat.expiryState && pat.expiryState !== 'ok'"
+						data-testid="expiry-badge"
+						:data-expiry-state="pat.expiryState"
+						:class="[$style.expiryBadge, {
+							[$style.expiryBadgeError]: pat.expiryState === 'expired',
+							[$style.expiryBadgeNeutral]: pat.expiryState === 'unknown',
+						}]">
+						{{ expiryBadgeLabel(pat) }}
+					</span>
 					<span v-if="pat.tokenHint" :class="$style.hint">…{{ pat.tokenHint }}</span>
 				</span>
 				<span :class="$style.actions">
 					<NcButton type="tertiary" :disabled="loading" @click="toggleShare(pat)">
-						{{ pat.sharedWithAdmins ? t('app_versions', 'Unshare') : t('app_versions', 'Share with admins') }}
+						{{ pat.sharedWithAdmins ? t('versioniq', 'Unshare') : t('versioniq', 'Share with admins') }}
 					</NcButton>
-					<NcButton type="tertiary" :disabled="loading" @click="deleteToken(pat)">{{ t('app_versions', 'Delete') }}</NcButton>
+					<NcButton type="tertiary" :disabled="loading" @click="deleteToken(pat)">{{ t('versioniq', 'Delete') }}</NcButton>
 				</span>
 			</li>
-			<li v-if="pats.length === 0" :class="$style.empty">{{ t('app_versions', 'No tokens configured.') }}</li>
+			<li v-if="pats.length === 0" :class="$style.empty">
+				{{ t('versioniq', 'No tokens configured.') }}
+			</li>
 		</ul>
 
 		<form :class="$style.form" @submit.prevent="addToken">
 			<NcSelect
 				v-model="forge"
-				:input-label="t('app_versions', 'Forge')"
+				:input-label="t('versioniq', 'Forge')"
 				:options="forgeOptions"
 				:reduce="(option) => option.id"
 				:clearable="false"
 				label="label" />
 			<NcButton type="secondary" :disabled="loading" @click="fetchDeeplink">
-				{{ t('app_versions', 'Create a token on {forge}…', { forge }) }}
+				{{ t('versioniq', 'Create a token on {forge}…', { forge }) }}
 			</NcButton>
 			<NcNoteCard v-if="deeplink" type="info">
 				<a :href="deeplink.url" target="_blank" rel="noopener noreferrer">{{ deeplink.url }}</a>
 				<ul>
-					<li v-for="(line, i) in deeplink.instructions" :key="i">{{ line }}</li>
+					<li v-for="(line, i) in deeplink.instructions" :key="i">
+						{{ line }}
+					</li>
 				</ul>
 			</NcNoteCard>
-			<NcTextField v-model="label" :label="t('app_versions', 'Label')" placeholder="Conduction private repos" />
-			<NcTextField v-model="owner" :label="t('app_versions', 'Owner')" placeholder="ConductionNL" />
-			<NcTextField v-model="repo" :label="t('app_versions', 'Repository (optional — blank covers the whole owner)')" placeholder="openregister" />
-			<NcTextField v-model="token" type="password" :label="t('app_versions', 'Token')" autocomplete="off" />
-			<NcButton native-type="submit" type="primary" :disabled="loading">{{ t('app_versions', 'Add token') }}</NcButton>
+			<NcTextField v-model="label" :label="t('versioniq', 'Label')" placeholder="Conduction private repos" />
+			<NcTextField v-model="owner" :label="t('versioniq', 'Owner')" placeholder="ConductionNL" />
+			<NcTextField v-model="repo" :label="t('versioniq', 'Repository (optional — blank covers the whole owner)')" placeholder="openregister" />
+			<NcTextField v-model="token"
+				type="password"
+				:label="t('versioniq', 'Token')"
+				autocomplete="off" />
+			<NcButton variant="primary" type="submit" :disabled="loading">
+				{{ t('versioniq', 'Add token') }}
+			</NcButton>
 		</form>
 	</div>
 </template>
@@ -199,4 +246,24 @@ onMounted(loadPats)
 .actions { display: flex; gap: 4px; }
 .empty { color: var(--color-text-maxcontrast); font-style: italic; }
 .form { display: flex; flex-direction: column; gap: 8px; max-width: 480px; margin-top: 8px; }
+.expiryBadge {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 8px;
+	border-radius: 9999px;
+	background: var(--color-warning, #f0a020);
+	color: var(--color-primary-text, #000);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	margin-left: 4px;
+}
+.expiryBadgeError {
+	background: var(--color-error, #d32f2f);
+	color: var(--color-primary-text, #fff);
+}
+.expiryBadgeNeutral {
+	background: var(--color-background-darker, #ededed);
+	color: var(--color-text-maxcontrast);
+}
 </style>

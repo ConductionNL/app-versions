@@ -10,3 +10,7 @@
 /node_modules/
 /js/
 /css/
+tests/e2e/.auth/
+test-results/
+playwright-report/
+tests/e2e/fixtures/forge/artifacts/

@@ -2,17 +2,20 @@
 
 declare(strict_types=1);
 /**
- * @license AGPL-3.0-or-later
+ * @license EUPL-1.2
  * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
  */
 
 
-namespace OCA\AppVersions\Service\Discovery;
+namespace OCA\Versioniq\Service\Discovery;
 
 use Exception;
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Service\Source\SourceBinding;
-use OCA\AppVersions\Service\Source\TrustedSourceList;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Source\TrustedSourceList;
 use OCP\Http\Client\IClientService;
 use OCP\IAppConfig;
 use Psr\Log\LoggerInterface;
@@ -20,7 +23,7 @@ use Psr\Log\LoggerInterface;
 /**
  * Opt-in public GitHub repository search restricted to repos with the
  * `nextcloud-app` topic OR matching the query in name/description. Disabled
- * by default; flips on via `app_versions.discovery.github_search_enabled`.
+ * by default; flips on via `versioniq.discovery.github_search_enabled`.
  *
  * Sends every search query to GitHub. Admin must opt in consciously.
  */
@@ -28,7 +31,7 @@ class GithubSearchDiscovery implements DiscoveryProviderInterface {
 	public const ID = 'github-search';
 	private const ENABLED_KEY = 'discovery.github_search_enabled';
 	private const SEARCH_ENDPOINT = 'https://api.github.com/search/repositories';
-	private const USER_AGENT = 'Nextcloud-AppVersions';
+	private const USER_AGENT = 'Nextcloud-Versioniq';
 
 	/**
 	 * @psalm-api

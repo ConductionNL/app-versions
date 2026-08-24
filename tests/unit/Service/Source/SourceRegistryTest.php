@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Source;
+namespace OCA\Versioniq\Tests\Unit\Service\Source;
 
 use InvalidArgumentException;
-use OCA\AppVersions\Service\Source\AppStoreSource;
-use OCA\AppVersions\Service\Source\ForgeReleaseSource;
-use OCA\AppVersions\Service\Source\SourceBinding;
-use OCA\AppVersions\Service\Source\SourceRegistry;
+use OCA\Versioniq\Service\Source\AppStoreSource;
+use OCA\Versioniq\Service\Source\ForgeReleaseSource;
+use OCA\Versioniq\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Source\SourceRegistry;
 use PHPUnit\Framework\TestCase;
 
 final class SourceRegistryTest extends TestCase {

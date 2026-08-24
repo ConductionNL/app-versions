@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 /**
- * @license AGPL-3.0-or-later
+ * @license EUPL-1.2
  * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
  */
 
@@ -10,7 +10,7 @@ declare(strict_types=1);
  * Psalm stubs for Nextcloud server-internal and transitive classes.
  *
  * These classes exist at runtime inside the Nextcloud server but are NOT part of
- * the public `nextcloud/ocp` package this app analyses against. The App Versions
+ * the public `nextcloud/ocp` package this app analyses against. The Versioniq
  * installer deliberately reuses the server's app-installer internals (archive
  * extraction, code-signing verification, repair-step execution) because the
  * public OCP API exposes no equivalent for installing a *specific* app version.

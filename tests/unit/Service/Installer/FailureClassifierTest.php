@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Installer;
+namespace OCA\Versioniq\Tests\Unit\Service\Installer;
 
 use Exception;
-use OCA\AppVersions\Service\Installer\FailureClassifier;
+use OCA\Versioniq\Service\Installer\FailureClassifier;
 use OCP\AppFramework\Http;
 use OCP\IL10N;
 use OCP\L10N\IFactory;
@@ -14,8 +14,14 @@ use PHPUnit\Framework\TestCase;
 final class FailureClassifierTest extends TestCase {
 	private function build(): FailureClassifier {
 		$l = $this->createMock(IL10N::class);
-		// Echo the source string so hint/message assertions stay readable.
-		$l->method('t')->willReturnCallback(static fn (string $text): string => $text);
+		// Mirror OC\L10N\L10NString: the translated text is vsprintf()'d against
+		// the parameter array. An earlier fake echoed the raw string and ignored
+		// the parameters, which hid a placeholder-bearing t() call that had no
+		// parameters — that crashed with a ValueError in production while the
+		// suite stayed green. Keep this faithful.
+		$l->method('t')->willReturnCallback(
+			static fn (string $text, array $parameters = []): string => vsprintf($text, $parameters),
+		);
 
 		$factory = $this->createMock(IFactory::class);
 		$factory->method('get')->willReturn($l);
@@ -36,10 +42,12 @@ final class FailureClassifierTest extends TestCase {
 	public static function statusProvider(): array {
 		return [
 			'preflight' => [FailureClassifier::CATEGORY_PREFLIGHT_PERMISSION, Http::STATUS_CONFLICT],
+			'downgrade_guard' => [FailureClassifier::CATEGORY_DOWNGRADE_GUARD, Http::STATUS_CONFLICT],
 			'incompatible' => [FailureClassifier::CATEGORY_INCOMPATIBLE, Http::STATUS_UNPROCESSABLE_ENTITY],
 			'version' => [FailureClassifier::CATEGORY_VERSION_MISMATCH, Http::STATUS_UNPROCESSABLE_ENTITY],
 			'appid' => [FailureClassifier::CATEGORY_APPID_MISMATCH, Http::STATUS_UNPROCESSABLE_ENTITY],
 			'checksum' => [FailureClassifier::CATEGORY_CHECKSUM_MISMATCH, Http::STATUS_UNPROCESSABLE_ENTITY],
+			'sha_mismatch' => [FailureClassifier::CATEGORY_SHA_MISMATCH, Http::STATUS_UNPROCESSABLE_ENTITY],
 			'download' => [FailureClassifier::CATEGORY_DOWNLOAD, Http::STATUS_BAD_GATEWAY],
 			'extract' => [FailureClassifier::CATEGORY_EXTRACT, Http::STATUS_INTERNAL_SERVER_ERROR],
 			'filesystem' => [FailureClassifier::CATEGORY_FILESYSTEM, Http::STATUS_INTERNAL_SERVER_ERROR],
@@ -102,6 +110,7 @@ final class FailureClassifierTest extends TestCase {
 			FailureClassifier::CATEGORY_PREFLIGHT_PERMISSION,
 			FailureClassifier::CATEGORY_DOWNLOAD,
 			FailureClassifier::CATEGORY_CHECKSUM_MISMATCH,
+			FailureClassifier::CATEGORY_SHA_MISMATCH,
 			FailureClassifier::CATEGORY_EXTRACT,
 			FailureClassifier::CATEGORY_APPID_MISMATCH,
 			FailureClassifier::CATEGORY_VERSION_MISMATCH,
@@ -142,5 +151,41 @@ final class FailureClassifierTest extends TestCase {
 
 	public function testRevertedHintIsNonEmpty(): void {
 		self::assertNotSame('', $this->build()->revertedHint());
+	}
+
+	public function testDowngradeGuardHintNamesBothVersions(): void {
+		$hint = $this->build()->downgradeGuardHint('2.5.0', '2.3.0');
+
+		self::assertStringContainsString('2.5.0', $hint);
+		self::assertStringContainsString('2.3.0', $hint);
+	}
+
+	public function testDowngradeGuardHintLeavesNoUnsubstitutedPlaceholder(): void {
+		// Regression: the hint used to be translated without its parameter array
+		// and substituted afterwards, which threw a ValueError inside L10NString
+		// on every downgrade refusal (CLI crash / HTTP 500 instead of 409).
+		$hint = $this->build()->downgradeGuardHint('2.5.0', '2.3.0');
+
+		self::assertDoesNotMatchRegularExpression('/%\d+\$s/', $hint);
+	}
+
+	public function testDowngradeGuardMessageIsNonEmpty(): void {
+		self::assertNotSame('', $this->build()->messageFor(FailureClassifier::CATEGORY_DOWNGRADE_GUARD));
+	}
+
+	public function testClassifyWithForcedShaMismatchCategoryIgnoresMessageSniffing(): void {
+		// The exception message contains "checksum" (see ShaMismatchException),
+		// which categoryFor() would otherwise sniff as CATEGORY_CHECKSUM_MISMATCH
+		// — the caller forces CATEGORY_SHA_MISMATCH instead.
+		$classifier = $this->build();
+		$result = $classifier->classify(
+			new Exception('Artifact for openregister@2.3.0 does not match the checksum recorded at first install.'),
+			FailureClassifier::STAGE_CHECKSUM,
+			FailureClassifier::CATEGORY_SHA_MISMATCH,
+		);
+
+		self::assertSame(FailureClassifier::CATEGORY_SHA_MISMATCH, $result['category']);
+		self::assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $result['statusCode']);
+		self::assertNotSame('', $result['hint']);
 	}
 }
