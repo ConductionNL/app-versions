@@ -19,5 +19,5 @@ Versioniq is an open-source app version manager for the Nextcloud workspace. It 
 
 - Email: info@conduction.nl
 - Web: https://www.conduction.nl
-- Codeberg: https://codeberg.org/Conduction
+- GitHub: https://github.com/ConductionNL
 - Conduction B.V. · KvK 76741850 · Lauriergracht 14h, Amsterdam, Netherlands
