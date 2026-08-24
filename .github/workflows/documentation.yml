@@ -12,4 +12,16 @@ jobs:
     with:
       cname: versioniq.conduction.nl
 
+      # EVERY host this site answers on, in FULL: wrangler reconciles the
+      # worker's triggers against this list, so a host omitted here is
+      # REMOVED from the worker and goes dark. Both were attached as custom
+      # domains on 2026-08-23 and both serve 200.
       docs-hosts: app-versions.conduction.nl,versioniq.conduction.nl
+
+      # The worker that ALREADY holds both custom domains. Without this the
+      # callee derives the name from `cname` — `versioniq-docs` — which does
+      # not exist. Deploying that would create a SECOND worker while both
+      # custom domains keep routing to `app-versions-docs`: every deploy
+      # green, reaching nobody. Renaming the worker is a Cloudflare-side move,
+      # not something this file can perform.
+      worker-name: app-versions-docs
