@@ -14,6 +14,19 @@
 			unit/Service (root-level InstallerService*/Installer* files),
 			unit/Sections, and unit/Settings were fully green but had been left
 			out of this curated list.
+
+			⚠️ THIS LIST ONLY GOVERNS IF NOTHING IS PASSED POSITIONALLY.
+			`composer test:unit-only` used to run `phpunit tests -c <this file>`,
+			and a positional path OVERRIDES the configured testsuite entirely —
+			so the curation was decorative and the script swept all of tests/
+			anyway. Measured 2026-08-24: 572 tests / 7 errors with the argument,
+			565 / 0 without it. The 7 were unit/Repair, which needs
+			Doctrine\DBAL\ParameterType from the server's 3rdparty autoload —
+			exactly the dependency this suite exists to avoid.
+
+			unit/Repair is therefore absent ON PURPOSE, not by oversight. It runs
+			in the main phpunit.xml suite, which sweeps all of tests/ and is what
+			CI executes in-container where doctrine resolves.
 		-->
 		<directory suffix="Test.php">unit/Service</directory>
 		<directory suffix="Test.php">unit/Controller</directory>
