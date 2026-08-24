@@ -29,13 +29,13 @@ const config = createConfig({
   title: 'Versioniq',
   tagline: 'Install any earlier or newer version of already installed Nextcloud apps. Essential for debugging, testing compatibility, and recovering from breaking changes.',
   /* FROZEN ON THE OLD HOSTNAME through the app_versions -> versioniq rename.
-     Verified 2026-08-22: app-versions.conduction.nl answers 200 and
+     Verified 2026-08-22: versioniq.conduction.nl answers 200 and
      versioniq.conduction.nl does not resolve at all. This must move only
      once the new subdomain exists in DNS, together with docs/static/CNAME
      and the `cname:` input in .github/workflows/documentation.yml — pointing
      the site's canonical URL at a host that does not resolve would break
      every generated absolute link. */
-  url: 'https://app-versions.conduction.nl',
+  url: 'https://versioniq.conduction.nl',
   baseUrl: '/',
 
   organizationName: 'ConductionNL',
