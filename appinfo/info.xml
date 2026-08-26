@@ -87,6 +87,22 @@ Versioniq gives Nextcloud administrators the ability to roll back apps to previo
 				— an escaping exception in <install> aborts the install.
 			-->
 			<step>OCA\Versioniq\Repair\MigrateSchemaApplicationId</step>
+			<!--
+				The background jobs moved from OCA\Versioniq\Cron to
+				OCA\Versioniq\BackgroundJob (ADR-100 Decision 3), and the <job>
+				entries below are a REGISTRATION instruction rather than a
+				description of state: on upgrade Nextcloud ADDS a job it does
+				not have, but never removes one whose class disappeared —
+				it cannot tell a renamed class from one that is merely
+				unavailable this boot.
+
+				So without this step the instance holds BOTH rows, and the dead
+				one cannot be instantiated on any cron tick. Measured on a live
+				instance during this move: oc_jobs carried
+				OCA\OpenCatalogi\Cron\DirectorySync alongside its BackgroundJob
+				replacement. Idempotent — a fresh install removes nothing.
+			-->
+			<step>OCA\Versioniq\Repair\RemoveRetiredCronJobs</step>
 		</post-migration>
 		<install>
 			<step>OCA\Versioniq\Repair\MigrateAppConfigKeys</step>
