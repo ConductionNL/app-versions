@@ -117,6 +117,12 @@ class RemoveRetiredCronJobs implements IRepairStep {
 	 *
 	 * @spec exclude See the class docblock — no capability spec covers the
 	 *  namespace move this step cleans up after.
+	 *
+	 * @psalm-suppress ArgumentTypeCoercion `IJobList::remove()` is typed for
+	 *  callers REGISTERING a job, which hold the class. This step RETIRES one
+	 *  and the class is gone by construction, so a class-string cannot exist.
+	 *  Declared here rather than at the call site: psalm needs a docblock, and
+	 *  phpcs forbids one before a statement.
 	 */
 	public function run(IOutput $output): void {
 		foreach (self::RETIRED_JOB_CLASSES as $class) {
@@ -128,10 +134,7 @@ class RemoveRetiredCronJobs implements IRepairStep {
 				// remove() only ever uses the value as the `class` column to
 				// delete on, so the narrower type is about callers registering
 				// jobs, not callers retiring them.
-				/**
-				 * @phpstan-ignore argument.type
-				 * @psalm-suppress ArgumentTypeCoercion
-				 */
+				// @phpstan-ignore argument.type
 				$this->jobList->remove($class);
 				$output->info('Removed retired background job registration: ' . $class);
 			} catch (Throwable $e) {
