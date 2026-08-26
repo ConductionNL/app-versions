@@ -34,7 +34,12 @@
 		<directory suffix="Test.php">unit/BackgroundJob</directory>
 		<directory suffix="Test.php">unit/Notification</directory>
 		<directory suffix="Test.php">unit/Listener</directory>
-		<directory suffix="Test.php">unit/Cron</directory>
+		<!-- unit/Repair was missing from this list, so BOTH tests under it had
+		     never run: a testsuite that matches no directory is not an error,
+		     it just collects nothing and reports green. Found while adding
+		     RemoveRetiredCronJobsTest, whose first run reported
+		     "No tests executed!". -->
+		<directory suffix="Test.php">unit/Repair</directory>
 		<directory suffix="Test.php">unit/Sections</directory>
 		<directory suffix="Test.php">unit/Settings</directory>
 		<directory suffix="Test.php">unit/Command</directory>
@@ -47,7 +52,7 @@
 			<directory suffix=".php">../lib/BackgroundJob</directory>
 			<directory suffix=".php">../lib/Notification</directory>
 			<directory suffix=".php">../lib/Listener</directory>
-			<directory suffix=".php">../lib/Cron</directory>
+			<directory suffix=".php">../lib/Repair</directory>
 			<directory suffix=".php">../lib/Sections</directory>
 			<directory suffix=".php">../lib/Settings</directory>
 			<directory suffix=".php">../lib/Command</directory>

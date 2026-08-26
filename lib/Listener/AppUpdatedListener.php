@@ -24,7 +24,7 @@ use OCP\EventDispatcher\IEventListener;
  * tool built on `IAppManager`. `AppUpdateEvent` is post-hoc and
  * non-cancellable (Nextcloud core has no pre-update veto hook — see
  * design.md), so this listener can only detect and report; the daily
- * {@see \OCA\Versioniq\Cron\PinReconcileJob} is the safety net for updates
+ * {@see \OCA\Versioniq\BackgroundJob\PinReconcileJob} is the safety net for updates
  * that bypass the event entirely (e.g. performed while this app was
  * disabled).
  *

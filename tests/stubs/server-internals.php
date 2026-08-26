@@ -160,3 +160,44 @@ namespace Doctrine\DBAL\Schema {
 		}
 	}
 }
+
+namespace Doctrine\DBAL {
+	/**
+	 * The parameter-type constants `OCP\DB\QueryBuilder\IQueryBuilder` derives
+	 * its PARAM_* constants from.
+	 *
+	 * doctrine/dbal is a runtime dependency of the Nextcloud SERVER, not of an
+	 * app, so it is absent from this app's vendor tree — but `nextcloud/ocp`'s
+	 * IQueryBuilder references these constants at class-definition time. Any
+	 * unit test that so much as type-hints IQueryBuilder therefore dies with
+	 * `Class "Doctrine\DBAL\ParameterType" not found` before a single assertion
+	 * runs.
+	 *
+	 * That is exactly what had happened: tests/unit/Repair was missing from the
+	 * testsuite list in phpunit-unit-only.xml, so its tests never ran and this
+	 * gap stayed invisible. Adding the directory surfaced seven errors at once.
+	 *
+	 * The values mirror doctrine/dbal 3.x, where these are plain int constants.
+	 */
+	final class ParameterType {
+		public const NULL = 0;
+		public const INTEGER = 1;
+		public const STRING = 2;
+		public const LARGE_OBJECT = 3;
+		public const BOOLEAN = 5;
+		public const BINARY = 16;
+		public const ASCII = 17;
+	}
+
+	/**
+	 * The array-parameter counterpart, used by IQueryBuilder's PARAM_*_ARRAY.
+	 *
+	 * Same reason, same source: doctrine/dbal 3.x integer constants.
+	 */
+	final class ArrayParameterType {
+		public const INTEGER = 101;
+		public const STRING = 102;
+		public const ASCII = 117;
+		public const BINARY = 116;
+	}
+}
