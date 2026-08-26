@@ -10,7 +10,7 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\Versioniq\Cron;
+namespace OCA\Versioniq\BackgroundJob;
 
 use OCA\Versioniq\Service\Pin\PinDriftHandler;
 use OCA\Versioniq\Service\Pin\PinStore;

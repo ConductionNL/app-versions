@@ -21,7 +21,7 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Shared drift-response path used by both {@see \OCA\Versioniq\Listener\AppUpdatedListener}
- * (immediate, event-driven) and {@see \OCA\Versioniq\Cron\PinReconcileJob}
+ * (immediate, event-driven) and {@see \OCA\Versioniq\BackgroundJob\PinReconcileJob}
  * (daily safety net): compares a pinned app's live installed version against
  * its pin, records drift on the pin (idempotently, via {@see PinStore::markDrift()}),
  * and — only on a genuinely new drift — notifies every admin-group member.

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace OCA\Versioniq\Tests\Unit\Cron;
+namespace OCA\Versioniq\Tests\Unit\BackgroundJob;
 
 use OCA\Versioniq\AppInfo\Application;
-use OCA\Versioniq\Cron\PruneAuditJob;
+use OCA\Versioniq\BackgroundJob\PruneAuditJob;
 use OCA\Versioniq\Db\AuditEntryMapper;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace OCA\Versioniq\Tests\Unit\Cron;
+namespace OCA\Versioniq\Tests\Unit\BackgroundJob;
 
-use OCA\Versioniq\Cron\PinReconcileJob;
+use OCA\Versioniq\BackgroundJob\PinReconcileJob;
 use OCA\Versioniq\Service\Pin\Pin;
 use OCA\Versioniq\Service\Pin\PinDriftHandler;
 use OCA\Versioniq\Service\Pin\PinStore;
