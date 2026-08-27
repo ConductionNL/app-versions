@@ -349,7 +349,65 @@ export async function installFixture(
 	// A non-zero exit (guard refused, integrity failure, …) still emits the
 	// structured outcome on stdout — surface it with the exit code.
 	const { code, stdout } = await execInInstance(args)
-	return { status: code, body: parseLastJson(stdout) }
+	const body = parseLastJson(stdout)
+
+	// A SUCCESSFUL install that did not land is the failure mode this helper
+	// has to catch, because every caller downstream reads the result as fact.
+	//
+	// `resetFixtureApp` has always known about it — "rapid sequential installs
+	// each toggle maintenance mode, and an occasional overlap can make one
+	// attempt a no-op" — and retries once with `maintenance:mode --off`. Every
+	// OTHER caller got no such protection, and a no-op there is silent: exit 0,
+	// a structured payload, and the app still on its previous version.
+	//
+	// It does not surface where it happens. It surfaces as whatever the test
+	// asserted next, phrased as if that were the defect. jobs.spec.ts:169 is
+	// the worked example: it installs 1.0.1, pins at 1.0.0, and expects the
+	// reconcile job to record drift. When the install no-ops the app stays at
+	// 1.0.0, installed == pinned, PinReconcileJob correctly records NO drift,
+	// and the run reports `Error: drift recorded on the pin` — a true statement
+	// about the job and a completely false lead about the cause. That test
+	// failed on both attempts in CI on 2026-08-27; six more install-backed
+	// tests were flaky in the same run.
+	//
+	// `InstallerService::installAppVersion` wraps the install in
+	// `maintenance = true` and clears it in a `finally`, but only if IT set the
+	// flag. A run that dies before that `finally` leaves the instance in
+	// maintenance mode, and the next install then sees the flag already set,
+	// declines to own it, proceeds anyway and leaves it on. Nothing reports it.
+	//
+	// So: only when the install CLAIMS TO HAVE INSTALLED. `installStatus` is the
+	// marker the specs themselves assert on (`not.toBe('installed')` for the
+	// refused cases), and gating on it rather than on the exit code alone
+	// matters — `install-effects.spec.ts` calls this for an appId-mismatch
+	// archive and asserts nothing at all about the outcome. Were that path ever
+	// to exit 0 while reporting a failure, keying off `code` would turn a
+	// passing test into a thrown error here. A deliberate failure (tamper,
+	// wrong id, a refused guard) is left exactly as it was.
+	const landed = () => body?.installedVersion === version || body?.updateType === 'none'
+	const claimsInstalled = code === 0 && body?.installStatus === 'installed'
+
+	if (claimsInstalled && !landed()) {
+		// Clear the stuck flag before retrying — this is the state that makes
+		// the second attempt a no-op too.
+		await occ('maintenance:mode', '--off')
+		const retry = await execInInstance(args)
+		const retryBody = parseLastJson(retry.stdout)
+		if (retry.code === 0
+			&& (retryBody?.installedVersion === version || retryBody?.updateType === 'none')) {
+			return { status: retry.code, body: retryBody }
+		}
+
+		throw new Error(
+			`installFixture(${version}): occ reported success but the app is at `
+			+ `${retryBody?.installedVersion ?? body?.installedVersion ?? 'an unknown version'} `
+			+ 'after a retry. The install is a no-op, NOT a failing assertion in whatever '
+			+ 'runs next — check whether the instance was left in maintenance mode by an '
+			+ 'earlier install that died before its finally block.',
+		)
+	}
+
+	return { status: code, body }
 }
 
 /** Extracts the last JSON object printed by an occ command (ignores warnings). */
