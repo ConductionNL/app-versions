@@ -9,7 +9,7 @@ const APP = 'dashboard'
 
 test.describe('auto-update policies', () => {
 	test.afterEach(async ({ page }) => {
-		await page.request.delete(`/ocs/v2.php/apps/app_versions/api/app/${APP}/policy?format=json`, {
+		await page.request.delete(`/ocs/v2.php/apps/versioniq/api/app/${APP}/policy?format=json`, {
 			headers: { 'OCS-APIRequest': 'true' },
 		}).catch(() => undefined)
 	})
@@ -78,7 +78,7 @@ test.describe('auto-update policies', () => {
 
 	test('policies show as inert while the kill switch is off', async ({ page }) => {
 		// Seed a policy directly, then confirm the UI explains it will not run.
-		await page.request.put(`/ocs/v2.php/apps/app_versions/api/app/${APP}/policy?format=json`, {
+		await page.request.put(`/ocs/v2.php/apps/versioniq/api/app/${APP}/policy?format=json`, {
 			headers: { 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' },
 			data: { level: 'patch' },
 		})

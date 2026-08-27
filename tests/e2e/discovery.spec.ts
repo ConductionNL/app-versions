@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { openSettings, openTab } from './helpers'
+import { discoverDiagnostics, openSettings, openTab } from './helpers'
 
 /**
  * Multi-source app discovery surfaced in the Discover tab.
@@ -30,8 +30,8 @@ test.describe('app discovery', () => {
 		await page.getByTestId('discover-search-input').fill('calendar')
 
 		const hits = page.getByTestId('discover-hit')
-		await expect(hits.first()).toBeVisible({ timeout: 90_000 })
-		await expect(await hits.count()).toBeGreaterThan(0)
+		await expect(hits.first(), await discoverDiagnostics(page, 'calendar')).toBeVisible({ timeout: 45_000 })
+		expect(await hits.count()).toBeGreaterThan(0)
 
 		// Every hit names the source it came from.
 		await expect(hits.first().getByTestId('discover-source-badge')).toBeVisible()
@@ -44,7 +44,7 @@ test.describe('app discovery', () => {
 		// `dashboard` ships with Nextcloud, so it is always installed.
 		await page.getByTestId('discover-search-input').fill('dashboard')
 		const hit = page.getByTestId('discover-hit').filter({ hasText: 'dashboard' }).first()
-		await expect(hit).toBeVisible({ timeout: 90_000 })
+		await expect(hit, await discoverDiagnostics(page, 'dashboard')).toBeVisible({ timeout: 45_000 })
 		await expect(hit.getByTestId('discover-installed-version')).toBeVisible()
 
 		await hit.getByTestId('discover-open-app').click()
@@ -58,11 +58,15 @@ test.describe('app discovery', () => {
 		// The Discover tab exposes an installed-only toggle backed by the API's
 		// `installedOnly` param; assert the contract at the API the UI calls.
 		const res = await page.request.get(
-			'/ocs/v2.php/apps/app_versions/api/discover?q=files&installedOnly=1&format=json',
+			'/ocs/v2.php/apps/versioniq/api/discover?q=files&installedOnly=1&format=json',
 			{ headers: { 'OCS-APIRequest': 'true' } },
 		)
-		const results = (await res.json())?.ocs?.data?.results ?? []
-		expect(results.length).toBeGreaterThan(0)
+		const data = (await res.json())?.ocs?.data ?? {}
+		const results = data.results ?? []
+		// The endpoint already reports which provider failed and why; asserting
+		// on the count alone throws that away and blames the app for a search
+		// that never reached its source.
+		expect(results.length, `provider errors: ${JSON.stringify(data.errors ?? [])}`).toBeGreaterThan(0)
 		for (const hit of results) {
 			expect(hit.installedVersion, `${hit.appId} should be installed`).toBeTruthy()
 		}
@@ -72,7 +76,7 @@ test.describe('app discovery', () => {
 		await openSettings(page)
 		await openTab(page, 'Discover')
 		await page.getByTestId('discover-search-input').fill('zznomatchapp-qxwv')
-		await expect(page.getByTestId('discover-empty')).toBeVisible({ timeout: 90_000 })
+		await expect(page.getByTestId('discover-empty')).toBeVisible({ timeout: 45_000 })
 		await expect(page.getByTestId('discover-hit')).toHaveCount(0)
 	})
 })

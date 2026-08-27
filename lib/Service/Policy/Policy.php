@@ -10,17 +10,17 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Policy;
+namespace OCA\Versioniq\Service\Policy;
 
 use InvalidArgumentException;
 
 /**
- * Immutable representation of a per-app auto-update policy: "App Versions
+ * Immutable representation of a per-app auto-update policy: "Versioniq
  * may automatically install newer versions of this app up to this semver
  * level". Persisted as a JSON blob under app config key `policy.{appId}`,
- * mirroring the {@see \OCA\AppVersions\Service\Pin\Pin} pattern.
+ * mirroring the {@see \OCA\Versioniq\Service\Pin\Pin} pattern.
  *
- * `level` bounds the blast radius of {@see \OCA\AppVersions\BackgroundJob\AutoUpdateJob}:
+ * `level` bounds the blast radius of {@see \OCA\Versioniq\BackgroundJob\AutoUpdateJob}:
  * `none` (the default when no policy is stored), `patch` (same major.minor),
  * `minor` (same major), or `all` (any newer version).
  */

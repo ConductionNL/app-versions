@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { FIXTURE_APP, fixtureAvailable, fixtureControl, installFixture, occ, resetFixtureApp, sql, sqlExec } from './helpers'
+import { execInInstance, FIXTURE_APP, fixtureAvailable, fixtureControl, installFixture, occ, resetFixtureApp, sql, sqlExec, tsOffset } from './helpers'
 
 /**
  * PAT validation, private-repo auth, ownership, and lifecycle — driven against
@@ -11,14 +11,14 @@ test.describe('PAT validation & lifecycle', () => {
 	test.beforeEach(async ({ page }) => {
 		test.skip(!(await fixtureAvailable(page)), 'forge fixture not running')
 		// Clear PATs owned by admin so listings are deterministic.
-		const list = (await (await page.request.get('/ocs/v2.php/apps/app_versions/api/pats?format=json', { headers: { 'OCS-APIRequest': 'true' } })).json())?.ocs?.data?.pats ?? []
+		const list = (await (await page.request.get('/ocs/v2.php/apps/versioniq/api/pats?format=json', { headers: { 'OCS-APIRequest': 'true' } })).json())?.ocs?.data?.pats ?? []
 		for (const p of list) {
-			await page.request.delete(`/ocs/v2.php/apps/app_versions/api/pats/${p.id}?format=json`, { headers: { 'OCS-APIRequest': 'true' } }).catch(() => undefined)
+			await page.request.delete(`/ocs/v2.php/apps/versioniq/api/pats/${p.id}?format=json`, { headers: { 'OCS-APIRequest': 'true' } }).catch(() => undefined)
 		}
 	})
 
 	function addPat(page: import('@playwright/test').Page, data: object) {
-		return page.request.post('/ocs/v2.php/apps/app_versions/api/pats?format=json', {
+		return page.request.post('/ocs/v2.php/apps/versioniq/api/pats?format=json', {
 			headers: { 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' },
 			data: { targetPattern: 'fixtureowner/*', ...data },
 		})
@@ -56,7 +56,7 @@ test.describe('PAT validation & lifecycle', () => {
 
 		// Without a token: the private repo 404s → no versions.
 		const noauth = await page.request.get(
-			`/ocs/v2.php/apps/app_versions/api/app/${FIXTURE_APP}/versions?source=codeberg:fixtureowner/fixtureapp&format=json`,
+			`/ocs/v2.php/apps/versioniq/api/app/${FIXTURE_APP}/versions?source=codeberg:fixtureowner/fixtureapp&format=json`,
 			{ headers: { 'OCS-APIRequest': 'true' } },
 		)
 		expect(((await noauth.json())?.ocs?.data?.availableVersions ?? []).length).toBe(0)
@@ -64,7 +64,7 @@ test.describe('PAT validation & lifecycle', () => {
 		// With a matching codeberg PAT: the token is attached and versions list.
 		await addPat(page, { forge: 'codeberg', label: 'private', token: 'codeberg-private-repo-token-000' })
 		const withauth = await page.request.get(
-			`/ocs/v2.php/apps/app_versions/api/app/${FIXTURE_APP}/versions?source=codeberg:fixtureowner/fixtureapp&format=json`,
+			`/ocs/v2.php/apps/versioniq/api/app/${FIXTURE_APP}/versions?source=codeberg:fixtureowner/fixtureapp&format=json`,
 			{ headers: { 'OCS-APIRequest': 'true' } },
 		)
 		expect(((await withauth.json())?.ocs?.data?.availableVersions ?? []).length).toBeGreaterThan(0)
@@ -75,11 +75,11 @@ test.describe('PAT validation & lifecycle', () => {
 		await fixtureControl(page, 'repo', { repo: 'fixtureowner/fixtureapp', requireAuth: true })
 		// A matching codeberg PAT that we then age into the past.
 		await addPat(page, { forge: 'codeberg', label: 'expired', token: 'codeberg-expired-token-000' })
-		await sqlExec("UPDATE oc_app_versions_pats SET expires_at = datetime('now','-1 day') WHERE label='expired'")
+		await sqlExec(`UPDATE oc_app_versions_pats SET expires_at = '${tsOffset(-1)}' WHERE label='expired'`)
 
 		// The expired PAT must not be attached → the private repo 404s → no versions.
 		const res = await page.request.get(
-			`/ocs/v2.php/apps/app_versions/api/app/${FIXTURE_APP}/versions?source=codeberg:fixtureowner/fixtureapp&format=json`,
+			`/ocs/v2.php/apps/versioniq/api/app/${FIXTURE_APP}/versions?source=codeberg:fixtureowner/fixtureapp&format=json`,
 			{ headers: { 'OCS-APIRequest': 'true' } },
 		)
 		expect(((await res.json())?.ocs?.data?.availableVersions ?? []).length, 'expired PAT skipped → unauthenticated → private repo hidden').toBe(0)
@@ -87,15 +87,22 @@ test.describe('PAT validation & lifecycle', () => {
 
 	test('a PAT owned by another admin is neither listed nor deletable', async ({ page }) => {
 		// Seed a PAT owned by a different admin, not shared.
-		await sqlExec("INSERT INTO oc_app_versions_pats (owner_uid, label, target_pattern, kind, forge, encrypted_token, token_hint, shared_with_admins, warned_thresholds, created_at) VALUES ('otheradmin','theirs','x/*','forge-token','codeberg','enc','abcd...wxyz',0,'[]', strftime('%Y-%m-%d %H:%M:%S','now'))")
+		//
+		// `false`, not `0`, for shared_with_admins. SQLite takes either; pgsql
+		// types that column boolean and refuses the integer with
+		//   SQLSTATE[42804] column "shared_with_admins" is of type boolean
+		// The failed INSERT then made the id lookup below return an empty
+		// string, which the NEXT statement interpolated into `WHERE id=` — one
+		// type mismatch showing up as a syntax error two queries later.
+		await sqlExec(`INSERT INTO oc_app_versions_pats (owner_uid, label, target_pattern, kind, forge, encrypted_token, token_hint, shared_with_admins, warned_thresholds, created_at) VALUES ('otheradmin','theirs','x/*','forge-token','codeberg','enc','abcd...wxyz',false,'[]', '${tsOffset()}')`)
 		const id = (await sql("SELECT id FROM oc_app_versions_pats WHERE label='theirs'")).trim()
 
 		// admin does not see a non-shared PAT owned by someone else.
-		const list = (await (await page.request.get('/ocs/v2.php/apps/app_versions/api/pats?format=json', { headers: { 'OCS-APIRequest': 'true' } })).json())?.ocs?.data?.pats ?? []
+		const list = (await (await page.request.get('/ocs/v2.php/apps/versioniq/api/pats?format=json', { headers: { 'OCS-APIRequest': 'true' } })).json())?.ocs?.data?.pats ?? []
 		expect(list.find((p: any) => String(p.id) === id), 'not listed to a non-owner').toBeFalsy()
 
 		// admin cannot delete it.
-		const del = await page.request.delete(`/ocs/v2.php/apps/app_versions/api/pats/${id}?format=json`, { headers: { 'OCS-APIRequest': 'true' } })
+		const del = await page.request.delete(`/ocs/v2.php/apps/versioniq/api/pats/${id}?format=json`, { headers: { 'OCS-APIRequest': 'true' } })
 		expect([403, 404]).toContain(del.status())
 		expect(Number(await sql(`SELECT count(*) FROM oc_app_versions_pats WHERE id=${id}`)), 'still present').toBe(1)
 
@@ -103,17 +110,14 @@ test.describe('PAT validation & lifecycle', () => {
 	})
 
 	test('deleting a user sweeps their PATs', async () => {
-		const { execFile } = await import('node:child_process')
-		const { promisify } = await import('node:util')
-		const ct = process.env.NC_CONTAINER ?? 'av-e2e'
-		const userAdd = () => promisify(execFile)('docker', [
-			'exec', '-e', 'OC_PASS=sweepUserPass123', '-u', 'www-data', ct,
-			'php', 'occ', 'user:add', '--password-from-env', 'pat-sweep-user',
-		]).catch(() => undefined)
+		const userAdd = () => execInInstance(
+			['php', 'occ', 'user:add', '--password-from-env', 'pat-sweep-user'],
+			{ env: { OC_PASS: 'sweepUserPass123' } },
+		)
 
 		await occ('user:delete', 'pat-sweep-user') // clean any prior run
 		await userAdd()
-		await sqlExec("INSERT INTO oc_app_versions_pats (owner_uid, label, target_pattern, kind, forge, encrypted_token, token_hint, shared_with_admins, warned_thresholds, created_at) VALUES ('pat-sweep-user','swept','x/*','forge-token','codeberg','enc','abcd...wxyz',0,'[]', strftime('%Y-%m-%d %H:%M:%S','now'))")
+		await sqlExec(`INSERT INTO oc_app_versions_pats (owner_uid, label, target_pattern, kind, forge, encrypted_token, token_hint, shared_with_admins, warned_thresholds, created_at) VALUES ('pat-sweep-user','swept','x/*','forge-token','codeberg','enc','abcd...wxyz',false,'[]', '${tsOffset()}')`)
 		expect(Number(await sql("SELECT count(*) FROM oc_app_versions_pats WHERE owner_uid='pat-sweep-user'"))).toBe(1)
 
 		await occ('user:delete', 'pat-sweep-user')

@@ -10,7 +10,7 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Db;
+namespace OCA\Versioniq\Db;
 
 use OCP\AppFramework\Db\Entity;
 

@@ -10,12 +10,12 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Source;
+namespace OCA\Versioniq\Service\Source;
 
 use Exception;
-use OCA\AppVersions\Service\Advisory\AdvisorySourceInterface;
-use OCA\AppVersions\Service\Pat\PatManager;
-use OCA\AppVersions\Service\Pat\PatResolver;
+use OCA\Versioniq\Service\Advisory\AdvisorySourceInterface;
+use OCA\Versioniq\Service\Pat\PatManager;
+use OCA\Versioniq\Service\Pat\PatResolver;
 use OCP\Http\Client\IClientService;
 use OCP\IConfig;
 use OCP\IUserSession;
@@ -37,7 +37,7 @@ use UnexpectedValueException;
  * @psalm-api
  */
 class ForgeReleaseSource implements SourceInterface, AdvisorySourceInterface {
-	private const USER_AGENT = 'Nextcloud-AppVersions';
+	private const USER_AGENT = 'Nextcloud-Versioniq';
 
 	public function __construct(
 		private IClientService $clientService,

@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Discovery;
+namespace OCA\Versioniq\Tests\Unit\Service\Discovery;
 
-use OCA\AppVersions\Service\Discovery\AppStoreDiscovery;
-use OCA\AppVersions\Service\Discovery\DiscoveryAggregator;
-use OCA\AppVersions\Service\Discovery\DiscoveryHit;
-use OCA\AppVersions\Service\Discovery\DiscoveryResult;
-use OCA\AppVersions\Service\Discovery\GithubPrivateDiscovery;
-use OCA\AppVersions\Service\Discovery\GithubSearchDiscovery;
-use OCA\AppVersions\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Discovery\AppStoreDiscovery;
+use OCA\Versioniq\Service\Discovery\DiscoveryAggregator;
+use OCA\Versioniq\Service\Discovery\DiscoveryHit;
+use OCA\Versioniq\Service\Discovery\DiscoveryResult;
+use OCA\Versioniq\Service\Discovery\GithubPrivateDiscovery;
+use OCA\Versioniq\Service\Discovery\GithubSearchDiscovery;
+use OCA\Versioniq\Service\Source\SourceBinding;
 use OCP\App\IAppManager;
 use PHPUnit\Framework\TestCase;
 

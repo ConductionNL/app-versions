@@ -10,14 +10,14 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Advisory;
+namespace OCA\Versioniq\Service\Advisory;
 
-use OCA\AppVersions\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Source\SourceBinding;
 
 /**
  * Capability a release source may implement to expose published security
  * advisories for an app under a given binding. Kept separate from
- * {@see \OCA\AppVersions\Service\Source\SourceInterface} so a source that
+ * {@see \OCA\Versioniq\Service\Source\SourceInterface} so a source that
  * cannot answer advisories (or a future source) is not forced to, and so the
  * existing source drivers/tests are unaffected.
  *

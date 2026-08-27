@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\AutoUpdate;
+namespace OCA\Versioniq\Tests\Unit\Service\AutoUpdate;
 
-use OCA\AppVersions\Service\AutoUpdate\AutoUpdateNotifier;
+use OCA\Versioniq\Service\AutoUpdate\AutoUpdateNotifier;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IGroup;
 use OCP\IGroupManager;
@@ -25,7 +25,7 @@ final class AutoUpdateNotifierTest extends TestCase {
 
 	private function urlGenerator(): IURLGenerator {
 		$urlGenerator = $this->createMock(IURLGenerator::class);
-		$urlGenerator->method('linkToRouteAbsolute')->willReturn('https://example.test/settings/admin/app_versions');
+		$urlGenerator->method('linkToRouteAbsolute')->willReturn('https://example.test/settings/admin/versioniq');
 
 		return $urlGenerator;
 	}

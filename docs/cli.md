@@ -4,7 +4,7 @@ sidebar_position: 3
 
 # CLI Commands
 
-App Versions exposes its version listing and version-specific install
+Versioniq exposes its version listing and version-specific install
 through `occ`, so provisioning scripts, CI pipelines, and Docker image
 builds can reproduce an exact app version — a capability core's
 `occ app:install` lacks (requested upstream in
@@ -18,10 +18,10 @@ CLI execution runs as the server user with full config access — the trust
 context is equivalent to `occ app:install`, so neither command prompts for
 password confirmation.
 
-## `occ app_versions:versions`
+## `occ versioniq:versions`
 
 ```
-occ app_versions:versions <appId> [--source=<sourceId>] [--json]
+occ versioniq:versions <appId> [--source=<sourceId>] [--json]
 ```
 
 Lists the versions available for an already-installed app from its bound
@@ -30,7 +30,7 @@ version, a compatibility marker (`installed` / `newer` / `older`) relative
 to the installed version, and the source id.
 
 ```
-$ occ app_versions:versions openregister
+$ occ versioniq:versions openregister
 App: openregister
 Source: appstore
 Installed version: 2.4.0
@@ -46,17 +46,17 @@ Installed version: 2.4.0
 Pass `--json` for a machine-readable envelope:
 
 ```
-$ occ app_versions:versions openregister --json
+$ occ versioniq:versions openregister --json
 {"installedVersion":"2.4.0","availableVersions":[...],"versions":[...],"source":"appstore","sourceId":"appstore"}
 ```
 
 An unknown app, or a source that cannot be reached, exits non-zero with
 the problem named on stderr.
 
-## `occ app_versions:install`
+## `occ versioniq:install`
 
 ```
-occ app_versions:install <appId> <version> [--source=<sourceId>] [--dry-run] [--allow-downgrade] [--json]
+occ versioniq:install <appId> <version> [--source=<sourceId>] [--dry-run] [--allow-downgrade] [--json]
 ```
 
 Installs `<version>` of `<appId>` through the normal install path:
@@ -71,7 +71,7 @@ Installs `<version>` of `<appId>` through the normal install path:
 - `--json` — emits the structured outcome as JSON instead of
   human-readable text.
 
-The command refuses to run against App Versions itself or a core /
+The command refuses to run against Versioniq itself or a core /
 always-enabled app.
 
 ### Exit codes
@@ -98,10 +98,10 @@ the App Store since:
 ```dockerfile
 FROM nextcloud:34-apache
 
-# ... install app_versions itself first (occ app:enable app_versions) ...
+# ... install versioniq itself first (occ app:enable versioniq) ...
 
-RUN occ app_versions:install openregister 2.4.0 --json \
-    && occ app_versions:install openconnector 1.2.0 --json
+RUN occ versioniq:install openregister 2.4.0 --json \
+    && occ versioniq:install openconnector 1.2.0 --json
 ```
 
 A CI pipeline can use `--dry-run --json` first to confirm the target

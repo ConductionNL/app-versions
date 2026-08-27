@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\AutoUpdate;
+namespace OCA\Versioniq\Tests\Unit\Service\AutoUpdate;
 
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Service\AutoUpdate\AttemptLedger;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Service\AutoUpdate\AttemptLedger;
 use OCP\IAppConfig;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;

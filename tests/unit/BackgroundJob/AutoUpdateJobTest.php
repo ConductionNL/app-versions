@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\BackgroundJob;
+namespace OCA\Versioniq\Tests\Unit\BackgroundJob;
 
-use OCA\AppVersions\BackgroundJob\AutoUpdateJob;
-use OCA\AppVersions\Service\AutoUpdate\AttemptLedger;
-use OCA\AppVersions\Service\AutoUpdate\AutoUpdateNotifier;
-use OCA\AppVersions\Service\AutoUpdate\AutoUpdateSettingsStore;
-use OCA\AppVersions\Service\AutoUpdate\CandidateSelector;
-use OCA\AppVersions\Service\InstallerService;
-use OCA\AppVersions\Service\Pin\Pin;
-use OCA\AppVersions\Service\Pin\PinStore;
-use OCA\AppVersions\Service\Policy\Policy;
-use OCA\AppVersions\Service\Policy\PolicyStore;
+use OCA\Versioniq\BackgroundJob\AutoUpdateJob;
+use OCA\Versioniq\Service\AutoUpdate\AttemptLedger;
+use OCA\Versioniq\Service\AutoUpdate\AutoUpdateNotifier;
+use OCA\Versioniq\Service\AutoUpdate\AutoUpdateSettingsStore;
+use OCA\Versioniq\Service\AutoUpdate\CandidateSelector;
+use OCA\Versioniq\Service\InstallerService;
+use OCA\Versioniq\Service\Pin\Pin;
+use OCA\Versioniq\Service\Pin\PinStore;
+use OCA\Versioniq\Service\Policy\Policy;
+use OCA\Versioniq\Service\Policy\PolicyStore;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Utility\ITimeFactory;
 use PHPUnit\Framework\TestCase;
@@ -110,7 +110,7 @@ final class AutoUpdateJobTest extends TestCase {
 		$mocks['settingsStore']->method('isEnabled')->willReturn(true);
 		$mocks['settingsStore']->method('getWindow')->willReturn('01:00-05:00');
 		$mocks['policyStore']->method('all')->willReturn([
-			'app_versions' => new Policy(Policy::LEVEL_ALL, 'admin', '2026-07-01T00:00:00+00:00'),
+			'versioniq' => new Policy(Policy::LEVEL_ALL, 'admin', '2026-07-01T00:00:00+00:00'),
 		]);
 		$mocks['pinStore']->method('get')->willReturn(null);
 		$mocks['installerService']->method('isManageableApp')->willReturn(false);

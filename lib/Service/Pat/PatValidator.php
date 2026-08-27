@@ -10,11 +10,11 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Pat;
+namespace OCA\Versioniq\Service\Pat;
 
 use Exception;
-use OCA\AppVersions\Db\Pat;
-use OCA\AppVersions\Service\Source\ForgeRegistry;
+use OCA\Versioniq\Db\Pat;
+use OCA\Versioniq\Service\Source\ForgeRegistry;
 use OCP\Http\Client\IClientService;
 use OCP\IConfig;
 use Psr\Log\LoggerInterface;
@@ -33,7 +33,7 @@ use Psr\Log\LoggerInterface;
  * @psalm-api
  */
 class PatValidator {
-	private const USER_AGENT = 'Nextcloud-AppVersions';
+	private const USER_AGENT = 'Nextcloud-Versioniq';
 
 	/** @var list<string> */
 	public const ALLOWED_CLASSIC_SCOPES = ['repo', 'public_repo'];
@@ -140,7 +140,7 @@ class PatValidator {
 			));
 			if ($disallowed !== []) {
 				return ValidationResult::rejected(sprintf(
-					'PAT has scopes beyond what App Versions needs (%s). Recreate with %s only.',
+					'PAT has scopes beyond what Versioniq needs (%s). Recreate with %s only.',
 					implode(', ', $disallowed),
 					implode(' or ', self::ALLOWED_CLASSIC_SCOPES)
 				));

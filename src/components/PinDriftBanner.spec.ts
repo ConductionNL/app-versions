@@ -54,7 +54,7 @@ describe('PinDriftBanner', () => {
 
 		expect(mockedOcsWrite).toHaveBeenCalledWith(
 			'PUT',
-			'/ocs/v2.php/apps/app_versions/api/app/openregister/pin',
+			'/ocs/v2.php/apps/versioniq/api/app/openregister/pin',
 			{ version: '2.5.0' },
 		)
 		const emitted = wrapper.emitted('update:pin')
@@ -72,7 +72,7 @@ describe('PinDriftBanner', () => {
 
 		expect(mockedOcsWrite).toHaveBeenCalledWith(
 			'DELETE',
-			'/ocs/v2.php/apps/app_versions/api/app/openregister/pin',
+			'/ocs/v2.php/apps/versioniq/api/app/openregister/pin',
 		)
 		expect(wrapper.emitted('update:pin')).toEqual([['openregister', null]])
 	})

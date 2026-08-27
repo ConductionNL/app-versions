@@ -5,7 +5,7 @@ status: implemented
 # Artifact Cache Specification
 
 **Status**: implemented
-**Standards**: OCP\Files\IAppData, existing App Versions verification chain (code-signing / SHA-256)
+**Standards**: OCP\Files\IAppData, existing Versioniq verification chain (code-signing / SHA-256)
 **Feature tier**: MVP
 
 ## Purpose

@@ -10,7 +10,7 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Db;
+namespace OCA\Versioniq\Db;
 
 use OCP\AppFramework\Db\QBMapper;
 use OCP\DB\QueryBuilder\IQueryBuilder;
@@ -22,6 +22,18 @@ use OCP\IDBConnection;
  * @extends QBMapper<AuditEntry>
  */
 class AuditEntryMapper extends QBMapper {
+	/**
+	 * FROZEN ON THE OLD APP ID — deliberately still `app_versions_audit`.
+	 *
+	 * Same reason as {@see PatMapper::TABLE_NAME}: table names are not keyed
+	 * by app id, so the `app_versions` -> `versioniq` rename leaves this table
+	 * exactly where it is, with the whole audit history in it. The audit trail
+	 * is append-only and is the record of who installed what — orphaning it
+	 * behind a renamed constant would destroy evidence, silently, while every
+	 * new write went to an empty table.
+	 *
+	 * @var string
+	 */
 	public const TABLE_NAME = 'app_versions_audit';
 
 	public function __construct(IDBConnection $db) {

@@ -99,7 +99,7 @@ The system MUST provide an opt-in public GitHub code search provider that is dis
 
 @e2e exclude the public-search opt-in flag is unit-tested.
 
-- **GIVEN** `app_versions.discovery.github_search_enabled` has never been set
+- **GIVEN** `versioniq.discovery.github_search_enabled` has never been set
 - **WHEN** the admin calls `GET /api/sources`
 - **THEN** `github-search` MUST appear in the providers list with `enabled = false`
 
@@ -107,7 +107,7 @@ The system MUST provide an opt-in public GitHub code search provider that is dis
 
 @e2e exclude opt-in public GitHub code search needs real GitHub; unit-tested.
 
-- **GIVEN** the admin runs `occ config:app:set app_versions discovery.github_search_enabled --value=true`
+- **GIVEN** the admin runs `occ config:app:set versioniq discovery.github_search_enabled --value=true`
 - **WHEN** they search for `register`
 - **THEN** the provider MUST query `https://api.github.com/search/code?q=path:appinfo+filename:info.xml+register`
 - **AND** return up to 30 hits annotated with allowlist status
@@ -255,5 +255,5 @@ From a hit, the admin MUST be able to: (a) for an installed app, jump to the App
 ## Notes
 
 - The frontend search bar + result cards UI (`src/components/DiscoverPanel.vue`, the Discover tab in `App.vue`) shipped in `add-discovery-search-ui`; see "Discover tab surfaces multi-source search" and "Hits route into existing flows" above.
-- Federation (asking another Nextcloud's App Versions for its search results) is future work.
-- Software Catalogus integration is tracked in [issue #24](https://codeberg.org/Conduction/app-versions/issues/24).
+- Federation (asking another Nextcloud's Versioniq for its search results) is future work.
+- Software Catalogus integration is tracked in issue #24 (Codeberg numbering, pre-migration; the same request is tracked on GitHub as ConductionNL/versioniq#24).

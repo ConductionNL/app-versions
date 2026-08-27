@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Policy;
+namespace OCA\Versioniq\Tests\Unit\Service\Policy;
 
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Service\Policy\Policy;
-use OCA\AppVersions\Service\Policy\PolicyStore;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Service\Policy\Policy;
+use OCA\Versioniq\Service\Policy\PolicyStore;
 use OCP\IAppConfig;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;

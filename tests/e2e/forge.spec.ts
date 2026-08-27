@@ -116,7 +116,7 @@ test.describe('forge installs (fixture-backed)', () => {
 	test('a rate-limited forge surfaces an error in the version list', async ({ page }) => {
 		await fixtureControl(page, 'repo', { repo: 'fixtureowner/fixtureapp', status: 429 })
 		const res = await page.request.get(
-			`/ocs/v2.php/apps/app_versions/api/app/${FIXTURE_APP}/versions?source=${encodeURIComponent(FIXTURE_SOURCE)}&format=json`,
+			`/ocs/v2.php/apps/versioniq/api/app/${FIXTURE_APP}/versions?source=${encodeURIComponent(FIXTURE_SOURCE)}&format=json`,
 			{ headers: { 'OCS-APIRequest': 'true' } },
 		)
 		const data = (await res.json())?.ocs?.data
@@ -143,6 +143,9 @@ test.describe('forge installs (fixture-backed)', () => {
 		await expect(page.getByText('Selected app')).toBeVisible()
 		// The picker (safe mode off to see all versions) marks cached versions.
 		await page.getByRole('checkbox', { name: /Safe mode/ }).uncheck().catch(() => undefined)
-		await expect(page.getByTestId('cached-offline-badge').first()).toBeVisible({ timeout: 60_000 })
+		// 45s, not 60s: a wait equal to the test bound leaves no room for the
+		// steps around it, so it expires as an unexplained test timeout rather
+		// than as this assertion failing.
+		await expect(page.getByTestId('cached-offline-badge').first()).toBeVisible({ timeout: 45_000 })
 	})
 })

@@ -13,7 +13,7 @@ const APP = 'dashboard'
 test.describe('version pinning', () => {
 	test.afterEach(async ({ page }) => {
 		// Best-effort cleanup: remove any pin this spec may have left behind.
-		await page.request.delete(`/ocs/v2.php/apps/app_versions/api/app/${APP}/pin?format=json`, {
+		await page.request.delete(`/ocs/v2.php/apps/versioniq/api/app/${APP}/pin?format=json`, {
 			headers: { 'OCS-APIRequest': 'true' },
 		}).catch(() => undefined)
 	})
@@ -69,17 +69,47 @@ test.describe('version pinning', () => {
 
 	test('a pinned app shows who pinned it and when', async ({ page }) => {
 		// Seed a pin through the API, then assert the UI presents it.
-		const put = await page.request.put(`/ocs/v2.php/apps/app_versions/api/app/${APP}/pin?format=json`, {
+		const put = await page.request.put(`/ocs/v2.php/apps/versioniq/api/app/${APP}/pin?format=json`, {
 			headers: { 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' },
 			data: { reason: 'seeded by e2e' },
 		})
 		expect(put.ok(), 'seeding a pin via API should succeed').toBeTruthy()
 
+		// The badge renders `v-if="pinFor(app.id)"`, fed by GET /api/pins. So
+		// "element(s) not found" has three quite different causes — the pin was
+		// never stored, the list endpoint does not return it, or the component
+		// did not render it — and the locator alone cannot tell them apart.
+		// Reading the API first turns one opaque failure into a statement about
+		// WHICH link of that chain broke.
+		const pinsList = await page.request.get('/ocs/v2.php/apps/versioniq/api/pins?format=json', {
+			headers: { 'OCS-APIRequest': 'true' },
+		})
+		const listed = (await pinsList.json())?.ocs?.data?.pins ?? []
+		expect(
+			listed.map((p: { appId: string }) => p.appId),
+			`GET /api/pins must list the pin just seeded for "${APP}" — if this passes and the badge below does not appear, the break is in the component, not the API`,
+		).toContain(APP)
+
 		await openSettings(page)
 		await openTab(page, 'Apps')
 
+		// Located by the card's OWN app id, not by its visible text. The card
+		// renders `{{ app.label }}`, so a text match proves a label contains the
+		// string — it says nothing about `app.id`, which is the value the
+		// badge's `pinFor(app.id)` actually keys on. Those are the two sides of
+		// the comparison under test, so matching on the wrong one would make a
+		// green assertion meaningless.
+		const card = page.locator(`article[data-app-id="${APP}"]`)
+		await expect(
+			card,
+			`no app card has data-app-id="${APP}" — the pin is keyed by appId, so if the card's id differs from the API's appId that mismatch IS the bug`,
+		).toBeVisible()
+
 		const badge = page.getByTestId('pin-badge').first()
-		await expect(badge).toBeVisible()
+		await expect(
+			badge,
+			`the API lists a pin for "${APP}" and its card IS rendered (both asserted above), so the badge's own v-if="pinFor(app.id)" is what did not match — compare the pin's appId against the card's app.id`,
+		).toBeVisible()
 		await expect(badge).toContainText('Pinned')
 		// Attribution is carried in the title so hovering explains the badge.
 		await expect(badge).toHaveAttribute('title', /admin/)

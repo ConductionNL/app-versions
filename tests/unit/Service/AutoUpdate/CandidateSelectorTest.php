@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\AutoUpdate;
+namespace OCA\Versioniq\Tests\Unit\Service\AutoUpdate;
 
-use OCA\AppVersions\Service\AutoUpdate\CandidateSelector;
-use OCA\AppVersions\Service\Policy\Policy;
+use OCA\Versioniq\Service\AutoUpdate\CandidateSelector;
+use OCA\Versioniq\Service\Policy\Policy;
 use PHPUnit\Framework\TestCase;
 
 final class CandidateSelectorTest extends TestCase {

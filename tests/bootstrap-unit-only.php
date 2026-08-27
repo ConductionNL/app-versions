@@ -9,6 +9,21 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
+// Server-side classes an app never has in its own vendor tree, but which
+// nextcloud/ocp references at CLASS-DEFINITION time.
+//
+// This file existed and was never loaded here. It matters because
+// OCP\DB\QueryBuilder\IQueryBuilder derives its PARAM_* constants from
+// Doctrine\DBAL\ParameterType, and doctrine/dbal is a dependency of the
+// Nextcloud SERVER, not of an app — so any unit test that so much as
+// type-hints IQueryBuilder died with `Class "Doctrine\DBAL\ParameterType" not
+// found` before reaching an assertion.
+//
+// That stayed invisible because tests/unit/Repair was missing from the
+// testsuite list in phpunit-unit-only.xml: the tests never ran, so the
+// breakage never reported. Adding the directory surfaced seven errors at once.
+require_once __DIR__ . '/stubs/server-internals.php';
+
 // nextcloud/ocp ships interface stubs without composer autoload — register
 // them manually so PHPUnit can build mocks for OCP\* interfaces.
 spl_autoload_register(static function (string $class): void {

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Source;
+namespace OCA\Versioniq\Tests\Unit\Service\Source;
 
-use OCA\AppVersions\Service\Source\AppStoreSource;
-use OCA\AppVersions\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Source\AppStoreSource;
+use OCA\Versioniq\Service\Source\SourceBinding;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
@@ -232,9 +232,19 @@ final class AppStoreSourceTest extends TestCase {
 		// is having an outage — here a 200 with an empty body, the exact episode
 		// observed against garm3. The listing must serve the stale copy rather
 		// than blank out; a flaky upstream is why the cache exists.
-		$body = json_encode([
-			'data' => [['id' => 'openregister', 'releases' => [['version' => '2.3.0']]]],
-		], JSON_THROW_ON_ERROR);
+		//
+		// THE CACHED SHAPE IS THE EXTRACTED APP PAYLOAD, NOT THE API ENVELOPE.
+		// `fetchAppPayload()` caches whatever `extractAppPayload()` returned —
+		// the inner `{id, releases}` object — so seeding the outer
+		// `{"data": [...]}` envelope here fixtured a shape this app never
+		// writes. `readCachedPayload()` handed the envelope straight back, the
+		// version mapping found no `releases` at the top level, and the
+		// assertion read null. The stale-if-error path in the code is correct;
+		// the fixture was describing a different cache.
+		$body = json_encode(
+			['id' => 'openregister', 'releases' => [['version' => '2.3.0']]],
+			JSON_THROW_ON_ERROR,
+		);
 
 		$response = $this->createMock(IResponse::class);
 		$response->method('getStatusCode')->willReturn(200);
@@ -266,5 +276,67 @@ final class AppStoreSourceTest extends TestCase {
 		$result = $source->listVersions('openregister', $this->binding());
 
 		$this->assertSame('2.3.0', $result['versions'][0]['version'], 'stale cache must serve during an upstream outage');
+	}
+
+	/**
+	 * ONE DOWNLOAD SERVES THE WHOLE SWEEP.
+	 *
+	 * The App Store ignores `?filter=`, so a lookup for one app already
+	 * downloads every app (measured: 755 entries, 31.7 MB). Before this, the
+	 * other 754 were discarded, so an advisory sweep over 88 enabled apps
+	 * re-downloaded the catalogue per app.
+	 *
+	 * The assertion is on HTTP calls, not on elapsed time: the second app must
+	 * be answered without touching the network at all.
+	 */
+	public function testCachesEveryAppInTheCatalogueSoASweepDownloadsItOnce(): void {
+		$catalogue = ['data' => [
+			['id' => 'notes', 'releases' => [['version' => '4.13.0']]],
+			['id' => 'calendar', 'releases' => [['version' => '5.4.0']]],
+			['id' => 'deck', 'releases' => [['version' => '1.14.0']]],
+		]];
+
+		$response = $this->createMock(IResponse::class);
+		$response->method('getStatusCode')->willReturn(200);
+		$response->method('getBody')->willReturn(json_encode($catalogue, JSON_THROW_ON_ERROR));
+
+		$client = $this->createMock(IClient::class);
+		// THE ASSERTION: exactly one GET for three apps.
+		$client->expects($this->once())->method('get')->willReturn($response);
+
+		$clientService = $this->createMock(IClientService::class);
+		$clientService->method('newClient')->willReturn($client);
+
+		// An in-memory app config, so a cache write by one lookup is visible to
+		// the next — which is the whole mechanism under test.
+		$store = [];
+		$config = $this->createMock(IConfig::class);
+		$config->method('getSystemValueString')->willReturn('28.0.0');
+		$config->method('setAppValue')->willReturnCallback(
+			static function (string $app, string $key, string $value) use (&$store): void {
+				$store[$key] = $value;
+			},
+		);
+		$config->method('getAppValue')->willReturnCallback(
+			static function (string $app, string $key, string $default = '') use (&$store): string {
+				return $store[$key] ?? $default;
+			},
+		);
+
+		$l10nFactory = $this->createMock(IFactory::class);
+		$l10nFactory->method('findLanguage')->willReturn('en');
+
+		$source = new AppStoreSource($clientService, $config, $l10nFactory);
+
+		$first = $source->listVersions('notes', $this->binding());
+		$second = $source->listVersions('calendar', $this->binding());
+		$third = $source->listVersions('deck', $this->binding());
+
+		// Each app must still get ITS OWN payload — a shared cache that returned
+		// the first app's data for every lookup would also satisfy the call
+		// count above, so assert the versions differ.
+		$this->assertSame('4.13.0', $first['versions'][0]['version']);
+		$this->assertSame('5.4.0', $second['versions'][0]['version'], 'the second app must be served from cache, with its own payload');
+		$this->assertSame('1.14.0', $third['versions'][0]['version'], 'the third app must be served from cache, with its own payload');
 	}
 }

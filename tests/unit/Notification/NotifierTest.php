@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Notification;
+namespace OCA\Versioniq\Tests\Unit\Notification;
 
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Notification\Notifier;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Notification\Notifier;
 use OCP\IL10N;
 use OCP\L10N\IFactory;
 use OCP\Notification\INotification;

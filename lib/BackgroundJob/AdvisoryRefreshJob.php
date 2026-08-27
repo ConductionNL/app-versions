@@ -10,10 +10,13 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\BackgroundJob;
+namespace OCA\Versioniq\BackgroundJob;
 
-use OCA\AppVersions\Service\Advisory\AdvisoryNotifier;
-use OCA\AppVersions\Service\Advisory\AdvisoryService;
+use OCA\Versioniq\Service\Advisory\AdvisoryDigestNotifier;
+use OCA\Versioniq\Service\Advisory\AdvisoryNotifier;
+use OCA\Versioniq\Service\Advisory\AdvisoryResultStore;
+use OCA\Versioniq\Service\Advisory\AdvisoryService;
+use OCA\Versioniq\Service\Advisory\AdvisorySettingsStore;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\TimedJob;
 use Psr\Log\LoggerInterface;
@@ -28,28 +31,89 @@ use Psr\Log\LoggerInterface;
  * @psalm-api
  */
 class AdvisoryRefreshJob extends TimedJob {
-	/** Re-resolve advisories every 6 hours. */
-	private const INTERVAL_SECONDS = 6 * 60 * 60;
+
+	/**
+	 * Wall-clock ceiling for the sweep, in seconds.
+	 *
+	 * Generous on purpose. Correlation costs two external calls per app, so an
+	 * instance with 88 enabled apps issues ~176 sequential calls; the whole
+	 * point of doing that here rather than in a request is that there is time
+	 * for it. Ten minutes covers a slow-but-working source while still
+	 * bounding a source that hangs, so one unreachable forge cannot leave a
+	 * cron job running forever.
+	 *
+	 * @var float
+	 */
+	private const SWEEP_BUDGET_SECONDS = 600.0;
 
 	public function __construct(
 		ITimeFactory $time,
 		private AdvisoryService $advisoryService,
 		private AdvisoryNotifier $advisoryNotifier,
+		private AdvisoryDigestNotifier $digestNotifier,
+		private AdvisoryResultStore $resultStore,
+		// NOT promoted to a property: the interval is read exactly once, here.
+		// TimedJob fixes its interval at construction, so keeping a reference
+		// would suggest the job can re-read the setting mid-life, which it
+		// cannot — the next run after a change picks up the new value because
+		// the job is constructed afresh.
+		AdvisorySettingsStore $settings,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct($time);
-		$this->setInterval(self::INTERVAL_SECONDS);
+		// Administrator-settable: 6h default, 1–24 supported.
+		$this->setInterval($settings->getIntervalSeconds());
 	}
 
 	/**
+	 * Sweeps every enabled app, stores the snapshot the admin UI reads, and
+	 * raises notifications for advisories that newly affect an installed or
+	 * pinned version.
+	 *
+	 * @spec openspec/specs/security-advisory-correlation/spec.md
 	 * @param mixed $argument
 	 */
 	protected function run($argument): void {
 		try {
-			$correlations = $this->advisoryService->correlateAll();
+			// The sweep passes its OWN budget. AdvisoryService's default is
+			// sized for a request someone is waiting on (5s); inheriting it
+			// here would clip this job to the first handful of apps and make
+			// the stored snapshot — and the notifications derived from it —
+			// quietly incomplete.
+			$correlations = $this->advisoryService->correlateAll(self::SWEEP_BUDGET_SECONDS);
+
+			// Persist BEFORE notifying. Notification is the more failure-prone
+			// half (it talks to the notifications app), and a snapshot the
+			// admin UI can render is worth keeping even if the notification
+			// half then throws.
+			$this->resultStore->save($correlations, $this->time->getTime());
+
+			$unreached = count(array_filter(
+				$correlations,
+				static fn (array $entry): bool => ($entry['error'] ?? null) !== null,
+			));
+			if ($unreached > 0) {
+				// Said out loud, because "correlated" and "correlated except
+				// for 30 apps whose source did not answer" look identical in
+				// a UI that only renders badges for what it found.
+				$this->logger->warning('AdvisoryRefreshJob: some apps could not be correlated', [
+					'unreached' => $unreached,
+					'total' => count($correlations),
+				]);
+			}
+
 			$fired = $this->advisoryNotifier->notifyNewAdvisories($correlations);
 			if ($fired > 0) {
 				$this->logger->info('AdvisoryRefreshJob: raised advisory notifications', ['count' => $fired]);
+			}
+
+			// The weekly digest of everything that is NOT urgent. It rate-
+			// limits itself, so calling it on every sweep is correct — the
+			// sweep runs up to 24 times a day and the digest still sends once
+			// a week.
+			$digested = $this->digestNotifier->sendIfDue($correlations, $this->time->getTime());
+			if ($digested > 0) {
+				$this->logger->info('AdvisoryRefreshJob: sent the weekly advisory digest', ['recipients' => $digested]);
 			}
 		} catch (\Throwable $error) {
 			$this->logger->error('AdvisoryRefreshJob: refresh failed', ['message' => $error->getMessage()]);

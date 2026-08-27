@@ -10,14 +10,14 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Installer;
+namespace OCA\Versioniq\Service\Installer;
 
 use Exception;
 use OC\AppFramework\Bootstrap\Coordinator;
 use OC\DB\Connection;
 use OC\DB\MigrationService;
-use OCA\AppVersions\Service\Lkg\Lkg;
-use OCA\AppVersions\Service\Lkg\LkgStore;
+use OCA\Versioniq\Service\Lkg\Lkg;
+use OCA\Versioniq\Service\Lkg\LkgStore;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJob;
@@ -138,21 +138,25 @@ class InstallFinalizer {
 		 *
 		 *   conflict between new type (mixed) and old type (string)
 		 *
-		 * That made every app installed through App Versions impossible to
+		 * That made every app installed through Versioniq impossible to
 		 * enable, which is most of the point of the app. Config we own stays
 		 * on the typed API; only core's keys use core's semantics.
 		 */
+		/** @psalm-suppress DeprecatedMethod Deliberate — see the block comment above. */
 		$this->config->setAppValue($appId, 'installed_version', $installedVersion);
+		/** @psalm-suppress DeprecatedMethod Deliberate — see the block comment above. */
 		$this->config->setAppValue($appId, 'enabled', $enabled);
 
 		/** @var array<string, string> $remote */
 		$remote = (array)($info['remote'] ?? []);
 		foreach ($remote as $name => $path) {
+			/** @psalm-suppress DeprecatedMethod Deliberate — see the block comment above. */
 			$this->config->setAppValue('core', 'remote_' . $name, $appId . '/' . $path);
 		}
 		/** @var array<string, string> $public */
 		$public = (array)($info['public'] ?? []);
 		foreach ($public as $name => $path) {
+			/** @psalm-suppress DeprecatedMethod Deliberate — see the block comment above. */
 			$this->config->setAppValue('core', 'public_' . $name, $appId . '/' . $path);
 		}
 
@@ -188,6 +192,7 @@ class InstallFinalizer {
 		}
 		// Core-owned key as well: OC_App writes app types untyped, so a typed
 		// row here would collide the same way installed_version did.
+		/** @psalm-suppress DeprecatedMethod Deliberate — core owns this key and writes it untyped. */
 		$this->config->setAppValue($appId, 'types', $types);
 	}
 

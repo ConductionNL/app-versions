@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Pat;
+namespace OCA\Versioniq\Tests\Unit\Service\Pat;
 
-use OCA\AppVersions\Db\Pat;
-use OCA\AppVersions\Db\PatMapper;
-use OCA\AppVersions\Service\Pat\PatManager;
+use OCA\Versioniq\Db\Pat;
+use OCA\Versioniq\Db\PatMapper;
+use OCA\Versioniq\Service\Pat\PatManager;
 use OCP\Security\ICrypto;
 use PHPUnit\Framework\TestCase;
 
@@ -91,7 +91,7 @@ final class PatManagerTest extends TestCase {
 		$crypto = $this->createMock(ICrypto::class);
 		$manager = new PatManager($mapper, $crypto);
 
-		$validation = \OCA\AppVersions\Service\Pat\ValidationResult::accepted(
+		$validation = \OCA\Versioniq\Service\Pat\ValidationResult::accepted(
 			['repo'],
 			[],
 			'2026-08-15 12:00:00'
@@ -126,7 +126,7 @@ final class PatManagerTest extends TestCase {
 		$mapper->expects($this->once())->method('update')->willReturnArgument(0);
 		$manager = new PatManager($mapper, $this->createMock(ICrypto::class));
 
-		$validation = \OCA\AppVersions\Service\Pat\ValidationResult::accepted(
+		$validation = \OCA\Versioniq\Service\Pat\ValidationResult::accepted(
 			['repo'],
 			[],
 			'2026-09-01 00:00:00'

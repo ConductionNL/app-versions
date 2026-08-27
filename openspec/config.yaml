@@ -1,13 +1,13 @@
 schema: conduction
 
 context: |
-  Project: App Versions
-  Repo: ConductionNL/app-versions
+  Project: Versioniq
+  Repo: ConductionNL/versioniq
   Type: Nextcloud App (PHP backend + Vue 2 frontend)
   Description: Install any earlier or newer version of already installed Nextcloud apps
   Key components: App list, Version picker, Installer, Update channel detection
   Database: None — this app has no data storage, only API calls
-  Mount path: /var/www/html/custom_apps/app_versions
+  Mount path: /var/www/html/custom_apps/versioniq
 
   Architecture:
     Pattern: Admin utility — no database, no OpenRegister dependency

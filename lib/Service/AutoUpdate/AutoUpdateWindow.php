@@ -10,11 +10,11 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\AutoUpdate;
+namespace OCA\Versioniq\Service\AutoUpdate;
 
 /**
  * Pure `HH:MM-HH:MM` maintenance-window parsing and containment logic for
- * {@see \OCA\AppVersions\BackgroundJob\AutoUpdateJob}. Supports windows that
+ * {@see \OCA\Versioniq\BackgroundJob\AutoUpdateJob}. Supports windows that
  * cross midnight (e.g. `23:00-03:00`); see "Global kill switch and window"
  * ("Midnight-crossing window").
  *

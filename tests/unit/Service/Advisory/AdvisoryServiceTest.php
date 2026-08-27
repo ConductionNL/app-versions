@@ -10,14 +10,17 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Tests\Unit\Service\Advisory;
+namespace OCA\Versioniq\Tests\Unit\Service\Advisory;
 
-use OCA\AppVersions\Service\Advisory\AdvisoryService;
-use OCA\AppVersions\Service\Advisory\AdvisorySourceInterface;
-use OCA\AppVersions\Service\Source\SourceBinding;
-use OCA\AppVersions\Service\Source\SourceBindingStore;
-use OCA\AppVersions\Service\Source\SourceInterface;
-use OCA\AppVersions\Service\Source\SourceRegistry;
+use OCA\Versioniq\Service\Advisory\AdvisoryService;
+use OCA\Versioniq\Service\Advisory\AdvisorySourceInterface;
+use OCA\Versioniq\Service\Advisory\BranchAwareRange;
+use OCA\Versioniq\Service\Advisory\NextcloudAdvisoryFeed;
+use OCA\Versioniq\Service\Advisory\ServerVersionProvider;
+use OCA\Versioniq\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Source\SourceBindingStore;
+use OCA\Versioniq\Service\Source\SourceInterface;
+use OCA\Versioniq\Service\Source\SourceRegistry;
 use OCP\App\IAppManager;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -28,8 +31,81 @@ final class AdvisoryServiceTest extends TestCase {
 			$this->createMock(SourceRegistry::class),
 			$this->createMock(SourceBindingStore::class),
 			$this->createMock(IAppManager::class),
+			$this->quietFeed(),
+			new BranchAwareRange(),
+			$this->createMock(ServerVersionProvider::class),
 			$this->createMock(LoggerInterface::class),
 		);
+	}
+
+	/**
+	 * A feed that answers with nothing. These tests exercise the pure
+	 * evaluation path, so the central feed must not contribute advisories of
+	 * its own — otherwise a change to the feed would move assertions about
+	 * clause semantics.
+	 */
+	private function quietFeed(): NextcloudAdvisoryFeed {
+		$feed = $this->createMock(NextcloudAdvisoryFeed::class);
+		$feed->method('fetchAll')->willReturn(['advisories' => [], 'error' => null]);
+
+		return $feed;
+	}
+
+	/**
+	 * A service whose central feed answers with the given map, and whose
+	 * enabled-app list and versions are fixed.
+	 *
+	 * @param array<string, list<array<string, mixed>>> $feedAdvisories
+	 * @param array<string, string> $installedVersions app id => version
+	 */
+	private function serviceWithFeed(array $feedAdvisories, array $installedVersions, string $serverVersion = '31.0.2'): AdvisoryService {
+		$feed = $this->createMock(NextcloudAdvisoryFeed::class);
+		$feed->method('fetchAll')->willReturn(['advisories' => $feedAdvisories, 'error' => null]);
+
+		$appManager = $this->createMock(IAppManager::class);
+		$appManager->method('getEnabledApps')->willReturn(array_keys($installedVersions));
+		$appManager->method('getAppVersion')->willReturnCallback(
+			static fn (string $appId): string => $installedVersions[$appId] ?? '',
+		);
+
+		// A source with no advisory capability — the App Store case, which is
+		// 87 of 88 apps on a real instance.
+		$registry = $this->createMock(SourceRegistry::class);
+		$registry->method('get')->willReturn($this->createMock(SourceInterface::class));
+
+		$bindingStore = $this->createMock(SourceBindingStore::class);
+		$bindingStore->method('get')->willReturn(SourceBinding::appStore());
+
+		$provider = $this->createMock(ServerVersionProvider::class);
+		$provider->method('current')->willReturn($serverVersion);
+
+		return new AdvisoryService(
+			$registry,
+			$bindingStore,
+			$appManager,
+			$feed,
+			new BranchAwareRange(),
+			$provider,
+			$this->createMock(LoggerInterface::class),
+		);
+	}
+
+	/**
+	 * A feed-shaped advisory: carries `patchedVersions`, which is what routes
+	 * it through branch-aware evaluation.
+	 *
+	 * @param list<string> $patched
+	 * @return array{id: string, severity: string, summary: string, affected: list<string>, firstPatchedVersion: ?string, patchedVersions: list<string>}
+	 */
+	private function feedAdvisory(string $id, array $patched, string $range = ''): array {
+		return [
+			'id' => $id,
+			'severity' => 'high',
+			'summary' => 'Feed advisory ' . $id,
+			'affected' => $range === '' ? [] : [$range],
+			'firstPatchedVersion' => $patched[0] ?? null,
+			'patchedVersions' => $patched,
+		];
 	}
 
 	/**
@@ -150,7 +226,7 @@ final class AdvisoryServiceTest extends TestCase {
 		$appManager = $this->createMock(IAppManager::class);
 		$appManager->method('getAppVersion')->willReturn('1.0.5');
 
-		$service = new AdvisoryService($registry, $bindingStore, $appManager, $this->createMock(LoggerInterface::class));
+		$service = new AdvisoryService($registry, $bindingStore, $appManager, $this->quietFeed(), new BranchAwareRange(), $this->createMock(ServerVersionProvider::class), $this->createMock(LoggerInterface::class));
 		$result = $service->correlate('someapp');
 
 		$this->assertSame('someapp', $result['appId']);
@@ -175,10 +251,108 @@ final class AdvisoryServiceTest extends TestCase {
 		$appManager = $this->createMock(IAppManager::class);
 		$appManager->method('getAppVersion')->willReturn('1.0.0');
 
-		$service = new AdvisoryService($registry, $bindingStore, $appManager, $this->createMock(LoggerInterface::class));
+		$service = new AdvisoryService($registry, $bindingStore, $appManager, $this->quietFeed(), new BranchAwareRange(), $this->createMock(ServerVersionProvider::class), $this->createMock(LoggerInterface::class));
 		$result = $service->correlate('plainapp');
 
 		$this->assertSame(AdvisoryService::STATE_NONE, $result['state']);
 		$this->assertNull($result['error']);
+	}
+
+	// ── The central feed: what #166 exists to fix ────────────────────────
+
+	/**
+	 * THE HEADLINE CASE. An App Store app's own source publishes no advisory
+	 * data at all, so before this the app was recorded as "no advisories" with
+	 * no error. The centrally-published feed is the only thing that covers it.
+	 */
+	public function testAnAppStoreAppIsCorrelatedFromTheCentralFeed(): void {
+		$service = $this->serviceWithFeed(
+			['mail' => [$this->feedAdvisory('GHSA-aaaa', ['3.7.25', '5.5.16'])]],
+			['mail' => '3.6.0'],
+		);
+
+		$results = $service->correlateAll(60.0);
+
+		$this->assertSame(AdvisoryService::STATE_VULNERABLE, $results['mail']['state']);
+		$this->assertSame('3.7.25', $results['mail']['recommendedVersion']);
+		$this->assertNull($results['mail']['error']);
+	}
+
+	/**
+	 * The branch-aware rule reaching the real evaluation path. Under the old
+	 * AND semantics these four lower bounds collapse to `>= 4.3.0` and 3.6.0
+	 * is cleared — a false negative on two thirds of real advisories.
+	 */
+	public function testMultipleLowerBoundsDoNotClearAVulnerableInstance(): void {
+		$service = $this->serviceWithFeed(
+			['mail' => [$this->feedAdvisory('GHSA-bbbb', ['3.7.25', '5.5.16', '5.6.20', '5.7.13'], '>= 3.5.0, >= 3.7.0, >= 4.1.0, >= 4.3.0')]],
+			['mail' => '3.6.0'],
+		);
+
+		$results = $service->correlateAll(60.0);
+
+		$this->assertSame(AdvisoryService::STATE_VULNERABLE, $results['mail']['state']);
+	}
+
+	/**
+	 * And the other direction: an instance already on its branch's patch must
+	 * not be dragged forward by a later branch's patch.
+	 */
+	public function testAnInstanceOnItsBranchPatchIsNotReportedVulnerable(): void {
+		$service = $this->serviceWithFeed(
+			['spreed' => [$this->feedAdvisory('GHSA-cccc', ['21.1.10', '22.0.11', '23.0.3'])]],
+			['spreed' => '22.0.11'],
+		);
+
+		$results = $service->correlateAll(60.0);
+
+		$this->assertSame(AdvisoryService::STATE_AVAILABLE, $results['spreed']['state'], 'patched, but the app has a security history');
+		$this->assertNull($results['spreed']['recommendedVersion']);
+	}
+
+	/**
+	 * The server is not an app, but it is the largest single subject in the
+	 * feed — 95 of 277 advisories — so it gets its own row.
+	 */
+	public function testTheServerGetsItsOwnCorrelatedRow(): void {
+		$service = $this->serviceWithFeed(
+			[AdvisoryService::SERVER_KEY => [$this->feedAdvisory('GHSA-dddd', ['31.0.12'])]],
+			['mail' => '5.7.13'],
+			'31.0.5',
+		);
+
+		$results = $service->correlateAll(60.0);
+
+		$this->assertArrayHasKey(AdvisoryService::SERVER_KEY, $results);
+		$this->assertSame('31.0.5', $results[AdvisoryService::SERVER_KEY]['installedVersion']);
+		$this->assertSame(AdvisoryService::STATE_VULNERABLE, $results[AdvisoryService::SERVER_KEY]['state']);
+		$this->assertSame('31.0.12', $results[AdvisoryService::SERVER_KEY]['recommendedVersion']);
+	}
+
+	/**
+	 * No server advisories means no server row — an empty row would read as
+	 * "the server was checked and is fine" on an instance where the feed was
+	 * never reached.
+	 */
+	public function testNoServerRowWhenTheFeedCarriesNoServerAdvisories(): void {
+		$service = $this->serviceWithFeed(['mail' => []], ['mail' => '1.0.0']);
+
+		$this->assertArrayNotHasKey(AdvisoryService::SERVER_KEY, $service->correlateAll(60.0));
+	}
+
+	/**
+	 * The recommended version comes from the ADVISORY's patch list, not from
+	 * whatever versions the source happens to offer. The publisher's stated
+	 * fix is authoritative; an inferred one is a guess.
+	 */
+	public function testTheRecommendationComesFromTheAdvisoryNotTheVersionList(): void {
+		$service = $this->serviceWithFeed(
+			['tables' => [$this->feedAdvisory('GHSA-eeee', ['0.9.5'])]],
+			['tables' => '0.9.0'],
+		);
+
+		$results = $service->correlateAll(60.0);
+
+		$this->assertSame('0.9.5', $results['tables']['recommendedVersion']);
 	}
 }

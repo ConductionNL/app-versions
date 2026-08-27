@@ -10,10 +10,10 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Cron;
+namespace OCA\Versioniq\BackgroundJob;
 
-use OCA\AppVersions\Service\Pin\PinDriftHandler;
-use OCA\AppVersions\Service\Pin\PinStore;
+use OCA\Versioniq\Service\Pin\PinDriftHandler;
+use OCA\Versioniq\Service\Pin\PinStore;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\TimedJob;
@@ -22,8 +22,8 @@ use Psr\Log\LoggerInterface;
 /**
  * Daily safety net for drift detection: walks every pin and compares it
  * against the live installed version via `IAppManager`, catching updates
- * that the {@see \OCA\AppVersions\Listener\AppUpdatedListener} event-driven
- * path can miss (events dispatched while App Versions was disabled, manual
+ * that the {@see \OCA\Versioniq\Listener\AppUpdatedListener} event-driven
+ * path can miss (events dispatched while Versioniq was disabled, manual
  * file replacement, restored backups); see "Drift detection" (reconciliation
  * path).
  *

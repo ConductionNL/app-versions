@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Source;
+namespace OCA\Versioniq\Tests\Unit\Service\Source;
 
 use Exception;
-use OCA\AppVersions\Service\Pat\PatManager;
-use OCA\AppVersions\Service\Pat\PatResolver;
-use OCA\AppVersions\Service\Source\ForgeRegistry;
-use OCA\AppVersions\Service\Source\ForgeReleaseSource;
-use OCA\AppVersions\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Pat\PatManager;
+use OCA\Versioniq\Service\Pat\PatResolver;
+use OCA\Versioniq\Service\Source\ForgeRegistry;
+use OCA\Versioniq\Service\Source\ForgeReleaseSource;
+use OCA\Versioniq\Service\Source\SourceBinding;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;

@@ -10,10 +10,11 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Source;
+namespace OCA\Versioniq\Service\Source;
 
 use Exception;
-use OCA\AppVersions\Service\Advisory\AdvisorySourceInterface;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Service\Advisory\AdvisorySourceInterface;
 use OCP\Http\Client\IClientService;
 use OCP\IConfig;
 use OCP\L10N\IFactory;
@@ -243,7 +244,7 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 	private function readCachedPayload(string $appId, bool $ignoreTtl): ?array {
 		if (!$ignoreTtl) {
 			$cachedAt = (int)$this->config->getAppValue(
-				'app_versions',
+				Application::APP_ID,
 				self::PAYLOAD_CACHE_TS_PREFIX . $appId,
 				'0',
 			);
@@ -252,7 +253,7 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 			}
 		}
 
-		$raw = $this->config->getAppValue('app_versions', self::PAYLOAD_CACHE_PREFIX . $appId, '');
+		$raw = $this->config->getAppValue(Application::APP_ID, self::PAYLOAD_CACHE_PREFIX . $appId, '');
 		if ($raw === '') {
 			return null;
 		}
@@ -276,12 +277,12 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 	private function writeCachedPayload(string $appId, array $payload): void {
 		try {
 			$this->config->setAppValue(
-				'app_versions',
+				Application::APP_ID,
 				self::PAYLOAD_CACHE_PREFIX . $appId,
 				json_encode($payload, JSON_THROW_ON_ERROR),
 			);
 			$this->config->setAppValue(
-				'app_versions',
+				Application::APP_ID,
 				self::PAYLOAD_CACHE_TS_PREFIX . $appId,
 				(string)time(),
 			);
@@ -301,7 +302,7 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 	 */
 	private function apiBase(): string {
 		/** @var string|null $raw */
-		$raw = $this->config->getAppValue('app_versions', 'appstore.api_base', '');
+		$raw = $this->config->getAppValue(Application::APP_ID, 'appstore.api_base', '');
 		$override = trim((string)$raw);
 
 		return rtrim($override !== '' ? $override : self::DEFAULT_API_BASE, '/');
@@ -326,6 +327,8 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 				if (!is_array($decoded)) {
 					return null;
 				}
+				// The whole catalogue arrived regardless of the filter; keep it.
+				$this->cacheCatalogueEntries($decoded);
 				$appPayload = $this->extractAppPayload($decoded, $appId);
 				if (is_array($appPayload)) {
 					return $appPayload;
@@ -357,6 +360,9 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 				if (!is_array($decoded)) {
 					continue;
 				}
+				// Same reasoning as the filtered endpoint above: this response
+				// is the whole platform catalogue, so index all of it.
+				$this->cacheCatalogueEntries($decoded);
 				$appPayload = $this->extractAppPayload($decoded, $appId);
 				if (is_array($appPayload)) {
 					return $appPayload;
@@ -416,6 +422,57 @@ class AppStoreSource implements SourceInterface, AdvisorySourceInterface {
 	 * @param array<array-key, mixed> $entries
 	 * @return array<array-key, mixed>|null
 	 */
+	/**
+	 * Caches EVERY app in a freshly-downloaded catalogue, not just the one that
+	 * was asked for.
+	 *
+	 * The App Store's `apps.json` IGNORES its `filter` parameter — measured
+	 * 2026-08-21, `?filter=notes` returned all 755 entries and 31.7 MB — so a
+	 * lookup for one app already pays for the whole catalogue. Keeping one
+	 * entry and discarding 754 meant a full advisory sweep over 88 enabled
+	 * apps downloaded ~31.7 MB per app, and did it twice per app because
+	 * `listAdvisories()` and `listVersions()` each resolve a payload.
+	 *
+	 * Indexing the whole response makes the FIRST lookup pay for the download
+	 * and every subsequent app in the same sweep a cache hit. Nothing else
+	 * changes: entries are written through the same per-app cache with the same
+	 * TTL, so a caller asking for one app in isolation behaves exactly as before.
+	 *
+	 * @spec openspec/specs/security-advisory-correlation/spec.md
+	 * @param array<array-key, mixed> $decoded A decoded catalogue response.
+	 */
+	private function cacheCatalogueEntries(array $decoded): void {
+		$entries = null;
+		$data = $this->arrayField($decoded, 'data');
+		if ($data !== null && array_is_list($data)) {
+			$entries = $data;
+		} elseif (array_is_list($decoded)) {
+			$entries = $decoded;
+		} else {
+			$apps = $this->arrayField($decoded, 'apps');
+			if ($apps !== null && array_is_list($apps)) {
+				$entries = $apps;
+			}
+		}
+
+		if ($entries === null) {
+			return;
+		}
+
+		/** @var mixed $entry */
+		foreach ($entries as $entry) {
+			if (!is_array($entry)) {
+				continue;
+			}
+			/** @var mixed $id */
+			$id = $entry['id'] ?? null;
+			if (!is_string($id) || $id === '') {
+				continue;
+			}
+			$this->writeCachedPayload($id, $entry);
+		}
+	}
+
 	private function findById(array $entries, string $appId): ?array {
 		/** @var mixed $entry */
 		foreach ($entries as $entry) {

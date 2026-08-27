@@ -15,7 +15,20 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
+
+      # There was NO setup-node step here at all, so this job ran on whatever
+      # node the runner image happened to ship — node 20, and therefore npm 10.
+      # package.json declares `npm: ^11`, and npm 10 cannot read an npm-11
+      # lockfile: it reports `Missing: picomatch@4.0.5 from lock file` for a
+      # package that IS in the lock, which reads like a corrupt lockfile and is
+      # actually a tool-version mismatch. Pinned to the version the manifest
+      # asks for so the two cannot disagree.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci

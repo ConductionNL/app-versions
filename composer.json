@@ -1,5 +1,5 @@
 {
-  "name": "nextcloud/app_versions",
+  "name": "nextcloud/versioniq",
   "description": "An example description",
   "license": "EUPL-1.2",
   "authors": [
@@ -11,7 +11,7 @@
   ],
   "autoload": {
     "psr-4": {
-      "OCA\\AppVersions\\": "lib/"
+      "OCA\\Versioniq\\": "lib/"
     }
   },
   "scripts": {
@@ -25,8 +25,8 @@
     "cs:check": "./vendor/bin/php-cs-fixer fix --dry-run --diff",
     "cs:fix": "./vendor/bin/php-cs-fixer fix",
     "psalm": "./vendor/bin/psalm --threads=1 --no-cache",
-    "test:unit": "./vendor/bin/phpunit tests -c tests/phpunit.xml --colors=always --fail-on-warning --fail-on-risky",
-    "test:unit-only": "./vendor/bin/phpunit tests -c tests/phpunit-unit-only.xml --colors=always",
+    "test:unit": "./vendor/bin/phpunit -c phpunit.xml --colors=always --fail-on-warning --fail-on-risky",
+    "test:unit-only": "./vendor/bin/phpunit -c tests/phpunit-unit-only.xml --colors=always",
     "openapi": "./vendor/bin/generate-spec",
     "rector": "./vendor/bin/rector && composer cs:fix",
     "check:strict": "E=0; for CMD in lint cs:check psalm; do echo; echo \"=== $CMD ===\"; composer $CMD || E=1; done; echo; if [ $E -eq 0 ]; then echo \"ALL CHECKS PASSED\"; else echo \"SOME CHECKS FAILED (see above)\"; fi; exit $E"
@@ -36,13 +36,17 @@
     "bamarni/composer-bin-plugin": "^1.8"
   },
   "require-dev": {
+    "conduction/coding-standard": "^1.0",
+    "conduction/hydra-gates": "^1.0",
+    "cyclonedx/cyclonedx-php-composer": "^6.2",
     "nextcloud/ocp": "dev-master",
     "roave/security-advisories": "dev-latest",
     "symfony/console": "^6.4"
   },
   "config": {
     "allow-plugins": {
-      "bamarni/composer-bin-plugin": true
+      "bamarni/composer-bin-plugin": true,
+      "cyclonedx/cyclonedx-php-composer": true
     },
     "optimize-autoloader": true,
     "sort-packages": true,

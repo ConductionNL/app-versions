@@ -13,7 +13,18 @@ import { chooseApp, openSettings, versionsLoaded } from './helpers'
 // Shipped apps such as `dashboard` are a poor subject here: their App Store
 // presence is inconsistent, so the picker may legitimately report that the app
 // follows the server release instead of listing versions.
-const APP = 'notes'
+// `dashboard`, not `notes`. Notes is a separate repo that had to be installed
+// via additional-apps, and its info.xml declares min-version="33" while this
+// repo's PHPUnit matrix includes stable32 — so it could NEVER enable on two of
+// the six cells ("App Notes cannot be installed because it is not compatible
+// with this version of the server"). That only looked harmless because a failed
+// enable is currently a warning; ConductionNL/.github#355 makes it fail.
+//
+// dashboard ships WITH Nextcloud, so it is present on every matrix version with
+// no compatibility floor to trip — and it is exactly what the safe-mode test
+// below already describes: bundled at a version far ahead of its App Store
+// releases, so every catalogue entry is a downgrade.
+const APP = 'dashboard'
 
 test.describe('version listing and release notes', () => {
 	test('versions load for an App Store app and name their source', async ({ page }) => {
@@ -40,7 +51,7 @@ test.describe('version listing and release notes', () => {
 
 		await page.getByRole('checkbox', { name: /Safe mode/ }).uncheck()
 		await expect
-			.poll(async () => page.getByTestId('changelog-toggle').count(), { timeout: 240_000 })
+			.poll(async () => page.getByTestId('changelog-toggle').count(), { timeout: 45_000 })
 			.toBeGreaterThan(before)
 
 		// Restore the safer default for subsequent specs.
@@ -53,7 +64,7 @@ test.describe('version listing and release notes', () => {
 		await versionsLoaded(page)
 		// Older releases are only listed with safe mode off.
 		await page.getByRole('checkbox', { name: /Safe mode/ }).uncheck()
-		await expect(page.getByTestId('changelog-toggle').first()).toBeVisible({ timeout: 240_000 })
+		await expect(page.getByTestId('changelog-toggle').first()).toBeVisible({ timeout: 45_000 })
 
 		const toggle = page.getByTestId('changelog-toggle').first()
 		await toggle.click()
@@ -83,7 +94,7 @@ test.describe('version listing and release notes', () => {
 		// still-listed release below the installed version at runtime rather than
 		// hard-coding a version that may have aged out of the catalogue.
 		const listing = (await (await page.request.get(
-			`/ocs/v2.php/apps/app_versions/api/app/${APP}/versions?format=json`,
+			`/ocs/v2.php/apps/versioniq/api/app/${APP}/versions?format=json`,
 			{ headers: { 'OCS-APIRequest': 'true' } },
 		)).json())?.ocs?.data
 		const installed = String(listing?.installedVersion ?? '')
@@ -93,7 +104,7 @@ test.describe('version listing and release notes', () => {
 		expect(older, 'an older release exists to attempt a downgrade to').not.toBe(installed)
 
 		const res = await page.request.post(
-			`/ocs/v2.php/apps/app_versions/api/app/${APP}/versions/${older}/install?format=json`,
+			`/ocs/v2.php/apps/versioniq/api/app/${APP}/versions/${older}/install?format=json`,
 			{ headers: { 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' }, data: {} },
 		)
 		const body = await res.text()

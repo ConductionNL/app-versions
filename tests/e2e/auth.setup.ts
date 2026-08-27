@@ -33,7 +33,15 @@ setup('authenticate as admin', async ({ page }) => {
 
 	// Landing anywhere authenticated is enough; go straight to our settings page
 	// so a broken login fails here rather than in every functional spec.
-	await page.goto('/index.php/settings/admin/app_versions')
+	//
+	// `domcontentloaded` for the same reason as helpers.ts::openSettings — the
+	// default `load` waits for sub-resources a Nextcloud settings page keeps in
+	// flight, so the navigation runs to the timeout and is reported as
+	// `net::ERR_ABORTED`. This one is the more dangerous of the two: it runs in
+	// SETUP, so a stall here does not fail one spec, it fails the suite.
+	await page.goto('/index.php/settings/admin/versioniq', {
+		waitUntil: 'domcontentloaded',
+	})
 
 	// Nextcloud's first-run wizard is a modal that covers the page and swallows
 	// clicks and focus. Instances used for e2e should have `firstrunwizard`
@@ -45,7 +53,7 @@ setup('authenticate as admin', async ({ page }) => {
 		await expect(wizard).toBeHidden()
 	}
 
-	await expect(page.getByRole('heading', { name: 'App Versions', level: 2 })).toBeVisible()
+	await expect(page.getByRole('heading', { name: 'Versioniq', level: 2 })).toBeVisible()
 
 	await page.context().storageState({ path: AUTH_FILE })
 
@@ -58,12 +66,16 @@ setup('authenticate as admin', async ({ page }) => {
 	// functional specs fast and deterministic. Failures are ignored: an offline
 	// instance should surface in the specs that actually assert on the data.
 	for (const url of [
-		'/ocs/v2.php/apps/app_versions/api/app/notes/versions?format=json',
-		'/ocs/v2.php/apps/app_versions/api/discover?q=calendar&format=json',
+		'/ocs/v2.php/apps/versioniq/api/app/notes/versions?format=json',
+		'/ocs/v2.php/apps/versioniq/api/discover?q=calendar&format=json',
 	]) {
+		// 45s, not 240s: the setup project inherits the 60s test bound, so a
+		// longer request timeout could never elapse — it would abort the whole
+		// setup with a timeout naming nothing. The warm-up now hits the local
+		// fixture catalogue rather than the ~12.4 MB store, so this is generous.
 		await page.request.get(url, {
 			headers: { 'OCS-APIRequest': 'true' },
-			timeout: 240_000,
+			timeout: 45_000,
 		}).catch(() => undefined)
 	}
 })

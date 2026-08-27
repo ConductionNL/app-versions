@@ -10,24 +10,24 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service;
+namespace OCA\Versioniq\Service;
 
 use Exception;
 use OC\Archive\TAR;
 use OC\Archive\ZIP;
 use OC\Files\FilenameValidator;
-use OCA\AppVersions\Service\Audit\AuditLogger;
-use OCA\AppVersions\Service\Cache\ArtifactCache;
-use OCA\AppVersions\Service\Installer\FailureClassifier;
-use OCA\AppVersions\Service\Installer\InstallFailure;
-use OCA\AppVersions\Service\Installer\InstallFinalizer;
-use OCA\AppVersions\Service\Installer\MigrationDiffer;
-use OCA\AppVersions\Service\Installer\ShaMismatchException;
-use OCA\AppVersions\Service\Pat\PatManager;
-use OCA\AppVersions\Service\Pat\PatResolver;
-use OCA\AppVersions\Service\Source\SourceBinding;
-use OCA\AppVersions\Service\Source\SourceInterface;
-use OCA\AppVersions\Service\Source\TrustedSourceList;
+use OCA\Versioniq\Service\Audit\AuditLogger;
+use OCA\Versioniq\Service\Cache\ArtifactCache;
+use OCA\Versioniq\Service\Installer\FailureClassifier;
+use OCA\Versioniq\Service\Installer\InstallFailure;
+use OCA\Versioniq\Service\Installer\InstallFinalizer;
+use OCA\Versioniq\Service\Installer\MigrationDiffer;
+use OCA\Versioniq\Service\Installer\ShaMismatchException;
+use OCA\Versioniq\Service\Pat\PatManager;
+use OCA\Versioniq\Service\Pat\PatResolver;
+use OCA\Versioniq\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Source\SourceInterface;
+use OCA\Versioniq\Service\Source\TrustedSourceList;
 use OCP\App\AppPathNotFoundException;
 use OCP\App\IAppManager;
 use OCP\Http\Client\IClientService;
@@ -420,7 +420,7 @@ class ExternalReleaseInstallerService {
 		);
 	}
 
-	private function resolveAuth(SourceBinding $binding): ?\OCA\AppVersions\Db\Pat {
+	private function resolveAuth(SourceBinding $binding): ?\OCA\Versioniq\Db\Pat {
 		$ownerRepo = $binding->getOwnerRepo();
 		if ($ownerRepo === null) {
 			return null;
@@ -433,11 +433,11 @@ class ExternalReleaseInstallerService {
 		return $this->patResolver->findFor($binding->getForge(), $ownerRepo, $user->getUID());
 	}
 
-	private function authenticatedDownload(string $url, string $sinkPath, ?\OCA\AppVersions\Db\Pat $pat): void {
+	private function authenticatedDownload(string $url, string $sinkPath, ?\OCA\Versioniq\Db\Pat $pat): void {
 		$options = [
 			'sink' => $sinkPath,
 			'timeout' => $this->getDownloadTimeout(),
-			'headers' => ['User-Agent' => 'Nextcloud-AppVersions'],
+			'headers' => ['User-Agent' => 'Nextcloud-Versioniq'],
 			// SSRF defence-in-depth: block fetches to internal addresses even
 			// though $url originates from a trusted-source GitHub release JSON.
 			// Mirrors PatValidator. See OWASP A10:2021.
@@ -462,14 +462,14 @@ class ExternalReleaseInstallerService {
 	 * transport check only — see design.md "Trust model: TOFU" for why the
 	 * recorded-digest check (above, in the caller) takes precedence.
 	 */
-	private function verifyChecksum(string $actualSha, ?string $shaUrl, ?\OCA\AppVersions\Db\Pat $pat): ?string {
+	private function verifyChecksum(string $actualSha, ?string $shaUrl, ?\OCA\Versioniq\Db\Pat $pat): ?string {
 		if ($shaUrl === null) {
 			return 'No SHA-256 checksum available for this artifact.';
 		}
 
 		$options = [
 			'timeout' => 30,
-			'headers' => ['User-Agent' => 'Nextcloud-AppVersions'],
+			'headers' => ['User-Agent' => 'Nextcloud-Versioniq'],
 			// SSRF defence-in-depth: same rationale as authenticatedDownload.
 			'nextcloud' => ['allow_local_address' => $this->config->getSystemValueBool('allow_local_remote_servers', false)],
 		];
@@ -590,6 +590,10 @@ class ExternalReleaseInstallerService {
 		// every external install fail at the last moment. The legacy static
 		// takes the same arguments, and the dependency check on the next line
 		// already comes from the same class.
+		// \OC_App is private API and carries no OCP stub, so psalm cannot resolve
+		// the static. The call is deliberate for the reason above; suppressed
+		// here rather than baselined so it stays attached to that reason.
+		/** @psalm-suppress UndefinedMethod */
 		if (!\OC_App::isAppCompatible($serverVersion, $info, $ignoreMax)) {
 			$appName = isset($info['name']) && is_string($info['name']) ? $info['name'] : $expectedAppId;
 			throw new Exception(sprintf(

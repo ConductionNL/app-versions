@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Installer;
+namespace OCA\Versioniq\Tests\Unit\Service\Installer;
 
 use Exception;
-use OCA\AppVersions\Service\Installer\FailureClassifier;
+use OCA\Versioniq\Service\Installer\FailureClassifier;
 use OCP\AppFramework\Http;
 use OCP\IL10N;
 use OCP\L10N\IFactory;

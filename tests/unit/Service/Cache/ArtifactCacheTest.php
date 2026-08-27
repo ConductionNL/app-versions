@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Cache;
+namespace OCA\Versioniq\Tests\Unit\Service\Cache;
 
 // The Fake* helpers below are not suffixed `*Test.php`, so PHPUnit's
 // directory-based test discovery never loads them and there is no
 // autoload-dev PSR-4 mapping for the Tests\ namespace (composer.json only
-// maps OCA\AppVersions\ -> lib/) — require them explicitly.
+// maps OCA\Versioniq\ -> lib/) — require them explicitly.
 require_once __DIR__ . '/FakeSimpleFile.php';
 require_once __DIR__ . '/FakeSimpleFolder.php';
 require_once __DIR__ . '/FakeAppData.php';
 
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Service\Cache\ArtifactCache;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Service\Cache\ArtifactCache;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Files\AppData\IAppDataFactory;
 use OCP\IAppConfig;

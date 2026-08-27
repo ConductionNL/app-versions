@@ -55,7 +55,7 @@ export type PrefillBindPayload = {
 	assetPattern: string
 }
 
-const DISCOVER = '/ocs/v2.php/apps/app_versions/api/discover'
+const DISCOVER = '/ocs/v2.php/apps/versioniq/api/discover'
 
 const MIN_QUERY_LENGTH = 2
 const MAX_QUERY_LENGTH = 100
@@ -97,7 +97,7 @@ const validationHint = computed(() => {
 		return ''
 	}
 	if (trimmedLength < MIN_QUERY_LENGTH) {
-		return t('app_versions', 'Type at least {min} characters to search.', { min: MIN_QUERY_LENGTH })
+		return t('versioniq', 'Type at least {min} characters to search.', { min: MIN_QUERY_LENGTH })
 	}
 	return ''
 })
@@ -112,7 +112,7 @@ const bestInstallableCandidate = (hit: DiscoveryHit): DiscoveryCandidate | null 
 
 const notInstallableReason = (hit: DiscoveryHit): string => {
 	return hit.sourceCandidates[0]?.installableReason
-		?? t('app_versions', 'No installable source was found for this app.')
+		?? t('versioniq', 'No installable source was found for this app.')
 }
 
 /**
@@ -178,7 +178,7 @@ const runSearch = async (trimmedQuery: string): Promise<void> => {
 		if (caught instanceof DOMException && caught.name === 'AbortError') {
 			return
 		}
-		requestError.value = caught instanceof Error ? caught.message : t('app_versions', 'Could not search for apps.')
+		requestError.value = caught instanceof Error ? caught.message : t('versioniq', 'Could not search for apps.')
 		results.value = []
 		hasSearched.value = true
 	} finally {
@@ -253,16 +253,16 @@ const handleOpenTrusted = (): void => {
 
 <template>
 	<div :class="$style.panel">
-		<h3>{{ t('app_versions', 'Discover apps') }}</h3>
+		<h3>{{ t('versioniq', 'Discover apps') }}</h3>
 		<p :class="$style.hint">
-			{{ t('app_versions', 'Search the Nextcloud App Store and your configured GitHub sources for apps to install or manage.') }}
+			{{ t('versioniq', 'Search the Nextcloud App Store and your configured GitHub sources for apps to install or manage.') }}
 		</p>
 
 		<div :class="$style.controls">
 			<NcTextField
 				v-model="query"
-				:label="t('app_versions', 'Search apps')"
-				:placeholder="t('app_versions', 'e.g. openregister')"
+				:label="t('versioniq', 'Search apps')"
+				:placeholder="t('versioniq', 'e.g. openregister')"
 				data-testid="discover-search-input" />
 			<p v-if="validationHint" :class="$style.validationHint" data-testid="discover-validation-hint">
 				{{ validationHint }}
@@ -270,15 +270,15 @@ const handleOpenTrusted = (): void => {
 
 			<NcSelect
 				v-model="sourceFilter"
-				:input-label="t('app_versions', 'Sources')"
+				:input-label="t('versioniq', 'Sources')"
 				:options="providerOptions"
 				:reduce="(option) => option.id"
 				label="label"
 				:multiple="true"
-				:placeholder="t('app_versions', 'All sources')" />
+				:placeholder="t('versioniq', 'All sources')" />
 
 			<NcCheckboxRadioSwitch v-model="installedOnly" data-testid="discover-installed-only">
-				{{ t('app_versions', 'Installed apps only') }}
+				{{ t('versioniq', 'Installed apps only') }}
 			</NcCheckboxRadioSwitch>
 		</div>
 
@@ -295,7 +295,7 @@ const handleOpenTrusted = (): void => {
 					:class="$style.dismissButton"
 					data-testid="discover-dismiss-provider-error"
 					@click="dismissProviderError(entry.providerId)">
-					{{ t('app_versions', 'Dismiss') }}
+					{{ t('versioniq', 'Dismiss') }}
 				</button>
 			</div>
 		</NcNoteCard>
@@ -305,15 +305,15 @@ const handleOpenTrusted = (): void => {
 			role="status"
 			data-testid="discover-loading">
 			<NcLoadingIcon :size="20" />
-			<span>{{ t('app_versions', 'Searching…') }}</span>
+			<span>{{ t('versioniq', 'Searching…') }}</span>
 		</p>
 		<NcNoteCard v-else-if="requestError" type="error" data-testid="discover-error">
 			{{ requestError }}
 		</NcNoteCard>
 		<p v-else-if="hasSearched && results.length === 0" :class="$style.status" data-testid="discover-empty">
-			{{ t('app_versions', 'No apps matched your search.') }}
+			{{ t('versioniq', 'No apps matched your search.') }}
 		</p>
-		<ul v-else-if="hasSearched && results.length > 0" :class="$style.results" :aria-label="t('app_versions', 'Discovery results')">
+		<ul v-else-if="hasSearched && results.length > 0" :class="$style.results" :aria-label="t('versioniq', 'Discovery results')">
 			<li v-for="hit in results" :key="hit.appId">
 				<article :class="$style.hitCard" :aria-label="hit.name" data-testid="discover-hit">
 					<div :class="$style.hitHeader">
@@ -343,7 +343,7 @@ const handleOpenTrusted = (): void => {
 						</span>
 					</div>
 					<p v-if="hit.installedVersion" :class="$style.installedBadge" data-testid="discover-installed-version">
-						{{ t('app_versions', 'Installed: {version}', { version: hit.installedVersion }) }}
+						{{ t('versioniq', 'Installed: {version}', { version: hit.installedVersion }) }}
 					</p>
 
 					<div :class="$style.hitActions">
@@ -351,18 +351,18 @@ const handleOpenTrusted = (): void => {
 							type="primary"
 							data-testid="discover-open-app"
 							@click="handleOpen(hit.appId)">
-							{{ t('app_versions', 'Open version picker') }}
+							{{ t('versioniq', 'Open version picker') }}
 						</NcButton>
 						<NcButton v-else-if="bestInstallableCandidate(hit)"
 							type="primary"
 							data-testid="discover-install"
 							@click="handleInstall(hit)">
-							{{ t('app_versions', 'Install…') }}
+							{{ t('versioniq', 'Install…') }}
 						</NcButton>
 						<div v-else :class="$style.notInstallable" data-testid="discover-not-installable">
 							<p>{{ notInstallableReason(hit) }}</p>
 							<NcButton type="tertiary" data-testid="discover-open-trusted" @click="handleOpenTrusted">
-								{{ t('app_versions', 'Go to Trusted sources') }}
+								{{ t('versioniq', 'Go to Trusted sources') }}
 							</NcButton>
 						</div>
 					</div>
@@ -370,7 +370,7 @@ const handleOpenTrusted = (): void => {
 			</li>
 		</ul>
 		<p v-else :class="$style.status" data-testid="discover-idle">
-			{{ t('app_versions', 'Type an app name to search across your configured sources.') }}
+			{{ t('versioniq', 'Type an app name to search across your configured sources.') }}
 		</p>
 	</div>
 </template>

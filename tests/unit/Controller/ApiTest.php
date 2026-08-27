@@ -2,23 +2,24 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Controller;
+namespace OCA\Versioniq\Tests\Unit\Controller;
 
-use OCA\AppVersions\Controller\ApiController;
-use OCA\AppVersions\Db\AuditEntry;
-use OCA\AppVersions\Db\AuditEntryMapper;
-use OCA\AppVersions\Db\PatMapper;
-use OCA\AppVersions\Service\Advisory\AdvisoryService;
-use OCA\AppVersions\Service\AutoUpdate\AutoUpdateSettingsStore;
-use OCA\AppVersions\Service\Cache\ArtifactCache;
-use OCA\AppVersions\Service\Discovery\DiscoveryAggregator;
-use OCA\AppVersions\Service\InstallerService;
-use OCA\AppVersions\Service\Pat\PatDeeplinkBuilder;
-use OCA\AppVersions\Service\Pat\PatExpiryEvaluator;
-use OCA\AppVersions\Service\Pat\PatManager;
-use OCA\AppVersions\Service\Pat\PatValidator;
-use OCA\AppVersions\Service\Pin\PinStore;
-use OCA\AppVersions\Service\Policy\PolicyStore;
+use OCA\Versioniq\Controller\ApiController;
+use OCA\Versioniq\Db\AuditEntry;
+use OCA\Versioniq\Db\AuditEntryMapper;
+use OCA\Versioniq\Db\PatMapper;
+use OCA\Versioniq\Service\Advisory\AdvisoryResultStore;
+use OCA\Versioniq\Service\Advisory\AdvisorySettingsStore;
+use OCA\Versioniq\Service\AutoUpdate\AutoUpdateSettingsStore;
+use OCA\Versioniq\Service\Cache\ArtifactCache;
+use OCA\Versioniq\Service\Discovery\DiscoveryAggregator;
+use OCA\Versioniq\Service\InstallerService;
+use OCA\Versioniq\Service\Pat\PatDeeplinkBuilder;
+use OCA\Versioniq\Service\Pat\PatExpiryEvaluator;
+use OCA\Versioniq\Service\Pat\PatManager;
+use OCA\Versioniq\Service\Pat\PatValidator;
+use OCA\Versioniq\Service\Pin\PinStore;
+use OCA\Versioniq\Service\Policy\PolicyStore;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IGroupManager;
@@ -54,7 +55,7 @@ final class ApiTest extends TestCase {
 		?ArtifactCache $artifactCache = null,
 	): ApiController {
 		return new ApiController(
-			'app_versions',
+			'versioniq',
 			$request ?? $this->createMock(IRequest::class),
 			$this->createMock(InstallerService::class),
 			$this->createMock(IGroupManager::class),
@@ -66,7 +67,8 @@ final class ApiTest extends TestCase {
 			$this->createMock(PatDeeplinkBuilder::class),
 			$this->createMock(PatExpiryEvaluator::class),
 			$this->createMock(DiscoveryAggregator::class),
-			$this->createMock(AdvisoryService::class),
+			$this->createMock(AdvisoryResultStore::class),
+			$this->createMock(AdvisorySettingsStore::class),
 			$auditEntryMapper ?? $this->createMock(AuditEntryMapper::class),
 			$pinStore ?? $this->createMock(PinStore::class),
 			$appManager ?? $this->createMock(IAppManager::class),
@@ -100,7 +102,7 @@ final class ApiTest extends TestCase {
 		$groupManager->method('isAdmin')->with($uid)->willReturn(true);
 
 		return new ApiController(
-			'app_versions',
+			'versioniq',
 			$request,
 			$installer,
 			$groupManager,
@@ -112,7 +114,8 @@ final class ApiTest extends TestCase {
 			$this->createMock(PatDeeplinkBuilder::class),
 			$this->createMock(PatExpiryEvaluator::class),
 			$this->createMock(DiscoveryAggregator::class),
-			$this->createMock(AdvisoryService::class),
+			$this->createMock(AdvisoryResultStore::class),
+			$this->createMock(AdvisorySettingsStore::class),
 			$auditEntryMapper ?? $this->createMock(AuditEntryMapper::class),
 			$pinStore ?? $this->createMock(PinStore::class),
 			$appManager ?? $this->createMock(IAppManager::class),
@@ -182,9 +185,12 @@ final class ApiTest extends TestCase {
 		$request = $this->createMock(IRequest::class);
 		$request->method('getParam')->willReturnCallback(
 			static fn (string $name, mixed $default = null): mixed => match ($name) {
+				// `repo` is a declared parameter now, so it is NOT mocked here —
+				// this test exercises the omitted case, which the parameter's
+				// own null default provides. A leftover 'repo' => null entry
+				// would look like it were feeding the method and feed nothing.
 				'forge' => 'github',
 				'owner' => 'ConductionNL',
-				'repo' => null,
 				default => $default,
 			}
 		);
@@ -421,7 +427,7 @@ final class ApiTest extends TestCase {
 
 		$pinStore = $this->createMock(PinStore::class);
 		$pinStore->method('all')->willReturn([
-			'openregister' => new \OCA\AppVersions\Service\Pin\Pin('2.3.0', 'alice', '2026-06-11T12:00:00+00:00'),
+			'openregister' => new \OCA\Versioniq\Service\Pin\Pin('2.3.0', 'alice', '2026-06-11T12:00:00+00:00'),
 		]);
 
 		$appManager = $this->createMock(IAppManager::class);
@@ -469,7 +475,7 @@ final class ApiTest extends TestCase {
 
 		$policyStore = $this->createMock(PolicyStore::class);
 		$policyStore->method('all')->willReturn([
-			'openregister' => new \OCA\AppVersions\Service\Policy\Policy('patch', 'alice', '2026-07-23T00:00:00+00:00'),
+			'openregister' => new \OCA\Versioniq\Service\Policy\Policy('patch', 'alice', '2026-07-23T00:00:00+00:00'),
 		]);
 
 		$settingsStore = $this->createMock(AutoUpdateSettingsStore::class);
@@ -566,9 +572,12 @@ final class ApiTest extends TestCase {
 
 	public function testUpdateAutoUpdateSettingsWritesEnabledAndWindow(): void {
 		$request = $this->createMock(IRequest::class);
+		// `window` still arrives through stringParam()/getParam(), so its mock
+		// stays. `enabled` is a declared parameter now and is passed as an
+		// argument below — mocking it here would be mocking a path the method
+		// no longer reads.
 		$request->method('getParam')->willReturnCallback(
 			static fn (string $name, mixed $default = null): mixed => match ($name) {
-				'enabled' => '1',
 				'window' => '22:00-04:00',
 				default => $default,
 			}
@@ -581,7 +590,8 @@ final class ApiTest extends TestCase {
 		$settingsStore->method('getWindow')->willReturn('22:00-04:00');
 
 		$installer = $this->createMock(InstallerService::class);
-		$response = $this->buildAdminController($installer, $request, null, null, null, 'admin', null, $settingsStore)->updateAutoUpdateSettings();
+		$response = $this->buildAdminController($installer, $request, null, null, null, 'admin', null, $settingsStore)
+			->updateAutoUpdateSettings('1');
 
 		$this->assertSame(200, $response->getStatus());
 		$this->assertTrue($response->getData()['autoUpdateEnabled']);
@@ -590,15 +600,16 @@ final class ApiTest extends TestCase {
 
 	// --- dryRun decoupled from debug (see MODIFIED "Debug Mode") ---
 
+	// `debug` and `dryRun` are now DECLARED PARAMETERS of installVersion() rather
+	// than values read out of the request with getParam(), so these tests pass
+	// them as arguments. Nextcloud binds them from the same merged request
+	// parameters at runtime, so the production behaviour is unchanged — but a
+	// unit test calls the method directly, and a getParam() mock no longer
+	// reaches it. Leaving the mocks in place would have left these three tests
+	// silently exercising the DEFAULTS while still passing their status
+	// assertions.
 	public function testInstallVersionSendsExplicitDryRunFalseWithDebugTrueForARealInstallWithDebugTimeline(): void {
 		$request = $this->createMock(IRequest::class);
-		$request->method('getParam')->willReturnCallback(
-			static fn (string $name, mixed $default = null): mixed => match ($name) {
-				'debug' => '1',
-				'dryRun' => '0',
-				default => $default,
-			}
-		);
 
 		$installer = $this->createMock(InstallerService::class);
 		$installer->expects($this->once())
@@ -609,7 +620,8 @@ final class ApiTest extends TestCase {
 				'payload' => ['appId' => 'openregister', 'toVersion' => '2.3.0', 'dryRun' => false],
 			]);
 
-		$response = $this->buildAdminController($installer, $request)->installVersion('openregister', '2.3.0');
+		$response = $this->buildAdminController($installer, $request)
+			->installVersion('openregister', '2.3.0', null, '1', '0');
 
 		$this->assertSame(200, $response->getStatus());
 		$this->assertArrayNotHasKey('deprecationNotice', $response->getData());
@@ -617,12 +629,6 @@ final class ApiTest extends TestCase {
 
 	public function testInstallVersionSendsExplicitDryRunTrueWithNoDebugForASilentDryRun(): void {
 		$request = $this->createMock(IRequest::class);
-		$request->method('getParam')->willReturnCallback(
-			static fn (string $name, mixed $default = null): mixed => match ($name) {
-				'dryRun' => '1',
-				default => $default,
-			}
-		);
 
 		$installer = $this->createMock(InstallerService::class);
 		$installer->expects($this->once())
@@ -633,20 +639,19 @@ final class ApiTest extends TestCase {
 				'payload' => ['appId' => 'openregister', 'toVersion' => '2.3.0', 'dryRun' => true],
 			]);
 
-		$response = $this->buildAdminController($installer, $request)->installVersion('openregister', '2.3.0');
+		$response = $this->buildAdminController($installer, $request)
+			->installVersion('openregister', '2.3.0', null, '0', '1');
 
 		$this->assertSame(200, $response->getStatus());
 		$this->assertArrayNotHasKey('deprecationNotice', $response->getData());
 	}
 
+	// The one that matters most: `dryRun` is OMITTED here, not passed as '0'.
+	// That distinction is the whole legacy path — only an absent dryRun lets
+	// debug=1 still imply a dry run. A '0' default on the parameter would make
+	// this test pass while the behaviour it pins was gone.
 	public function testInstallVersionLegacyDebugAloneStillImpliesDryRunAndAddsADeprecationNotice(): void {
 		$request = $this->createMock(IRequest::class);
-		$request->method('getParam')->willReturnCallback(
-			static fn (string $name, mixed $default = null): mixed => match ($name) {
-				'debug' => '1',
-				default => $default,
-			}
-		);
 
 		$installer = $this->createMock(InstallerService::class);
 		$installer->expects($this->once())
@@ -657,7 +662,8 @@ final class ApiTest extends TestCase {
 				'payload' => ['appId' => 'openregister', 'toVersion' => '2.3.0', 'dryRun' => true],
 			]);
 
-		$response = $this->buildAdminController($installer, $request)->installVersion('openregister', '2.3.0');
+		$response = $this->buildAdminController($installer, $request)
+			->installVersion('openregister', '2.3.0', null, '1');
 
 		$this->assertSame(200, $response->getStatus());
 		$this->assertArrayHasKey('deprecationNotice', $response->getData());

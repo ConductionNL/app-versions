@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Source;
+namespace OCA\Versioniq\Tests\Unit\Service\Source;
 
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Service\Audit\AuditLogger;
-use OCA\AppVersions\Service\Source\SourceBinding;
-use OCA\AppVersions\Service\Source\SourceBindingStore;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Service\Audit\AuditLogger;
+use OCA\Versioniq\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Source\SourceBindingStore;
 use OCP\IAppConfig;
 use OCP\IUser;
 use OCP\IUserSession;

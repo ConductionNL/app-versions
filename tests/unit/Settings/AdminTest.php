@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Settings;
+namespace OCA\Versioniq\Tests\Unit\Settings;
 
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Settings\Admin;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Settings\Admin;
 use OCP\AppFramework\Http\TemplateResponse;
 use PHPUnit\Framework\TestCase;
 
 final class AdminTest extends TestCase {
 	public function testGetSectionIsAppId(): void {
-		self::assertSame('app_versions', (new Admin())->getSection());
+		self::assertSame('versioniq', (new Admin())->getSection());
 	}
 
 	public function testGetPriorityIsInt(): void {

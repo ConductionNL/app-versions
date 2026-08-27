@@ -10,10 +10,10 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Service\Pat;
+namespace OCA\Versioniq\Service\Pat;
 
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Db\Pat;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Db\Pat;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Notification\IManager;
 use Psr\Log\LoggerInterface;
@@ -21,7 +21,7 @@ use Psr\Log\LoggerInterface;
 /**
  * Raises the owner-only `pat_expiring` / `pat_expired` notification for a
  * single crossed threshold. Read-only — it never mutates the PAT row; the
- * caller ({@see \OCA\AppVersions\BackgroundJob\PatExpiryWarningJob}) is
+ * caller ({@see \OCA\Versioniq\BackgroundJob\PatExpiryWarningJob}) is
  * responsible for persisting the ledger once notification succeeds.
  *
  * @psalm-api

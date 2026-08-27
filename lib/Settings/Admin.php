@@ -10,14 +10,14 @@ declare(strict_types=1);
  */
 
 
-namespace OCA\AppVersions\Settings;
+namespace OCA\Versioniq\Settings;
 
-use OCA\AppVersions\AppInfo\Application;
+use OCA\Versioniq\AppInfo\Application;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\Settings\ISettings;
 
 /**
- * Renders the App Versions Vue SPA as the body of its admin settings section.
+ * Renders the Versioniq Vue SPA as the body of its admin settings section.
  * The empty `renderAs` argument embeds the template inside the settings page
  * rather than as a standalone full-page app.
  *

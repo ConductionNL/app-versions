@@ -121,7 +121,6 @@
     </MixedAssignment>
     <MixedMethodCall>
       <code><![CDATA[setDefault]]></code>
-      <code><![CDATA[setNotnull]]></code>
     </MixedMethodCall>
     <UndefinedMethod>
       <code><![CDATA[getColumn]]></code>
@@ -158,20 +157,6 @@
     <RedundantCastGivenDocblockType>
       <code><![CDATA[(string)$installedVersion]]></code>
     </RedundantCastGivenDocblockType>
-    <RedundantFunctionCall>
-      <code><![CDATA[array_values]]></code>
-    </RedundantFunctionCall>
-  </file>
-  <file src="lib/Service/Advisory/AdvisoryService.php">
-    <ArgumentTypeCoercion>
-      <code><![CDATA[$operator]]></code>
-    </ArgumentTypeCoercion>
-    <InvalidNullableReturnType>
-      <code><![CDATA[bool]]></code>
-    </InvalidNullableReturnType>
-    <NullableReturnStatement>
-      <code><![CDATA[version_compare($version, $bound, $operator)]]></code>
-    </NullableReturnStatement>
     <RedundantFunctionCall>
       <code><![CDATA[array_values]]></code>
     </RedundantFunctionCall>
@@ -233,8 +218,8 @@
     <InvalidReturnStatement>
       <code><![CDATA[$this->errorEnvelope(
 				$this->isCoreProtectedApp($appId)
-					? 'This core app cannot be managed from App Versions.'
-					: 'This app cannot be managed from App Versions.',
+					? 'This core app cannot be managed from Versioniq.'
+					: 'This app cannot be managed from Versioniq.',
 				Http::STATUS_FORBIDDEN
 			)]]></code>
       <code><![CDATA[$this->errorEnvelope($error->getMessage(), Http::STATUS_BAD_REQUEST)]]></code>

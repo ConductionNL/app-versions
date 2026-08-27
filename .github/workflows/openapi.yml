@@ -9,6 +9,32 @@
 
 name: OpenAPI
 
+# This job had NEVER ONCE PASSED, for a reason that had nothing to do with this
+# repository's code:
+#
+#   PHP Fatal error: license: Unable to convert EUPL-1.2 to SPDX identifier
+#
+# nextcloud/openapi-extractor maps licences through a hardcoded match() in
+# src/Helpers.php that accepts agpl / mit / mpl / apache / gpl3 and five SPDX
+# spellings, and calls Logger::panic() — a fatal, not a warning — on anything
+# else. EUPL-1.2 is a valid SPDX identifier and is what every Conduction app
+# ships under, so the tool could not run against any of them. Upstream `main`
+# still had the same list on 2026-08-18.
+#
+# We do not get to wait on an upstream fix, and we do not get to disable a
+# check to hide it. So the tool is PATCHED at install time — see
+# vendor-bin/openapi-extractor/patches/ and the composer-patches wiring beside
+# it. The patch is pinned to the exact version this repo already pinned
+# (v1.8.7); if that pin moves and the patch stops applying, composer fails
+# LOUDLY rather than silently reverting to the broken behaviour.
+#
+# Two dishonest routes were rejected on the way: mislabelling the licence to
+# suit the tool, and marking the step continue-on-error so a broken job
+# reports green. The second is worse than the red.
+#
+# With the fatal gone the extractor reaches this app's controllers for the
+# first time and reports real findings about them. Those are ours, and the
+# trigger is back on so they stay visible.
 on: pull_request
 
 permissions:

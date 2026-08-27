@@ -11,10 +11,31 @@ jobs:
   quality:
     uses: ConductionNL/.github/.github/workflows/quality.yml@main
     with:
-      app-name: app-versions
+      # MUST equal <id>versioniq</id> in appinfo/info.xml, character for
+      # character. Renamed here in lockstep with that id — this input and the
+      # id are one value in two files, and a rename that moves only one of them
+      # breaks every leg of this workflow.
+      #
+      # Nextcloud requires the app DIRECTORY name to equal the app id. Checked
+      # out under any other name, `occ app:enable` fails with
+      #
+      #   App "<dir>" cannot be installed because appinfo file cannot be read.
+      #
+      # which reads like a malformed or missing info.xml and is nothing of the
+      # sort — the file is valid and simply not where that id says to look.
+      # Under the old id this mismatch killed all six PHPUnit legs and the E2E
+      # job at the install step, so not one of them ever ran a test.
+      app-name: versioniq
       php-version: "8.3"
       php-test-versions: '["8.3", "8.4"]'
-      nextcloud-test-refs: '["stable31", "stable32", "stable33"]'
+      # THE LIST IS THE WHOLE DECLARED RANGE. appinfo/info.xml declares
+      # <nextcloud min-version="32" max-version="34"/>, so 32, 33 and 34 each get
+      # a leg. The previous list ran stable31 — below the floor even before this
+      # change raised it — and had no stable34 leg at all, so the one major this
+      # app most needed to prove was the one nothing touched.
+      # stable34 leads because newman, playwright and journeydoc-capture all read
+      # `fromJSON(inputs.nextcloud-test-refs)[0]` as their single server.
+      nextcloud-test-refs: '["stable34", "stable32", "stable33"]'
       # This repo's PHP toolchain is the upstream Nextcloud app-template one:
       # php-cs-fixer + psalm (+ rector, phpunit). It has no phpcs.xml, no
       # phpmd.xml and no phpstan.neon, and correspondingly no `phpcs`, `phpmd`,
@@ -52,8 +73,40 @@ jobs:
       # Flip it back to `true` in the same commit that adds a collection.
       enable-newman: false
 
-      # additional-apps: '[]'  # Add app dependencies here if needed, e.g.:
-      # additional-apps: '[{"repo":"ConductionNL/openregister","app":"openregister","ref":"main"}]'
+      # ── notifications, because four e2e specs assert on its table ─────────
+      #
+      # jobs.spec.ts reads and clears `oc_notifications` to prove the
+      # auto-update job tells the admin what it did. That table is created by
+      # the `notifications` app, which is bundled into Nextcloud RELEASES but
+      # is a separate repo and is NOT present in a server GIT checkout — which
+      # is what this workflow installs.
+      #
+      # So those assertions failed with
+      #   SQLSTATE[42P01] relation "oc_notifications" does not exist
+      # i.e. the app under test was blamed for the absence of an integration
+      # that was never installed. Checking it out at the same stable branch the
+      # server runs makes the assertion measure what it claims to.
+      # `notes` is here for the same reason, found the same way. versions.spec
+      # picks it as a representative App Store app and failed with
+      #   waiting for locator('article').filter({ has: getByText('notes') })
+      # i.e. the app card was simply not in the list, because Notes is another
+      # separate repo absent from a server git checkout. It has no stableXX
+      # branches, so `main` is the only ref there is.
+      # `notes` was here and is deliberately gone. It is a separate repo whose
+      # info.xml declares min-version="33", while this matrix includes
+      # stable32 — so on two of the six PHPUnit cells it could never enable:
+      #   App "Notes" cannot be installed because it is not compatible with
+      #   this version of the server.
+      # That looked harmless only because a failed enable is currently a
+      # ::warning:: and the job carries on; ConductionNL/.github#355 makes it
+      # fail, which is correct — a suite running without the app it was told to
+      # install reports the absence as this repository's own failures.
+      #
+      # It was added so versions.spec had an installed App Store app to walk.
+      # `dashboard` serves that purpose with no compatibility floor at all,
+      # because Nextcloud bundles it — see the note at the top of that spec.
+      additional-apps: '[{"repo":"nextcloud/notifications","app":"notifications","ref":"stable34"}]'
+
       enable-sbom: true
 
       # ── E2E browser tests ────────────────────────────────────────────────
@@ -73,6 +126,32 @@ jobs:
       # first of the two reasons it was dark; the second is a real failure in
       # this repo that this change does not touch.
       enable-playwright: true
+
+      # ── The forge fixture, without which two thirds of the suite skips ────
+      #
+      # Ten spec files open with
+      #
+      #     test.skip(!(await fixtureAvailable(page)), 'forge fixture not running')
+      #
+      # and nothing in CI ever started it. On the first run in which this job
+      # executed at all (2026-08-19) the tally was
+      #
+      #     7 failed · 3 flaky · 66 skipped · 22 passed
+      #
+      # and "22 passed" is what a reader takes away. The 66 are the CLI
+      # commands, downgrade migration drift, the artifact cache, TOFU digest
+      # recording, install faults and rate-limited forges — most of what this
+      # app does. A skip whose reason has quietly stopped being true reads as a
+      # considered decision and is an unnoticed hole.
+      #
+      # `bootstrap.sh` cannot serve here: it assumes Nextcloud in a container
+      # named `av-e2e` joined to the fixture by a Docker network, and this job
+      # runs the PHP built-in server on the runner. `bootstrap-ci.sh` is the
+      # same wiring without Docker, and it EXITS NON-ZERO if the fixture does
+      # not come up — the seed step fails the job on that, which is the point.
+      # A fixture that silently fails to start would put those 66 tests back to
+      # skipping for a reason that is no longer true.
+      playwright-seed-command: "bash apps/versioniq/tests/e2e/fixtures/forge/bootstrap-ci.sh"
 
       # ── Hydra mechanical gates ───────────────────────────────────────────
       # `enable-hydra-gates` defaults to FALSE, so this tier has never executed

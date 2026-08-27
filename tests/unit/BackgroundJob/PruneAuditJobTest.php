@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Cron;
+namespace OCA\Versioniq\Tests\Unit\BackgroundJob;
 
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Cron\PruneAuditJob;
-use OCA\AppVersions\Db\AuditEntryMapper;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\BackgroundJob\PruneAuditJob;
+use OCA\Versioniq\Db\AuditEntryMapper;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;
 use PHPUnit\Framework\TestCase;

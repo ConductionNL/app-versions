@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Source;
+namespace OCA\Versioniq\Tests\Unit\Service\Source;
 
 use InvalidArgumentException;
-use OCA\AppVersions\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Source\SourceBinding;
 use PHPUnit\Framework\TestCase;
 
 final class SourceBindingTest extends TestCase {

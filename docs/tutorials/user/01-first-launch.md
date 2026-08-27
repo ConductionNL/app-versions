@@ -1,12 +1,12 @@
 ---
 sidebar_position: 1
-title: Who is App Versions for?
-description: App Versions is an admin tool — non-admins do not see it. This page explains where to go next.
+title: Who is Versioniq for?
+description: Versioniq is an admin tool — non-admins do not see it. This page explains where to go next.
 ---
 
-# Who is App Versions for?
+# Who is Versioniq for?
 
-App Versions is **admin-only**. It changes which versions of Nextcloud
+Versioniq is **admin-only**. It changes which versions of Nextcloud
 apps are installed on the server, so non-admin users do not see it and
 do not need to.
 
@@ -16,7 +16,7 @@ the actual walkthroughs live.
 
 If you are a regular user and something is broken in another app
 ("feature X disappeared after the last update"), let your admin know.
-With App Versions installed, the fix is often a one-click rollback of
+With Versioniq installed, the fix is often a one-click rollback of
 that app rather than a wait for the next release.
 
 > **Status: in development.** Once the admin UI lands, this page stays
