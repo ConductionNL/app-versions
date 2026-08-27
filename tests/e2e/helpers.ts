@@ -91,16 +91,79 @@ export async function versionsLoaded(page: Page): Promise<boolean> {
 	return (await rows.count()) > 0
 }
 
-/** Reads an app config value straight from the server, to assert persistence. */
+/**
+ * Reads an app config value straight from the server, to assert persistence.
+ *
+ * ⚠️ THROWS when the READ itself fails, and it must. This previously did
+ * `if (!res.ok()) return null`, which is the same defect #233 fixed in
+ * `runJob`: a broken fixture wearing the words of a failed assertion.
+ *
+ * Every one of the eight specs failing on development goes through here, and
+ * every one of them fails as though the FEATURE did nothing:
+ *
+ *     expect(pin.driftedTo ?? …, 'drift recorded on the pin').toBeTruthy()
+ *     expect(binding.forge).toBe('codeberg')          // Received: undefined
+ *     expect(binding.sha256?.['1.0.1'], …).toMatch(…) // Received: undefined
+ *
+ * A null read and a feature that wrote nothing are indistinguishable once the
+ * value reaches `JSON.parse(… ?? '{}')`, so all eight blame the app for what
+ * may be a transport, auth, or provisioning_api problem. They need different
+ * fixes, so they must not wear the same words.
+ *
+ * Worse, the sibling test that asserts an ABSENCE — "records no drift while
+ * the installed version matches the pin" — PASSES on a null read, because a
+ * read that returned nothing looks exactly like a job that recorded nothing.
+ * That is the failure mode #233's own docblock warns about, one helper over.
+ *
+ * A genuinely unset key is not an error: OCS answers 200 with an ocs.meta
+ * statuscode of 404, and that still returns null.
+ */
+/**
+ * 5xx from this endpoint is TRANSIENT, and treating it as fatal is its own kind
+ * of wrong answer.
+ *
+ * Measured on run 33073... of this branch: the loud error above fired five
+ * times and every one of those specs PASSED on retry — nine flaky specs in a
+ * single run, all of them this same read. Nextcloud answers 503 while an app
+ * install or upgrade is in flight, which is exactly when these fixtures run.
+ *
+ * So retry the 5xx band, briefly and boundedly. A persistent outage still
+ * throws with the same words; what stops is a spec being marked flaky because
+ * the server was mid-install for 200ms. 4xx is NOT retried — an auth or
+ * permission failure is a real answer and repeating it only hides it.
+ */
+const CONFIG_READ_ATTEMPTS = 4
+
 export async function appConfigValue(page: Page, key: string): Promise<string | null> {
-	const res = await page.request.get(
-		`/ocs/v2.php/apps/provisioning_api/api/v1/config/apps/versioniq/${key}?format=json`,
-		{ headers: { 'OCS-APIRequest': 'true' } },
-	)
+	const url = `/ocs/v2.php/apps/provisioning_api/api/v1/config/apps/versioniq/${key}?format=json`
+	let res = await page.request.get(url, { headers: { 'OCS-APIRequest': 'true' } })
+	for (let attempt = 2; attempt <= CONFIG_READ_ATTEMPTS && res.status() >= 500; attempt++) {
+		await page.waitForTimeout(250 * (attempt - 1))
+		res = await page.request.get(url, { headers: { 'OCS-APIRequest': 'true' } })
+	}
 	if (!res.ok()) {
-		return null
+		const transient = res.status() >= 500
+		throw new Error(
+			`appConfigValue(${key}): the config READ failed with HTTP ${res.status()}`
+			+ (transient ? ` after ${CONFIG_READ_ATTEMPTS} attempts` : '')
+			+ '. The value was never retrieved, so nothing can be concluded about whether '
+			+ 'the app persisted it. This is a broken fixture, not a failing assertion — '
+			+ (transient
+				? 'a 5xx that survives four attempts is an unhealthy server, not a race — '
+				+ 'check the instance came up and is not stuck in maintenance mode. '
+				: 'check that provisioning_api is enabled and that the request is authenticated. ')
+			+ `URL: ${url}`,
+		)
 	}
 	const body = await res.json()
+	const status = body?.ocs?.meta?.statuscode
+	// 404 here means the key is genuinely unset, which is a real answer.
+	if (status !== undefined && status !== 100 && status !== 200 && status !== 404) {
+		throw new Error(
+			`appConfigValue(${key}): OCS returned statuscode ${status} `
+			+ `(${body?.ocs?.meta?.message ?? 'no message'}). The read did not succeed.`,
+		)
+	}
 	const data = body?.ocs?.data?.data
 	return typeof data === 'string' && data !== '' ? data : null
 }
