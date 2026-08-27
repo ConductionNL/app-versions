@@ -176,9 +176,36 @@ test.describe('background jobs', () => {
 		await occ('config:app:set', 'versioniq', `pin.${FIXTURE_APP}`, '--value',
 			JSON.stringify({ version: '1.0.0', pinnedBy: 'admin', pinnedAt: '2026-01-01T00:00:00+00:00' }))
 
+		// ⚠️ ASSERT THE SETUP BEFORE ASSERTING THE BEHAVIOUR.
+		//
+		// This test failed for a long time saying only "drift recorded on the
+		// pin: Received: null", which reads as "PinDriftHandler is broken" —
+		// and PinDriftHandler is one of FOUR links that can produce exactly
+		// that. The job silently does nothing when PinStore::all() does not
+		// return this app, when getAppVersion() gives '', and when the pin's
+		// version already equals the installed one; only the fourth case is
+		// the handler. The instance log carries no warning in any of them,
+		// because the job's catch only fires on a Throwable.
+		//
+		// So the preconditions are asserted here, where a failure can still
+		// name which link broke.
+		const seeded = JSON.parse((await appConfigValue(page, `pin.${FIXTURE_APP}`)) ?? '{}')
+		expect(seeded.version, 'the pin seed must be readable back before the job runs').toBe('1.0.0')
+
+		const installed = (await sql(
+			`SELECT configvalue FROM oc_appconfig WHERE appid='${FIXTURE_APP}' AND configkey='installed_version'`,
+		)).trim()
+		expect(installed, `${FIXTURE_APP} must be installed for reconcile to have anything to compare`).not.toBe('')
+		expect(installed, 'installed version must DIFFER from the pin, or there is no drift to detect').not.toBe(seeded.version)
+
 		await runJob('PinReconcileJob')
 		const pin = JSON.parse((await appConfigValue(page, `pin.${FIXTURE_APP}`)) ?? '{}')
-		expect(pin.driftedTo ?? pin.driftDetected ?? pin.drifted ?? null, 'drift recorded on the pin').toBeTruthy()
+		// `driftedTo` is the field Pin::toArray() actually serialises — see
+		// PinStore::markDrift() / Pin::withDrift(). The old assertion also
+		// accepted `driftDetected` and `drifted`, neither of which any code
+		// writes: a test that guesses three field names cannot fail for the
+		// right reason.
+		expect(pin.driftedTo, 'drift recorded on the pin').toBe(installed)
 	})
 
 	test('the reconcile job records no drift while the installed version matches the pin', async ({ page }) => {
