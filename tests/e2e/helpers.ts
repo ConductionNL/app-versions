@@ -118,15 +118,40 @@ export async function versionsLoaded(page: Page): Promise<boolean> {
  * A genuinely unset key is not an error: OCS answers 200 with an ocs.meta
  * statuscode of 404, and that still returns null.
  */
+/**
+ * 5xx from this endpoint is TRANSIENT, and treating it as fatal is its own kind
+ * of wrong answer.
+ *
+ * Measured on run 33073... of this branch: the loud error above fired five
+ * times and every one of those specs PASSED on retry — nine flaky specs in a
+ * single run, all of them this same read. Nextcloud answers 503 while an app
+ * install or upgrade is in flight, which is exactly when these fixtures run.
+ *
+ * So retry the 5xx band, briefly and boundedly. A persistent outage still
+ * throws with the same words; what stops is a spec being marked flaky because
+ * the server was mid-install for 200ms. 4xx is NOT retried — an auth or
+ * permission failure is a real answer and repeating it only hides it.
+ */
+const CONFIG_READ_ATTEMPTS = 4
+
 export async function appConfigValue(page: Page, key: string): Promise<string | null> {
 	const url = `/ocs/v2.php/apps/provisioning_api/api/v1/config/apps/versioniq/${key}?format=json`
-	const res = await page.request.get(url, { headers: { 'OCS-APIRequest': 'true' } })
+	let res = await page.request.get(url, { headers: { 'OCS-APIRequest': 'true' } })
+	for (let attempt = 2; attempt <= CONFIG_READ_ATTEMPTS && res.status() >= 500; attempt++) {
+		await page.waitForTimeout(250 * (attempt - 1))
+		res = await page.request.get(url, { headers: { 'OCS-APIRequest': 'true' } })
+	}
 	if (!res.ok()) {
+		const transient = res.status() >= 500
 		throw new Error(
-			`appConfigValue(${key}): the config READ failed with HTTP ${res.status()}. `
-			+ 'The value was never retrieved, so nothing can be concluded about whether '
+			`appConfigValue(${key}): the config READ failed with HTTP ${res.status()}`
+			+ (transient ? ` after ${CONFIG_READ_ATTEMPTS} attempts` : '')
+			+ '. The value was never retrieved, so nothing can be concluded about whether '
 			+ 'the app persisted it. This is a broken fixture, not a failing assertion — '
-			+ 'check that provisioning_api is enabled and that the request is authenticated. '
+			+ (transient
+				? 'a 5xx that survives four attempts is an unhealthy server, not a race — '
+				+ 'check the instance came up and is not stuck in maintenance mode. '
+				: 'check that provisioning_api is enabled and that the request is authenticated. ')
 			+ `URL: ${url}`,
 		)
 	}
