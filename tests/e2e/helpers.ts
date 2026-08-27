@@ -376,12 +376,18 @@ export async function installFixture(
 	// maintenance mode, and the next install then sees the flag already set,
 	// declines to own it, proceeds anyway and leaves it on. Nothing reports it.
 	//
-	// So: only when the CLI claims success. A deliberate failure (tamper, wrong
-	// id, a refused guard) exits non-zero and is left exactly as it was.
-	const claimedSuccess = code === 0
+	// So: only when the install CLAIMS TO HAVE INSTALLED. `installStatus` is the
+	// marker the specs themselves assert on (`not.toBe('installed')` for the
+	// refused cases), and gating on it rather than on the exit code alone
+	// matters — `install-effects.spec.ts` calls this for an appId-mismatch
+	// archive and asserts nothing at all about the outcome. Were that path ever
+	// to exit 0 while reporting a failure, keying off `code` would turn a
+	// passing test into a thrown error here. A deliberate failure (tamper,
+	// wrong id, a refused guard) is left exactly as it was.
 	const landed = () => body?.installedVersion === version || body?.updateType === 'none'
+	const claimsInstalled = code === 0 && body?.installStatus === 'installed'
 
-	if (claimedSuccess && !landed()) {
+	if (claimsInstalled && !landed()) {
 		// Clear the stuck flag before retrying — this is the state that makes
 		// the second attempt a no-op too.
 		await occ('maintenance:mode', '--off')
