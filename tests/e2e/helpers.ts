@@ -401,12 +401,52 @@ function reportDbFailure(helper: string, statement: string, code: number, stderr
 	)
 }
 
-/** Force-executes an app background job by class-name substring, once. */
+/**
+ * Force-executes an app background job by class-name substring, once.
+ *
+ * ⚠️ THROWS when no matching row exists, and it must. This previously read
+ * `if (id) { … }`, so a missing `oc_jobs` row made the whole helper a silent
+ * no-op: the job never ran, the test carried on, and the assertion that
+ * followed failed with whatever the job was supposed to have produced —
+ * "drift recorded on the pin" rather than "PinReconcileJob was never
+ * executed". The two need different fixes, so they must not wear the same
+ * words. A test asserting an ABSENCE fails even worse: it passes, because a
+ * job that never ran records nothing.
+ *
+ * The row can genuinely go missing. This app has moved its job classes twice
+ * — `lib/Cron` into `lib/BackgroundJob` (#231) and the app_versions ->
+ * versioniq rename (#187) — and each move orphans the rows registered under
+ * the old class string. RemoveRetiredCronJobs cleans up the first; nothing
+ * cleans an `OCA\AppVersions\…` leftover.
+ *
+ * The match is also asserted to be UNIQUE. `LIKE '%…%' LIMIT 1` with no
+ * ORDER BY picks an arbitrary row, so an orphan left beside the live job
+ * could shadow it and be executed instead — silently, since executing a job
+ * whose class no longer exists does nothing observable.
+ */
 export async function runJob(classSubstring: string): Promise<void> {
-	const id = (await sql(`SELECT id FROM oc_jobs WHERE class LIKE '%${classSubstring}%' LIMIT 1`)).split('\t')[0].trim()
-	if (id) {
-		await occ('background-job:execute', id, '--force-execute')
+	const rows = (await sql(`SELECT id, class FROM oc_jobs WHERE class LIKE '%${classSubstring}%'`))
+		.split('\n')
+		.map((line) => line.trim())
+		.filter((line) => line.length > 0)
+
+	if (rows.length === 0) {
+		throw new Error(
+			`runJob(${classSubstring}): no oc_jobs row matches. The job was NOT executed. `
+			+ 'This is a broken fixture, not a failing assertion — check that the app is '
+			+ 'enabled and that the class is still the one registered in appinfo/info.xml.',
+		)
 	}
+	if (rows.length > 1) {
+		throw new Error(
+			`runJob(${classSubstring}): ${rows.length} oc_jobs rows match, so which one runs `
+			+ `is arbitrary. Rows: ${rows.join(' | ')}. An orphaned row from a class rename `
+			+ 'must be removed before this can mean anything.',
+		)
+	}
+
+	const id = rows[0].split('\t')[0].trim()
+	await occ('background-job:execute', id, '--force-execute')
 }
 
 /** The fixture app's clean source binding, with no recorded digests. */
