@@ -546,16 +546,38 @@ function reportDbFailure(helper: string, statement: string, code: number, stderr
  * whose class no longer exists does nothing observable.
  */
 export async function runJob(classSubstring: string): Promise<void> {
-	const rows = (await sql(`SELECT id, class FROM oc_jobs WHERE class LIKE '%${classSubstring}%'`))
+	// ⚠️ ANCHORED ON THIS APP'S OWN NAMESPACE, not just the class name.
+	//
+	// `LIKE '%PinReconcileJob%'` also matches the rows this app left behind
+	// when it was renamed. Reproduced on a live instance 2026-08-27, oc_jobs
+	// held BOTH:
+	//
+	//   OCA\Versioniq\BackgroundJob\PinReconcileJob   <- live, never run
+	//   OCA\AppVersions\Cron\PinReconcileJob          <- orphan, ran daily
+	//
+	// and executing the orphan is a SILENT no-op that occ reports as success:
+	// it prints a fresh "Last executed" timestamp and changes nothing, because
+	// the class behind the row no longer exists. The drift test then failed
+	// saying drift was not recorded — blaming PinDriftHandler, which is
+	// correct and demonstrably records drift when the LIVE row is executed.
+	//
+	// Anchoring on `OCA\Versioniq\` cut the match from 2 rows to 1 on that
+	// instance. `%\\%` still allows either sub-namespace (BackgroundJob today,
+	// Cron before #231), so a future move within the app keeps working.
+	const rows = (await sql(
+		`SELECT id, class FROM oc_jobs WHERE class LIKE 'OCA\\\\Versioniq\\\\%${classSubstring}%'`,
+	))
 		.split('\n')
 		.map((line) => line.trim())
 		.filter((line) => line.length > 0)
 
 	if (rows.length === 0) {
 		throw new Error(
-			`runJob(${classSubstring}): no oc_jobs row matches. The job was NOT executed. `
-			+ 'This is a broken fixture, not a failing assertion — check that the app is '
-			+ 'enabled and that the class is still the one registered in appinfo/info.xml.',
+			`runJob(${classSubstring}): no oc_jobs row matches OCA\\Versioniq\\…${classSubstring}. `
+			+ 'The job was NOT executed. This is a broken fixture, not a failing assertion — '
+			+ 'check that the app is enabled and that the class is still the one registered in '
+			+ 'appinfo/info.xml. (A row under a PRE-RENAME namespace is deliberately not '
+			+ 'matched: executing it would do nothing and report success.)',
 		)
 	}
 	if (rows.length > 1) {

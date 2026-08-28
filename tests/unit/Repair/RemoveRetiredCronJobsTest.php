@@ -39,16 +39,22 @@ use RuntimeException;
 final class RemoveRetiredCronJobsTest extends TestCase {
 
 	/**
-	 * The step removes BOTH retired classes, by their full old names.
+	 * The step removes every retired class, by its full old name.
 	 *
 	 * This asserts the ARGUMENTS, not just the call count. The whole value of
 	 * the step is which strings it passes: a version that removed the NEW
 	 * class names would satisfy a count-only assertion while deleting the
 	 * registrations the app actually needs.
 	 *
+	 * Two namespaces are retired, not one. `OCA\Versioniq\Cron` is what the
+	 * Cron -> BackgroundJob move left behind; `OCA\AppVersions` is what the
+	 * app_versions -> versioniq RENAME left behind, and nothing cleaned that
+	 * one until now. All five were observed on a live instance with a recent
+	 * last_run — scheduled, and failing silently on every tick.
+	 *
 	 * @return void
 	 */
-	public function testRemovesBothRetiredClassesByName(): void {
+	public function testRemovesEveryRetiredClassByName(): void {
 		$removed = [];
 
 		$jobList = $this->createMock(IJobList::class);
@@ -65,13 +71,24 @@ final class RemoveRetiredCronJobsTest extends TestCase {
 			[
 				'OCA\Versioniq\Cron\PinReconcileJob',
 				'OCA\Versioniq\Cron\PruneAuditJob',
+				'OCA\AppVersions\BackgroundJob\AdvisoryRefreshJob',
+				'OCA\AppVersions\BackgroundJob\AutoUpdateJob',
+				'OCA\AppVersions\BackgroundJob\PatExpiryWarningJob',
+				'OCA\AppVersions\Cron\PinReconcileJob',
+				'OCA\AppVersions\Cron\PruneAuditJob',
 			],
 			$removed,
 			'the step must remove the OLD fully-qualified names — removing the new ones would '
 			. 'delete the registrations the app depends on'
 		);
 
-	}//end testRemovesBothRetiredClassesByName()
+		$this->assertNotContains(
+			'OCA\Versioniq\BackgroundJob\PinReconcileJob',
+			$removed,
+			'the LIVE class must never be removed: that is the row the app actually runs'
+		);
+
+	}//end testRemovesEveryRetiredClassByName()
 
 	/**
 	 * A failure on one class does not abort the step or the upgrade.
