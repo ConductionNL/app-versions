@@ -188,7 +188,11 @@ test.describe('background jobs', () => {
 	// cannot be determined from outside it. Diagnosing further needs a CI run
 	// that dumps the job's own view; until then this is skipped rather than
 	// left red, because a permanently red gate teaches people to ignore it.
-	test.fixme('the reconcile job flags drift when the installed version leaves the pin', async ({ page }) => {
+	test('the reconcile job flags drift when the installed version leaves the pin', async ({ page }) => {
+		test.fixme(
+			true,
+			'on CI `driftedTo` is absent entirely — not "0", not stale — while every precondition below passes. Four hypotheses were eliminated by measurement: the orphaned job row, getAppVersion() returning "" (it returns "0", and that path DOES record drift), an app-id mismatch, and the config read path. What remains points at PinStore::all() not returning the app on that instance, which is instance state and cannot be determined from outside it. Diagnosing further needs a CI run that dumps the job\'s own view.',
+		)
 		// Install 1.0.1 for real (files + version match), then seed a pin at an
 		// earlier version — as if the app had been pinned at 1.0.0 and something
 		// else later moved it to 1.0.1. Reconcile must notice installed != pinned.
