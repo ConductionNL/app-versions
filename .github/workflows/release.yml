@@ -27,6 +27,12 @@ concurrency:
   group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
+# `previous-app-id` is the App Store id this app shipped under before the
+# rename. The store keys everything on the id, so `versioniq` is a brand new
+# entry starting from nothing -- without this the version line restarts
+# BELOW what the app already published as `app_versions`, and the store accepts
+# that with a 200 and then never offers it to anyone. Drop the input once
+# the `app_versions` entry is retired.
 jobs:
   unstable:
     if: github.ref == 'refs/heads/development'
@@ -34,6 +40,7 @@ jobs:
     with:
       release-type: unstable
       app-name: versioniq
+      previous-app-id: app_versions
       # The packaged folder must match <id> in appinfo/info.xml, which is
       # `versioniq`. Renamed in lockstep with that id: a tarball whose folder
       # name disagrees with the id inside it will not install.
@@ -46,6 +53,7 @@ jobs:
     with:
       release-type: beta
       app-name: versioniq
+      previous-app-id: app_versions
       # The packaged folder must match <id> in appinfo/info.xml, which is
       # `versioniq`. Renamed in lockstep with that id: a tarball whose folder
       # name disagrees with the id inside it will not install.
@@ -58,6 +66,7 @@ jobs:
     with:
       release-type: stable
       app-name: versioniq
+      previous-app-id: app_versions
       # The packaged folder must match <id> in appinfo/info.xml, which is
       # `versioniq`. Renamed in lockstep with that id: a tarball whose folder
       # name disagrees with the id inside it will not install.
