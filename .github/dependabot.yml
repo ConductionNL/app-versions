@@ -26,6 +26,23 @@ updates:
       exclude:
         - "conduction/*"
   - package-ecosystem: npm
+    # HELD BACK DELIBERATELY. Each is blocked by a package we do not control,
+    # so dependabot proposes it every run and each one takes `npm ci` or
+    # `npm run build` from green to red with no code change that can fix it.
+    # typescript-eslint hard-throws on TS >= 7; @nextcloud/webpack-vue-config
+    # 7.0.4 (latest) peers webpack-cli ^6.0.1 and @babel/core ^7.22.9, and
+    # preset-env 8 needs core 8, so that pair moves together or not at all.
+    # Compatibility limits, not security ones: npm audit reports no advisory
+    # against any version pinned here. Lift each when its blocker ships support.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "webpack-cli"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@babel/core"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@babel/preset-env"
+        update-types: ["version-update:semver-major"]
     directory: "/"
     schedule:
       interval: weekly
