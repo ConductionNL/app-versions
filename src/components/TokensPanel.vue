@@ -261,12 +261,19 @@ onMounted(loadPats)
 
 <style module>
 .panel { display: flex; flex-direction: column; gap: 12px; }
+
 .hint { color: var(--color-text-maxcontrast); font-size: 13px; margin: 0; }
+
 .list { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+
 .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--color-border); }
+
 .actions { display: flex; gap: 4px; }
+
 .empty { color: var(--color-text-maxcontrast); font-style: italic; }
+
 .form { display: flex; flex-direction: column; gap: 8px; max-width: 480px; margin-top: 8px; }
+
 .expiryBadge {
 	display: inline-flex;
 	align-items: center;
@@ -277,12 +284,14 @@ onMounted(loadPats)
 	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.02em;
-	margin-left: 4px;
+	margin-inline-start: 4px;
 }
+
 .expiryBadgeError {
 	background: var(--color-error, #d32f2f);
 	color: var(--color-primary-text, #fff);
 }
+
 .expiryBadgeNeutral {
 	background: var(--color-background-darker, #ededed);
 	color: var(--color-text-maxcontrast);

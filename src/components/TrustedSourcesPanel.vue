@@ -153,9 +153,14 @@ onMounted(loadPatterns)
 
 <style module>
 .panel { display: flex; flex-direction: column; gap: 12px; }
+
 .hint { color: var(--color-text-maxcontrast); font-size: 13px; margin: 0; }
+
 .list { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+
 .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--color-border); }
+
 .empty { color: var(--color-text-maxcontrast); font-style: italic; }
+
 .form { display: flex; flex-direction: column; gap: 8px; max-width: 480px; margin-top: 8px; }
 </style>

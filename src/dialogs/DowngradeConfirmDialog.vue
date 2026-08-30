@@ -154,6 +154,6 @@ const buttons = computed(() => [
 
 .migrationDiffList {
 	margin: 4px 0 0;
-	padding-left: 18px;
+	padding-inline-start: 18px;
 }
 </style>

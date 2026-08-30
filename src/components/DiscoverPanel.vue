@@ -399,11 +399,17 @@ function handleOpenTrusted (): void {
 
 <style module>
 .panel { display: flex; flex-direction: column; gap: 12px; }
+
 .hint { color: var(--color-text-maxcontrast); font-size: 13px; margin: 0; }
+
 .controls { display: flex; flex-direction: column; gap: 8px; max-width: 480px; }
+
 .validationHint { margin: 0; font-size: 12px; color: var(--color-text-maxcontrast); }
+
 .status { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 13px; color: var(--color-text-maxcontrast); }
+
 .providerErrorRow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
 .dismissButton {
 	appearance: none;
 	-webkit-appearance: none;
@@ -416,7 +422,9 @@ function handleOpenTrusted (): void {
 	cursor: pointer;
 	flex-shrink: 0;
 }
+
 .results { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+
 .hitCard {
 	display: flex;
 	flex-direction: column;
@@ -426,18 +434,26 @@ function handleOpenTrusted (): void {
 	border-radius: 8px;
 	background: var(--color-main-background);
 }
+
 .hitHeader { display: flex; align-items: center; gap: 10px; }
+
 .hitIcon { width: 32px; height: 32px; border-radius: 6px; object-fit: contain; }
+
 .hitTitleBlock { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
 .hitName { margin: 0; font-weight: 700; }
+
 .hitAppId {
 	margin: 0;
 	font-size: 12px;
 	color: var(--color-text-maxcontrast);
 	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
+
 .hitSummary { margin: 0; font-size: 13px; color: var(--color-text-maxcontrast); }
+
 .badges { display: flex; flex-wrap: wrap; gap: 6px; }
+
 .sourceBadge {
 	display: inline-flex;
 	align-items: center;
@@ -448,9 +464,14 @@ function handleOpenTrusted (): void {
 	font-size: 11px;
 	font-weight: 600;
 }
+
 .sourceBadgeInstallable { background: var(--color-success, #46ba61); color: var(--color-primary-text, #fff); }
+
 .installedBadge { margin: 0; font-size: 12px; font-weight: 600; color: var(--color-text-maxcontrast); }
+
 .hitActions { display: flex; align-items: center; gap: 8px; }
+
 .notInstallable { display: flex; flex-direction: column; gap: 6px; }
+
 .notInstallable p { margin: 0; font-size: 12px; color: var(--color-error-text, var(--color-error)); }
 </style>

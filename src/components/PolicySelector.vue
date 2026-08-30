@@ -64,10 +64,12 @@ const isActive = computed(() => props.level !== 'none')
 	gap: 4px;
 	margin-top: 8px;
 }
+
 .badge {
 	font-size: 12px;
 	color: var(--color-text-maxcontrast);
 }
+
 .disabledHint {
 	font-size: 12px;
 	color: var(--color-warning-text, #a94b0a);

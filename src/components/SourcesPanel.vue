@@ -180,6 +180,8 @@ async function bind (): Promise<void> {
 
 <style module>
 .panel { display: flex; flex-direction: column; gap: 12px; }
+
 .hint { color: var(--color-text-maxcontrast); font-size: 13px; margin: 0; }
+
 .form { display: flex; flex-direction: column; gap: 8px; max-width: 480px; }
 </style>

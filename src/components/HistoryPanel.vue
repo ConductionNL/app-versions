@@ -201,17 +201,30 @@ const isEmpty = computed(() => hasLoadedOnce.value && !isLoading.value && entrie
 
 <style module>
 .panel { display: flex; flex-direction: column; gap: 12px; }
+
 .hint { color: var(--color-text-maxcontrast); font-size: 13px; margin: 0; }
+
 .loading { display: flex; align-items: center; gap: 8px; color: var(--color-text-maxcontrast); }
+
 .empty { color: var(--color-text-maxcontrast); font-style: italic; }
+
 .tableWrapper { overflow-x: auto; }
+
 .table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.table th { text-align: left; padding: 6px 10px; border-bottom: 2px solid var(--color-border-dark); color: var(--color-text-maxcontrast); font-weight: 600; white-space: nowrap; }
+
+.table th { text-align: start; padding: 6px 10px; border-bottom: 2px solid var(--color-border-dark); color: var(--color-text-maxcontrast); font-weight: 600; white-space: nowrap; }
+
 .table td { padding: 6px 10px; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+
 .row:hover { background: var(--color-background-hover); }
+
 .rowFailure { background: color-mix(in srgb, var(--color-error, #d32f2f) 8%, transparent); }
+
 .versions { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap; }
+
 .statusBadge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; background: var(--color-success, #2d7d46); color: var(--color-primary-text, #fff); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; }
+
 .statusBadgeFailure { background: var(--color-error, #d32f2f); }
+
 .message { margin: 4px 0 0; color: var(--color-text-maxcontrast); font-size: 12px; }
 </style>

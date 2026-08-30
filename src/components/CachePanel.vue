@@ -132,11 +132,18 @@ onMounted(loadSummary)
 
 <style module>
 .panel { display: flex; flex-direction: column; gap: 12px; }
+
 .hint { color: var(--color-text-maxcontrast); font-size: 13px; margin: 0; }
+
 .total { font-weight: 600; margin: 0; }
+
 .list { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+
 .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--color-border); }
+
 .rowInfo { display: flex; flex-direction: column; gap: 2px; }
+
 .rowMeta { color: var(--color-text-maxcontrast); font-size: 12px; }
+
 .empty { color: var(--color-text-maxcontrast); font-style: italic; }
 </style>

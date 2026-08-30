@@ -2505,7 +2505,7 @@ watch(dryRunEnabled, () => {
  */
 .skipLink {
 	position: absolute;
-	left: -9999px;
+	inset-inline-start: -9999px;
 	z-index: 100;
 	padding: 8px 16px;
 	border-radius: var(--border-radius);
@@ -2514,7 +2514,7 @@ watch(dryRunEnabled, () => {
 }
 
 .skipLink:focus {
-	left: 8px;
+	inset-inline-start: 8px;
 	top: 8px;
 	outline: 2px solid var(--color-primary-element);
 }
@@ -2704,7 +2704,7 @@ watch(dryRunEnabled, () => {
 .appCardMedia {
 	display: flex;
 	align-items: center;
-	margin-left: auto;
+	margin-inline-start: auto;
 	flex-shrink: 0;
 }
 
@@ -2938,7 +2938,7 @@ watch(dryRunEnabled, () => {
 }
 
 .installed {
-	border-left: 4px solid var(--color-border-dark);
+	border-inline-start: 4px solid var(--color-border-dark);
 	padding: 8px 10px;
 	width: 100%;
 	margin: 0;
@@ -2958,7 +2958,7 @@ watch(dryRunEnabled, () => {
 	pointer-events: none;
 	background: var(--color-main-background);
 	border: 1px solid var(--color-border-dark);
-	border-left-width: 4px;
+	border-inline-start-width: 4px;
 	border-radius: 6px;
 	padding: 10px;
 	display: flex;
@@ -2988,7 +2988,7 @@ watch(dryRunEnabled, () => {
 .installedLabel {
 	font-size: 12px;
 	color: var(--color-text-maxcontrast);
-	margin-right: 6px;
+	margin-inline-end: 6px;
 }
 
 .installedValue {
@@ -3127,7 +3127,7 @@ watch(dryRunEnabled, () => {
 	border-radius: 9999px;
 	padding: 2px 10px;
 	line-height: 1.3;
-	margin-left: auto;
+	margin-inline-start: auto;
 }
 
 .versionActionButton {
@@ -3269,7 +3269,7 @@ watch(dryRunEnabled, () => {
 	border: 2px solid rgba(255, 255, 255, 0.35);
 	border-top-color: currentColor;
 	border-radius: 50%;
-	margin-right: 7px;
+	margin-inline-end: 7px;
 	vertical-align: -1px;
 	animation: spin 0.85s linear infinite;
 }
