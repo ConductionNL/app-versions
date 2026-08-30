@@ -11,7 +11,9 @@
     "watch": "vite --mode development build --watch",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "l10n:build": "node scripts/build-l10n-js.cjs",
+    "check:l10n-js": "node scripts/build-l10n-js.cjs --check"
   },
   "browserslist": [
     "extends @nextcloud/browserslist-config"
