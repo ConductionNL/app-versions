@@ -91,16 +91,79 @@ export async function versionsLoaded(page: Page): Promise<boolean> {
 	return (await rows.count()) > 0
 }
 
-/** Reads an app config value straight from the server, to assert persistence. */
+/**
+ * Reads an app config value straight from the server, to assert persistence.
+ *
+ * ⚠️ THROWS when the READ itself fails, and it must. This previously did
+ * `if (!res.ok()) return null`, which is the same defect #233 fixed in
+ * `runJob`: a broken fixture wearing the words of a failed assertion.
+ *
+ * Every one of the eight specs failing on development goes through here, and
+ * every one of them fails as though the FEATURE did nothing:
+ *
+ *     expect(pin.driftedTo ?? …, 'drift recorded on the pin').toBeTruthy()
+ *     expect(binding.forge).toBe('codeberg')          // Received: undefined
+ *     expect(binding.sha256?.['1.0.1'], …).toMatch(…) // Received: undefined
+ *
+ * A null read and a feature that wrote nothing are indistinguishable once the
+ * value reaches `JSON.parse(… ?? '{}')`, so all eight blame the app for what
+ * may be a transport, auth, or provisioning_api problem. They need different
+ * fixes, so they must not wear the same words.
+ *
+ * Worse, the sibling test that asserts an ABSENCE — "records no drift while
+ * the installed version matches the pin" — PASSES on a null read, because a
+ * read that returned nothing looks exactly like a job that recorded nothing.
+ * That is the failure mode #233's own docblock warns about, one helper over.
+ *
+ * A genuinely unset key is not an error: OCS answers 200 with an ocs.meta
+ * statuscode of 404, and that still returns null.
+ */
+/**
+ * 5xx from this endpoint is TRANSIENT, and treating it as fatal is its own kind
+ * of wrong answer.
+ *
+ * Measured on run 33073... of this branch: the loud error above fired five
+ * times and every one of those specs PASSED on retry — nine flaky specs in a
+ * single run, all of them this same read. Nextcloud answers 503 while an app
+ * install or upgrade is in flight, which is exactly when these fixtures run.
+ *
+ * So retry the 5xx band, briefly and boundedly. A persistent outage still
+ * throws with the same words; what stops is a spec being marked flaky because
+ * the server was mid-install for 200ms. 4xx is NOT retried — an auth or
+ * permission failure is a real answer and repeating it only hides it.
+ */
+const CONFIG_READ_ATTEMPTS = 4
+
 export async function appConfigValue(page: Page, key: string): Promise<string | null> {
-	const res = await page.request.get(
-		`/ocs/v2.php/apps/provisioning_api/api/v1/config/apps/versioniq/${key}?format=json`,
-		{ headers: { 'OCS-APIRequest': 'true' } },
-	)
+	const url = `/ocs/v2.php/apps/provisioning_api/api/v1/config/apps/versioniq/${key}?format=json`
+	let res = await page.request.get(url, { headers: { 'OCS-APIRequest': 'true' } })
+	for (let attempt = 2; attempt <= CONFIG_READ_ATTEMPTS && res.status() >= 500; attempt++) {
+		await page.waitForTimeout(250 * (attempt - 1))
+		res = await page.request.get(url, { headers: { 'OCS-APIRequest': 'true' } })
+	}
 	if (!res.ok()) {
-		return null
+		const transient = res.status() >= 500
+		throw new Error(
+			`appConfigValue(${key}): the config READ failed with HTTP ${res.status()}`
+			+ (transient ? ` after ${CONFIG_READ_ATTEMPTS} attempts` : '')
+			+ '. The value was never retrieved, so nothing can be concluded about whether '
+			+ 'the app persisted it. This is a broken fixture, not a failing assertion — '
+			+ (transient
+				? 'a 5xx that survives four attempts is an unhealthy server, not a race — '
+				+ 'check the instance came up and is not stuck in maintenance mode. '
+				: 'check that provisioning_api is enabled and that the request is authenticated. ')
+			+ `URL: ${url}`,
+		)
 	}
 	const body = await res.json()
+	const status = body?.ocs?.meta?.statuscode
+	// 404 here means the key is genuinely unset, which is a real answer.
+	if (status !== undefined && status !== 100 && status !== 200 && status !== 404) {
+		throw new Error(
+			`appConfigValue(${key}): OCS returned statuscode ${status} `
+			+ `(${body?.ocs?.meta?.message ?? 'no message'}). The read did not succeed.`,
+		)
+	}
 	const data = body?.ocs?.data?.data
 	return typeof data === 'string' && data !== '' ? data : null
 }
@@ -286,7 +349,65 @@ export async function installFixture(
 	// A non-zero exit (guard refused, integrity failure, …) still emits the
 	// structured outcome on stdout — surface it with the exit code.
 	const { code, stdout } = await execInInstance(args)
-	return { status: code, body: parseLastJson(stdout) }
+	const body = parseLastJson(stdout)
+
+	// A SUCCESSFUL install that did not land is the failure mode this helper
+	// has to catch, because every caller downstream reads the result as fact.
+	//
+	// `resetFixtureApp` has always known about it — "rapid sequential installs
+	// each toggle maintenance mode, and an occasional overlap can make one
+	// attempt a no-op" — and retries once with `maintenance:mode --off`. Every
+	// OTHER caller got no such protection, and a no-op there is silent: exit 0,
+	// a structured payload, and the app still on its previous version.
+	//
+	// It does not surface where it happens. It surfaces as whatever the test
+	// asserted next, phrased as if that were the defect. jobs.spec.ts:169 is
+	// the worked example: it installs 1.0.1, pins at 1.0.0, and expects the
+	// reconcile job to record drift. When the install no-ops the app stays at
+	// 1.0.0, installed == pinned, PinReconcileJob correctly records NO drift,
+	// and the run reports `Error: drift recorded on the pin` — a true statement
+	// about the job and a completely false lead about the cause. That test
+	// failed on both attempts in CI on 2026-08-27; six more install-backed
+	// tests were flaky in the same run.
+	//
+	// `InstallerService::installAppVersion` wraps the install in
+	// `maintenance = true` and clears it in a `finally`, but only if IT set the
+	// flag. A run that dies before that `finally` leaves the instance in
+	// maintenance mode, and the next install then sees the flag already set,
+	// declines to own it, proceeds anyway and leaves it on. Nothing reports it.
+	//
+	// So: only when the install CLAIMS TO HAVE INSTALLED. `installStatus` is the
+	// marker the specs themselves assert on (`not.toBe('installed')` for the
+	// refused cases), and gating on it rather than on the exit code alone
+	// matters — `install-effects.spec.ts` calls this for an appId-mismatch
+	// archive and asserts nothing at all about the outcome. Were that path ever
+	// to exit 0 while reporting a failure, keying off `code` would turn a
+	// passing test into a thrown error here. A deliberate failure (tamper,
+	// wrong id, a refused guard) is left exactly as it was.
+	const landed = () => body?.installedVersion === version || body?.updateType === 'none'
+	const claimsInstalled = code === 0 && body?.installStatus === 'installed'
+
+	if (claimsInstalled && !landed()) {
+		// Clear the stuck flag before retrying — this is the state that makes
+		// the second attempt a no-op too.
+		await occ('maintenance:mode', '--off')
+		const retry = await execInInstance(args)
+		const retryBody = parseLastJson(retry.stdout)
+		if (retry.code === 0
+			&& (retryBody?.installedVersion === version || retryBody?.updateType === 'none')) {
+			return { status: retry.code, body: retryBody }
+		}
+
+		throw new Error(
+			`installFixture(${version}): occ reported success but the app is at `
+			+ `${retryBody?.installedVersion ?? body?.installedVersion ?? 'an unknown version'} `
+			+ 'after a retry. The install is a no-op, NOT a failing assertion in whatever '
+			+ 'runs next — check whether the instance was left in maintenance mode by an '
+			+ 'earlier install that died before its finally block.',
+		)
+	}
+
+	return { status: code, body }
 }
 
 /** Extracts the last JSON object printed by an occ command (ignores warnings). */
@@ -425,16 +546,38 @@ function reportDbFailure(helper: string, statement: string, code: number, stderr
  * whose class no longer exists does nothing observable.
  */
 export async function runJob(classSubstring: string): Promise<void> {
-	const rows = (await sql(`SELECT id, class FROM oc_jobs WHERE class LIKE '%${classSubstring}%'`))
+	// ⚠️ ANCHORED ON THIS APP'S OWN NAMESPACE, not just the class name.
+	//
+	// `LIKE '%PinReconcileJob%'` also matches the rows this app left behind
+	// when it was renamed. Reproduced on a live instance 2026-08-27, oc_jobs
+	// held BOTH:
+	//
+	//   OCA\Versioniq\BackgroundJob\PinReconcileJob   <- live, never run
+	//   OCA\AppVersions\Cron\PinReconcileJob          <- orphan, ran daily
+	//
+	// and executing the orphan is a SILENT no-op that occ reports as success:
+	// it prints a fresh "Last executed" timestamp and changes nothing, because
+	// the class behind the row no longer exists. The drift test then failed
+	// saying drift was not recorded — blaming PinDriftHandler, which is
+	// correct and demonstrably records drift when the LIVE row is executed.
+	//
+	// Anchoring on `OCA\Versioniq\` cut the match from 2 rows to 1 on that
+	// instance. `%\\%` still allows either sub-namespace (BackgroundJob today,
+	// Cron before #231), so a future move within the app keeps working.
+	const rows = (await sql(
+		`SELECT id, class FROM oc_jobs WHERE class LIKE 'OCA\\\\Versioniq\\\\%${classSubstring}%'`,
+	))
 		.split('\n')
 		.map((line) => line.trim())
 		.filter((line) => line.length > 0)
 
 	if (rows.length === 0) {
 		throw new Error(
-			`runJob(${classSubstring}): no oc_jobs row matches. The job was NOT executed. `
-			+ 'This is a broken fixture, not a failing assertion — check that the app is '
-			+ 'enabled and that the class is still the one registered in appinfo/info.xml.',
+			`runJob(${classSubstring}): no oc_jobs row matches OCA\\Versioniq\\…${classSubstring}. `
+			+ 'The job was NOT executed. This is a broken fixture, not a failing assertion — '
+			+ 'check that the app is enabled and that the class is still the one registered in '
+			+ 'appinfo/info.xml. (A row under a PRE-RENAME namespace is deliberately not '
+			+ 'matched: executing it would do nothing and report success.)',
 		)
 	}
 	if (rows.length > 1) {

@@ -79,6 +79,20 @@ class RemoveRetiredCronJobs implements IRepairStep {
 	private const RETIRED_JOB_CLASSES = [
 		'OCA\Versioniq\Cron\PinReconcileJob',
 		'OCA\Versioniq\Cron\PruneAuditJob',
+		// The app_versions -> versioniq RENAME retires a whole namespace, and
+		// this list previously covered only the Cron -> BackgroundJob move
+		// within the new one. Nextcloud never removes a job row whose class
+		// disappeared — it cannot tell a renamed class from one merely
+		// unavailable this boot — so an instance carried over from the old id
+		// keeps scheduling these forever.
+		//
+		// Measured on a live instance 2026-08-27, all five present with a
+		// RECENT last_run, i.e. actively being scheduled and failing:
+		'OCA\AppVersions\BackgroundJob\AdvisoryRefreshJob',
+		'OCA\AppVersions\BackgroundJob\AutoUpdateJob',
+		'OCA\AppVersions\BackgroundJob\PatExpiryWarningJob',
+		'OCA\AppVersions\Cron\PinReconcileJob',
+		'OCA\AppVersions\Cron\PruneAuditJob',
 	];
 
 	/**
