@@ -135,23 +135,48 @@ jobs:
       # it exists to catch — and stops failing on the one field it does not own.
       # Deliberately NOT `continue-on-error` or a deleted step: this narrows the
       # comparison, it does not silence it.
+      # EDIT THE TEXT, NEVER RE-SERIALISE. The first attempt round-tripped the
+      # document through json.load/json.dump and turned every non-ASCII
+      # character into a \uXXXX escape (json.dump defaults to
+      # ensure_ascii=True), so an em dash in a description became — and
+      # the check failed on hundreds of lines it had just rewritten itself.
+      # Replacing only the version token leaves every other byte untouched,
+      # which is the whole point of a freshness comparison.
       - name: Restore the info.version that release.yml owns
         run: |
           set -euo pipefail
           for f in openapi*.json; do
             [ -e "$f" ] || continue
             committed=$(git show "HEAD:$f" | python3 -c 'import json,sys; print(json.load(sys.stdin)["info"]["version"])')
-            python3 - "$f" "$committed" <<'PY'
-          import json, sys
-          path, version = sys.argv[1], sys.argv[2]
-          with open(path) as fh:
-              doc = json.load(fh)
-          doc["info"]["version"] = version
-          with open(path, "w") as fh:
-              json.dump(doc, fh, indent=4)
-              fh.write("\n")
+            COMMITTED="$committed" python3 - "$f" <<'PY'
+          import json, os, re, sys
+
+          path = sys.argv[1]
+          want = os.environ["COMMITTED"]
+
+          with open(path, encoding="utf-8") as fh:
+              text = fh.read()
+
+          have = json.loads(text)["info"]["version"]
+          if have == want:
+              print(f"{path}: info.version already {want}")
+              raise SystemExit(0)
+
+          # Anchored on the "info" object's own version, so a "version" key
+          # anywhere else in the document (a parameter, a schema) is untouched.
+          pattern = re.compile(
+              r'("info"\s*:\s*\{(?:[^{}]|\{[^{}]*\})*?"version"\s*:\s*)"'
+              + re.escape(have) + r'"',
+              re.S,
+          )
+          new_text, n = pattern.subn(lambda m: m.group(1) + json.dumps(want), text, count=1)
+          if n != 1:
+              sys.exit(f"{path}: expected exactly one info.version to replace, matched {n}")
+
+          with open(path, "w", encoding="utf-8") as fh:
+              fh.write(new_text)
+          print(f"{path}: info.version {have} -> {want}")
           PY
-            echo "restored $f info.version -> $committed"
           done
 
       - name: Check openapi*.json and typescript changes
