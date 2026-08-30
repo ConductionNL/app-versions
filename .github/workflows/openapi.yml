@@ -112,6 +112,48 @@ jobs:
       - name: Regenerate OpenAPI
         run: composer run openapi
 
+      # `info.version` HAS TWO WRITERS, and they can never agree.
+      #
+      # release.yml deliberately writes the release version into
+      # openapi.json's `info.version` as well as appinfo/info.xml — it says so
+      # itself ("a SECOND time, in openapi.json's info.version") and refuses to
+      # commit if the patch did not land, because an OpenAPI document whose
+      # version drifts from the app's is wrong.
+      #
+      # The extractor regenerates that field from its own default. Measured on
+      # 2026-08-30, versioniq #245: the ONLY difference between the committed
+      # document and the regenerated one was
+      #
+      #   -        "version": "1.4.3-unstable.20260830082124",
+      #   +        "version": "0.0.1",
+      #
+      # so this check failed on a document that was otherwise byte-identical,
+      # and would fail again after every single release.
+      #
+      # Restoring the committed value before comparing keeps the check honest:
+      # it still catches real drift in paths, schemas and responses — the thing
+      # it exists to catch — and stops failing on the one field it does not own.
+      # Deliberately NOT `continue-on-error` or a deleted step: this narrows the
+      # comparison, it does not silence it.
+      - name: Restore the info.version that release.yml owns
+        run: |
+          set -euo pipefail
+          for f in openapi*.json; do
+            [ -e "$f" ] || continue
+            committed=$(git show "HEAD:$f" | python3 -c 'import json,sys; print(json.load(sys.stdin)["info"]["version"])')
+            python3 - "$f" "$committed" <<'PY'
+          import json, sys
+          path, version = sys.argv[1], sys.argv[2]
+          with open(path) as fh:
+              doc = json.load(fh)
+          doc["info"]["version"] = version
+          with open(path, "w") as fh:
+              json.dump(doc, fh, indent=4)
+              fh.write("\n")
+          PY
+            echo "restored $f info.version -> $committed"
+          done
+
       - name: Check openapi*.json and typescript changes
         run: |
           bash -c "[[ ! \"`git status --porcelain `\" ]] || (echo 'Please run \"composer run openapi\" and commit the openapi*.json files and (if applicable) src/types/openapi/openapi*.ts, see the section \"Show changes on failure\" for details' && exit 1)"
