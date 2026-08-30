@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Discovery;
+namespace OCA\Versioniq\Tests\Unit\Service\Discovery;
 
-use OCA\AppVersions\Db\Pat;
-use OCA\AppVersions\Db\PatMapper;
-use OCA\AppVersions\Service\Discovery\GithubPrivateDiscovery;
-use OCA\AppVersions\Service\Pat\PatManager;
-use OCA\AppVersions\Service\Source\TrustedSourceList;
+use OCA\Versioniq\Db\Pat;
+use OCA\Versioniq\Db\PatMapper;
+use OCA\Versioniq\Service\Discovery\GithubPrivateDiscovery;
+use OCA\Versioniq\Service\Pat\PatManager;
+use OCA\Versioniq\Service\Source\TrustedSourceList;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use OCP\IUser;
 use OCP\IUserSession;
 use PHPUnit\Framework\TestCase;
@@ -36,10 +36,10 @@ final class GithubPrivateDiscoveryTest extends TestCase {
 			static fn (Pat $pat, callable $cb) => $cb('fake-plaintext-' . $pat->getId())
 		);
 
-		$config = $this->createMock(IConfig::class);
-		$config->method('getAppValue')->willReturnCallback(
+		$config = $this->createMock(IAppConfig::class);
+		$config->method('getValueString')->willReturnCallback(
 			static fn (string $app, string $key, string $default = '') => $key === 'trusted_sources'
-				? json_encode($allowlist)
+				? (string)json_encode($allowlist)
 				: $default
 		);
 		$trustedSources = new TrustedSourceList($config);

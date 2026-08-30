@@ -1,7 +1,7 @@
 // @ts-check
 
 /**
- * AppVersions documentation site.
+ * Versioniq documentation site.
  *
  * Built on @conduction/docusaurus-preset for brand defaults (tokens,
  * theme swizzles for Navbar / Footer, i18n scaffolding, KvK / BTW
@@ -9,12 +9,12 @@
  * path, mermaid theme, custom prism themes, navbar items — are passed
  * through createConfig() opts.
  *
- * This is the *default* docs site every new Conduction app inherits
- * from the template (ADR-030 / journeydoc). When you scaffold a new
- * app, the renaming pass swaps `app-template` / `Nextcloud App
- * Template` for your slug / title throughout this file — review the
- * title, tagline, url, projectName, editUrl, and the navbar GitHub
- * link, then commit.
+ * Versioniq lets Nextcloud administrators roll back to an earlier
+ * version of an installed app, or pin to a newer version for
+ * compatibility testing — across the Nextcloud App Store and external
+ * sources like GitHub releases. The app is in development; this docs
+ * site provides the brand landing surface and a journeydoc tutorial
+ * scaffold.
  */
 
 const { createConfig, baseFooterLinks } = require('@conduction/docusaurus-preset');
@@ -26,13 +26,20 @@ const { createConfig, baseFooterLinks } = require('@conduction/docusaurus-preset
 const BRAND_THEME = require.resolve('@conduction/docusaurus-preset/theme');
 
 const config = createConfig({
-  title: 'AppVersions',
-  tagline: "Version manifest registry for Conduction's Nextcloud apps. The source of truth for which app version pairs with which Nextcloud release, which Conduction stack version, and which dependent app versions.",
-  url: 'https://app-versions.conduction.nl',
+  title: 'Versioniq',
+  tagline: 'Install any earlier or newer version of already installed Nextcloud apps. Essential for debugging, testing compatibility, and recovering from breaking changes.',
+  /* FROZEN ON THE OLD HOSTNAME through the app_versions -> versioniq rename.
+     Verified 2026-08-22: versioniq.conduction.nl answers 200 and
+     versioniq.conduction.nl does not resolve at all. This must move only
+     once the new subdomain exists in DNS, together with docs/static/CNAME
+     and the `cname:` input in .github/workflows/documentation.yml — pointing
+     the site's canonical URL at a host that does not resolve would break
+     every generated absolute link. */
+  url: 'https://versioniq.conduction.nl',
   baseUrl: '/',
 
   organizationName: 'ConductionNL',
-  projectName: 'app-versions',
+  projectName: 'versioniq',
 
   /* English-only for now (ADR-030). The brand preset ships a
      multi-locale i18n block (nl/en/de/fr), but enabling locales
@@ -66,7 +73,7 @@ const config = createConfig({
              plus the standard node_modules bucket. */
           exclude: ['**/node_modules/**', 'src/**'],
           sidebarPath: require.resolve('./sidebars.js'),
-          editUrl: 'https://codeberg.org/Conduction/app-versions/src/branch/main/docs/',
+          editUrl: 'https://github.com/ConductionNL/versioniq/blob/development/docs/',
         },
         blog: false,
         theme: {
@@ -80,7 +87,7 @@ const config = createConfig({
 
   /* Brand navbar provides locale dropdown + GitHub by default; we
      replace items[] with the app's own (Documentation sidebar link,
-     GitHub link, locale dropdown). Object.assign in createConfig is
+     Codeberg link, locale dropdown). Object.assign in createConfig is
      shallow, so items: replaces wholesale. */
   navbar: {
     items: [
@@ -91,7 +98,7 @@ const config = createConfig({
         label: 'Documentation',
       },
       {
-        href: 'https://codeberg.org/Conduction/app-versions',
+        href: 'https://github.com/ConductionNL/versioniq',
         label: 'Codeberg',
         position: 'right',
       },
@@ -116,6 +123,7 @@ const config = createConfig({
   /* themeConfig is shallow-merged into the preset's defaults
      (colorMode + navbar + footer). prism + mermaid land alongside. */
   themeConfig: {
+    image: 'img/og-versioniq.png',
     prism: {
       theme: require('prism-react-renderer/themes/github'),
       darkTheme: require('prism-react-renderer/themes/dracula'),

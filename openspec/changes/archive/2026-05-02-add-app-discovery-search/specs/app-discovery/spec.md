@@ -168,4 +168,4 @@ The system MUST expose `GET /api/discover` with admin-only access and consistent
 
 - A frontend search bar + result cards UI is **not** part of this proposal. The Vue 3 frontend bundle in this app is currently not built; redesigning the UI deserves its own pass once the backend search surface is stable.
 - Federation (asking another Nextcloud's App Versions for its search results) is future work.
-- Software Catalogus integration is tracked in [issue #24](https://github.com/ConductionNL/app-versions/issues/24).
+- Software Catalogus integration is tracked in issue #24 (Codeberg numbering, pre-migration; the same request is tracked on GitHub as ConductionNL/versioniq#24).

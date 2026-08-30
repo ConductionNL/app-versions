@@ -1,4 +1,8 @@
-# App Versions
+<p align="center">
+  <img src="img/app-store.svg" alt="Versioniq logo" width="80" height="80">
+</p>
+
+# Versioniq
 
 Install any earlier or newer version of already-installed Nextcloud apps from the App Store, GitHub Releases, or any Gitea / Forgejo instance (including Codeberg). Bind each installed app to the source you trust; roll back to a specific release when a store update breaks something; ship dev-branch or private-repo builds onto a staging server without publishing them publicly.
 

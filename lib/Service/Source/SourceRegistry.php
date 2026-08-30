@@ -1,8 +1,16 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license EUPL-1.2
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
+ */
 
-namespace OCA\AppVersions\Service\Source;
+
+namespace OCA\Versioniq\Service\Source;
 
 use InvalidArgumentException;
 
@@ -10,33 +18,34 @@ use InvalidArgumentException;
  * Maps a `SourceBinding` to the concrete driver that knows how to talk to
  * that origin. Drivers are stateless DI singletons; the binding carries the
  * per-app configuration (owner/repo/assetPattern) into the driver.
+ *
+ * @psalm-api
  */
 class SourceRegistry {
 	public function __construct(
 		private AppStoreSource $appStore,
-		private GithubReleaseSource $github,
-		private GiteaReleaseSource $gitea,
+		private ForgeReleaseSource $forgeSource,
 	) {
 	}
 
+	/**
+	 * Resolves a binding to its concrete source driver; see "Source abstraction".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public function get(SourceBinding $binding): SourceInterface {
 		return match ($binding->kind) {
 			SourceBinding::KIND_APPSTORE => $this->appStore,
-			SourceBinding::KIND_GITHUB_RELEASE => $this->github,
-			SourceBinding::KIND_GITEA_RELEASE => $this->gitea,
+			// One driver serves all forges; it reads the forge from the binding.
+			SourceBinding::KIND_GITHUB_RELEASE => $this->forgeSource,
 			default => throw new InvalidArgumentException('Unsupported source kind: ' . $binding->kind),
 		};
 	}
 
 	/**
-	 * Available source kinds, in the order the picker UI should display them.
+	 * Lists the registered source kinds for the UI; see "Source management API".
 	 *
-	 * Order rationale: App Store first (implicit default for every installed
-	 * app), Codeberg / Gitea second (recommended for Conduction apps — that's
-	 * where the source of truth lives after the ConductionNL GitHub → Codeberg
-	 * migration), GitHub third (still supported as an alternative for apps
-	 * that publish releases there).
-	 *
+	 * @spec openspec/specs/external-sources/spec.md
 	 * @return list<array{id: string, kind: string, label: string}>
 	 */
 	public function listAvailable(): array {
@@ -56,26 +65,44 @@ class SourceRegistry {
 				'kind' => SourceBinding::KIND_GITHUB_RELEASE,
 				'label' => 'GitHub Releases',
 			],
+			[
+				'id' => 'codeberg',
+				'kind' => SourceBinding::KIND_GITHUB_RELEASE,
+				'label' => 'Codeberg Releases (public)',
+			],
 		];
 	}
 
+	/**
+	 * Parses a source-id string (`appstore` / `github:owner/repo`) into a binding; see "Explicit source override".
+	 *
+	 * @spec openspec/specs/external-sources/spec.md
+	 */
 	public static function parseSourceId(string $sourceId): SourceBinding {
 		$sourceId = trim($sourceId);
 		if ($sourceId === '' || $sourceId === 'appstore') {
 			return SourceBinding::appStore();
 		}
 
-		if (str_starts_with($sourceId, 'github:')) {
-			$ownerRepo = substr($sourceId, strlen('github:'));
-			if (!str_contains($ownerRepo, '/')) {
-				throw new InvalidArgumentException('GitHub source id must be of the form github:owner/repo');
+		foreach ([SourceBinding::FORGE_GITHUB, SourceBinding::FORGE_CODEBERG] as $forge) {
+			$prefix = $forge . ':';
+			if (!str_starts_with($sourceId, $prefix)) {
+				continue;
 			}
-			[$owner, $repo] = explode('/', $ownerRepo, 2);
+			$ownerRepo = substr($sourceId, strlen($prefix));
+			if (!str_contains($ownerRepo, '/')) {
+				throw new InvalidArgumentException(sprintf('%s source id must be of the form %s:owner/repo', $forge, $forge));
+			}
+			$parts = explode('/', $ownerRepo, 2);
+			$owner = $parts[0];
+			$repo = $parts[1] ?? '';
 			if ($owner === '' || $repo === '') {
-				throw new InvalidArgumentException('GitHub source id has empty owner or repo');
+				throw new InvalidArgumentException(sprintf('%s source id has empty owner or repo', $forge));
 			}
 
-			return SourceBinding::github($owner, $repo);
+			return $forge === SourceBinding::FORGE_CODEBERG
+				? SourceBinding::codeberg($owner, $repo)
+				: SourceBinding::github($owner, $repo);
 		}
 
 		if (str_starts_with($sourceId, 'gitea:')) {

@@ -1,8 +1,16 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license EUPL-1.2
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
+ */
 
-namespace OCA\AppVersions\Service\Discovery;
+
+namespace OCA\Versioniq\Service\Discovery;
 
 use Exception;
 use OCP\App\IAppManager;
@@ -20,6 +28,9 @@ class DiscoveryAggregator {
 	/** @var list<DiscoveryProviderInterface> */
 	private array $providers;
 
+	/**
+	 * @psalm-api
+	 */
 	public function __construct(
 		private IAppManager $appManager,
 		AppStoreDiscovery $appStore,
@@ -30,6 +41,9 @@ class DiscoveryAggregator {
 	}
 
 	/**
+	 * Lists every provider with its enabled state; see "Provider interface".
+	 *
+	 * @spec openspec/specs/app-discovery/spec.md
 	 * @return list<array{id: string, label: string, enabled: bool}>
 	 */
 	public function listProviders(): array {
@@ -44,6 +58,10 @@ class DiscoveryAggregator {
 	}
 
 	/**
+	 * Runs active providers, de-duplicates hits by appId, annotates installed versions;
+	 * see "Result aggregation".
+	 *
+	 * @spec openspec/specs/app-discovery/spec.md
 	 * @param list<string>|null $sourceIds when null, all enabled providers run
 	 * @return array{results: list<array<string, mixed>>, providers: list<array{id: string, label: string, enabled: bool}>, errors: list<array{providerId: string, message: string}>}
 	 */
@@ -112,7 +130,7 @@ class DiscoveryAggregator {
 				return $bInstalled - $aInstalled;
 			}
 
-			return strcmp($a['name'], $b['name']);
+			return strcmp((string)$a['name'], (string)$b['name']);
 		});
 
 		return [
@@ -144,7 +162,7 @@ class DiscoveryAggregator {
 	 */
 	private function snapshotInstalled(): array {
 		$installed = [];
-		foreach ($this->appManager->getInstalledApps() as $appId) {
+		foreach ($this->appManager->getEnabledApps() as $appId) {
 			try {
 				$installed[$appId] = $this->appManager->getAppVersion($appId);
 			} catch (Exception) {

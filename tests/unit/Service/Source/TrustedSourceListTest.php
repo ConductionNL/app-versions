@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Source;
+namespace OCA\Versioniq\Tests\Unit\Service\Source;
 
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Service\Source\TrustedSourceList;
-use OCA\AppVersions\Service\Source\UntrustedSourceException;
-use OCP\IConfig;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Service\Source\TrustedSourceList;
+use OCA\Versioniq\Service\Source\UntrustedSourceException;
+use OCP\IAppConfig;
 use PHPUnit\Framework\TestCase;
 
 final class TrustedSourceListTest extends TestCase {
 	private function withPatterns(string $stored): TrustedSourceList {
-		$config = $this->createMock(IConfig::class);
-		$config->method('getAppValue')->willReturnCallback(
+		$config = $this->createMock(IAppConfig::class);
+		$config->method('getValueString')->willReturnCallback(
 			fn (string $app, string $key, string $default = '') => $app === Application::APP_ID && $key === 'trusted_sources'
 				? $stored
 				: $default
@@ -79,38 +79,28 @@ final class TrustedSourceListTest extends TestCase {
 		$this->assertFalse($list->isAllowed('github://repo'));
 	}
 
-	public function testDefaultAllowsCodebergConduction(): void {
+	public function testCodebergDefaultAllowedAndCrossForgeIsolated(): void {
 		$list = $this->withPatterns('');
 
-		$this->assertTrue($list->isAllowed('gitea:codeberg.org/Conduction/opencatalogi'));
-		$this->assertTrue($list->isAllowed('gitea:codeberg.org/Conduction/openregister'));
+		// Default trusts Conduction on Codeberg but ConductionNL on GitHub.
+		$this->assertTrue($list->isAllowed('codeberg:Conduction/pipelinq'));
+		$this->assertFalse($list->isAllowed('codeberg:ConductionNL/pipelinq'));
+		// Cross-forge isolation: the github default owner is not trusted on codeberg and vice-versa.
+		$this->assertFalse($list->isAllowed('github:Conduction/pipelinq'));
 	}
 
-	public function testDefaultRejectsGiteaOnOtherHost(): void {
-		$list = $this->withPatterns('');
+	public function testLegacyBarePatternNormalizesToGithub(): void {
+		$list = $this->withPatterns('["acme/*"]');
 
-		$this->assertFalse($list->isAllowed('gitea:gitea.example.com/Conduction/opencatalogi'));
+		$this->assertTrue($list->isAllowed('github:acme/widget'));
+		// A bare legacy pattern only trusts GitHub, never Codeberg.
+		$this->assertFalse($list->isAllowed('codeberg:acme/widget'));
 	}
 
-	public function testDefaultRejectsGiteaOnCodebergUnderOtherOwner(): void {
-		$list = $this->withPatterns('');
+	public function testForgeQualifiedCustomPattern(): void {
+		$list = $this->withPatterns('["codeberg:acme/*"]');
 
-		$this->assertFalse($list->isAllowed('gitea:codeberg.org/other/opencatalogi'));
-	}
-
-	public function testCustomGiteaGlobIsUsed(): void {
-		$list = $this->withPatterns('["gitea.example.com/myorg/*"]');
-
-		$this->assertTrue($list->isAllowed('gitea:gitea.example.com/myorg/some-app'));
-		$this->assertFalse($list->isAllowed('gitea:gitea.example.com/other/some-app'));
-		$this->assertFalse($list->isAllowed('gitea:codeberg.org/myorg/some-app'));
-	}
-
-	public function testMalformedGiteaSourceIdRejected(): void {
-		$list = $this->withPatterns('');
-
-		$this->assertFalse($list->isAllowed('gitea:Conduction/opencatalogi'));
-		$this->assertFalse($list->isAllowed('gitea:codeberg.org//opencatalogi'));
-		$this->assertFalse($list->isAllowed('gitea:'));
+		$this->assertTrue($list->isAllowed('codeberg:acme/widget'));
+		$this->assertFalse($list->isAllowed('github:acme/widget'));
 	}
 }

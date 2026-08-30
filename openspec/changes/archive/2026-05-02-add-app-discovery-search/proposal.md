@@ -26,7 +26,7 @@ But finding **which** app to install still requires knowing the appId in advance
 ## Out of scope
 
 - The Vue search UI itself. The existing frontend bundle is not built in the dev environment and a UI overhaul is its own design exercise. This PR delivers the backend so any client (the to-be-built Vue UI, an admin's own tool, the openapi.json, ...) can consume it.
-- Software Catalogus integration — tracked in [issue #24](https://github.com/ConductionNL/app-versions/issues/24).
+- Software Catalogus integration — tracked in issue #24 (Codeberg numbering, pre-migration; the same request is tracked on GitHub as ConductionNL/versioniq#24).
 - Search ranking. Initial implementation returns provider-defined ordering with a soft "App Store first → installed apps first" bias.
 - Federation (asking another Nextcloud's App Versions for its search results). Future work.
 

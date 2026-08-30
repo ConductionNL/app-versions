@@ -1,15 +1,23 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license EUPL-1.2
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
+ */
 
-namespace OCA\AppVersions\Service\Discovery;
+
+namespace OCA\Versioniq\Service\Discovery;
 
 use Exception;
-use OCA\AppVersions\Db\Pat;
-use OCA\AppVersions\Db\PatMapper;
-use OCA\AppVersions\Service\Pat\PatManager;
-use OCA\AppVersions\Service\Source\SourceBinding;
-use OCA\AppVersions\Service\Source\TrustedSourceList;
+use OCA\Versioniq\Db\Pat;
+use OCA\Versioniq\Db\PatMapper;
+use OCA\Versioniq\Service\Pat\PatManager;
+use OCA\Versioniq\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Source\TrustedSourceList;
 use OCP\Http\Client\IClientService;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
@@ -28,8 +36,11 @@ use Psr\Log\LoggerInterface;
 class GithubPrivateDiscovery implements DiscoveryProviderInterface {
 	public const ID = 'github-private';
 	private const SEARCH_ENDPOINT = 'https://api.github.com/search/repositories';
-	private const USER_AGENT = 'Nextcloud-AppVersions';
+	private const USER_AGENT = 'Nextcloud-Versioniq';
 
+	/**
+	 * @psalm-api
+	 */
 	public function __construct(
 		private PatMapper $patMapper,
 		private PatManager $patManager,
@@ -48,6 +59,11 @@ class GithubPrivateDiscovery implements DiscoveryProviderInterface {
 		return 'GitHub (private, your PATs)';
 	}
 
+	/**
+	 * Enabled only when the current admin has at least one visible PAT; see "GitHub private discovery".
+	 *
+	 * @spec openspec/specs/app-discovery/spec.md
+	 */
 	public function isEnabled(): bool {
 		$user = $this->userSession->getUser();
 		if ($user === null) {
@@ -57,6 +73,11 @@ class GithubPrivateDiscovery implements DiscoveryProviderInterface {
 		return $this->patMapper->findVisibleTo($user->getUID()) !== [];
 	}
 
+	/**
+	 * Searches PAT-visible private GitHub repos, deduped by owner/repo; see "GitHub private discovery".
+	 *
+	 * @spec openspec/specs/app-discovery/spec.md
+	 */
 	public function search(string $query): DiscoveryResult {
 		$user = $this->userSession->getUser();
 		if ($user === null) {
@@ -87,7 +108,7 @@ class GithubPrivateDiscovery implements DiscoveryProviderInterface {
 		$seen = [];
 		$unique = [];
 		foreach ($hits as $hit) {
-			$key = $hit->sourceBinding['owner'] . '/' . $hit->sourceBinding['repo'];
+			$key = (string)($hit->sourceBinding['owner'] ?? '') . '/' . (string)($hit->sourceBinding['repo'] ?? '');
 			if (isset($seen[$key])) {
 				continue;
 			}
@@ -142,6 +163,7 @@ class GithubPrivateDiscovery implements DiscoveryProviderInterface {
 			}
 
 			$out = [];
+			/** @var mixed $item */
 			foreach ($decoded['items'] as $item) {
 				if (is_array($item)) {
 					$out[] = $item;
@@ -198,11 +220,18 @@ class GithubPrivateDiscovery implements DiscoveryProviderInterface {
 	 * @param array<string, mixed> $repo
 	 */
 	private function buildHit(array $repo): ?DiscoveryHit {
-		$fullName = $repo['full_name'] ?? '';
-		if (!is_string($fullName) || !str_contains($fullName, '/')) {
+		/** @var mixed $rawFullName */
+		$rawFullName = $repo['full_name'] ?? '';
+		if (!is_string($rawFullName)) {
 			return null;
 		}
-		[$owner, $repoName] = explode('/', $fullName, 2);
+		$fullName = $rawFullName;
+		if (!str_contains($fullName, '/')) {
+			return null;
+		}
+		$parts = explode('/', $fullName, 2);
+		$owner = $parts[0];
+		$repoName = $parts[1] ?? '';
 
 		$sourceId = 'github:' . $fullName;
 		$installable = $this->trustedSources->isAllowed($sourceId);
@@ -210,10 +239,17 @@ class GithubPrivateDiscovery implements DiscoveryProviderInterface {
 			? null
 			: sprintf('Add `%s/*` to the trusted-source allowlist to install from this repo.', $owner);
 
+		/** @var mixed $repoNameValue */
+		$repoNameValue = $repo['name'] ?? null;
+		/** @var mixed $descriptionValue */
+		$descriptionValue = $repo['description'] ?? null;
+		/** @var mixed $htmlUrlValue */
+		$htmlUrlValue = $repo['html_url'] ?? null;
+
 		return new DiscoveryHit(
 			appId: $this->guessAppId($repoName),
-			name: is_string($repo['name'] ?? null) ? $repo['name'] : $repoName,
-			summary: is_string($repo['description'] ?? null) ? (string)$repo['description'] : '',
+			name: is_string($repoNameValue) ? $repoNameValue : $repoName,
+			summary: is_string($descriptionValue) ? $descriptionValue : '',
 			iconUrl: null,
 			sourceProviderId: self::ID,
 			sourceBinding: [
@@ -223,7 +259,7 @@ class GithubPrivateDiscovery implements DiscoveryProviderInterface {
 			],
 			installable: $installable,
 			installableReason: $reason,
-			homepageUrl: is_string($repo['html_url'] ?? null) ? (string)$repo['html_url'] : null,
+			homepageUrl: is_string($htmlUrlValue) ? $htmlUrlValue : null,
 		);
 	}
 

@@ -10,3 +10,15 @@
 /node_modules/
 /js/
 /css/
+tests/e2e/.auth/
+test-results/
+playwright-report/
+tests/e2e/fixtures/forge/artifacts/
+
+# Agent/test scratch and tool caches — generated, never source.
+# Added by the 2026-08-25 fleet hygiene sweep (ADR-100 Decision 2).
+.stale/
+/.e2e-state/
+.phpunit.result.cache
+coverage/
+.phpunit.cache

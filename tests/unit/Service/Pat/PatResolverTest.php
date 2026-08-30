@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Pat;
+namespace OCA\Versioniq\Tests\Unit\Service\Pat;
 
-use OCA\AppVersions\Db\Pat;
-use OCA\AppVersions\Db\PatMapper;
-use OCA\AppVersions\Service\Pat\PatResolver;
+use OCA\Versioniq\Db\Pat;
+use OCA\Versioniq\Db\PatMapper;
+use OCA\Versioniq\Service\Pat\PatResolver;
 use PHPUnit\Framework\TestCase;
 
 final class PatResolverTest extends TestCase {
@@ -32,14 +32,14 @@ final class PatResolverTest extends TestCase {
 	public function testReturnsNullWhenNoPatsVisible(): void {
 		$resolver = $this->buildResolver(['admin' => []]);
 
-		$this->assertNull($resolver->findFor('ConductionNL/openregister', 'admin'));
+		$this->assertNull($resolver->findFor('github', 'ConductionNL/openregister', 'admin'));
 	}
 
 	public function testMatchesGlobPattern(): void {
 		$pat = $this->makePat(1, 'admin', 'ConductionNL/*');
 		$resolver = $this->buildResolver(['admin' => [$pat]]);
 
-		$found = $resolver->findFor('ConductionNL/openregister', 'admin');
+		$found = $resolver->findFor('github', 'ConductionNL/openregister', 'admin');
 
 		$this->assertNotNull($found);
 		$this->assertSame(1, $found->getId());
@@ -49,7 +49,7 @@ final class PatResolverTest extends TestCase {
 		$pat = $this->makePat(1, 'admin', 'OtherOrg/*');
 		$resolver = $this->buildResolver(['admin' => [$pat]]);
 
-		$this->assertNull($resolver->findFor('ConductionNL/openregister', 'admin'));
+		$this->assertNull($resolver->findFor('github', 'ConductionNL/openregister', 'admin'));
 	}
 
 	public function testExpiredPatSkipped(): void {
@@ -58,7 +58,7 @@ final class PatResolverTest extends TestCase {
 
 		$resolver = $this->buildResolver(['admin' => [$expired, $valid]]);
 
-		$found = $resolver->findFor('ConductionNL/openregister', 'admin');
+		$found = $resolver->findFor('github', 'ConductionNL/openregister', 'admin');
 
 		$this->assertNotNull($found);
 		$this->assertSame(2, $found->getId());
@@ -71,7 +71,7 @@ final class PatResolverTest extends TestCase {
 
 		$resolver = $this->buildResolver(['admin' => [$shared, $ownerOwned]]);
 
-		$found = $resolver->findFor('ConductionNL/openregister', 'admin');
+		$found = $resolver->findFor('github', 'ConductionNL/openregister', 'admin');
 
 		$this->assertNotNull($found);
 		$this->assertSame(2, $found->getId(), 'PAT owned by current user should win over shared one');
@@ -83,9 +83,30 @@ final class PatResolverTest extends TestCase {
 
 		$resolver = $this->buildResolver(['admin' => [$broad, $specific]]);
 
-		$found = $resolver->findFor('ConductionNL/openregister', 'admin');
+		$found = $resolver->findFor('github', 'ConductionNL/openregister', 'admin');
 
 		$this->assertNotNull($found);
 		$this->assertSame(2, $found->getId());
+	}
+
+	public function testForgeScopedMatching(): void {
+		$githubPat = $this->makePat(1, 'admin', 'Conduction/*'); // forge defaults to github
+		$codebergPat = $this->makePat(2, 'admin', 'Conduction/*');
+		$codebergPat->setForge('codeberg');
+
+		$resolver = $this->buildResolver(['admin' => [$githubPat, $codebergPat]]);
+
+		// A codeberg binding only matches the codeberg token, and github only github.
+		$this->assertSame(2, $resolver->findFor('codeberg', 'Conduction/pipelinq', 'admin')?->getId());
+		$this->assertSame(1, $resolver->findFor('github', 'Conduction/pipelinq', 'admin')?->getId());
+	}
+
+	public function testLegacyGithubPatNeverMatchesCodeberg(): void {
+		$legacy = $this->makePat(1, 'admin', 'ConductionNL/*'); // legacy row → forge defaults github
+
+		$resolver = $this->buildResolver(['admin' => [$legacy]]);
+
+		$this->assertSame(1, $resolver->findFor('github', 'ConductionNL/openregister', 'admin')?->getId());
+		$this->assertNull($resolver->findFor('codeberg', 'ConductionNL/openregister', 'admin'));
 	}
 }

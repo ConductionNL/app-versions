@@ -1,8 +1,16 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license EUPL-1.2
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
+ */
 
-namespace OCA\AppVersions\Service\Discovery;
+
+namespace OCA\Versioniq\Service\Discovery;
 
 /**
  * Read-only search driver for one source of installable apps. Used by
@@ -20,5 +28,10 @@ interface DiscoveryProviderInterface {
 	 */
 	public function isEnabled(): bool;
 
+	/**
+	 * Searches this provider's source for apps matching the query; see "Provider interface".
+	 *
+	 * @spec openspec/specs/app-discovery/spec.md
+	 */
 	public function search(string $query): DiscoveryResult;
 }

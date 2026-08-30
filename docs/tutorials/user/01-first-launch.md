@@ -1,35 +1,23 @@
 ---
 sidebar_position: 1
-title: Open the app for the first time
-description: Step-by-step guide to open the app for the first time and find your way around the dashboard
+title: Who is Versioniq for?
+description: Versioniq is an admin tool — non-admins do not see it. This page explains where to go next.
 ---
 
-# Open the app for the first time
+# Who is Versioniq for?
 
-Step-by-step guide to open the app for the first time and find your way around the dashboard.
+Versioniq is **admin-only**. It changes which versions of Nextcloud
+apps are installed on the server, so non-admin users do not see it and
+do not need to.
 
-## Goal
+If you are an administrator on this Nextcloud instance, head over to
+the **[Admin guide](../admin/01-admin-settings.md)** — that is where
+the actual walkthroughs live.
 
-<!-- TODO: write the goal — what the reader will have accomplished by the end (e.g. "you have opened the app, seen the dashboard, and know where the main features live"). -->
+If you are a regular user and something is broken in another app
+("feature X disappeared after the last update"), let your admin know.
+With Versioniq installed, the fix is often a one-click rollback of
+that app rather than a wait for the next release.
 
-## Prerequisites
-
-<!-- TODO: list prerequisites — the app installed and enabled, OpenRegister installed (if your app depends on it), a configured workspace/register, the right Nextcloud group membership, etc. -->
-
-## Steps
-
-<!-- TODO: write the numbered steps for opening the app and getting oriented on the Dashboard. Each step that warrants a screenshot gets a matching shoot() call in tests/e2e/docs-screenshots.spec.ts — see /journeydoc-add-story. -->
-
-## Verification
-
-<!-- TODO: how the reader confirms it worked — e.g. the dashboard renders without errors and the expected widgets are visible. -->
-
-## Common issues
-
-| Symptom | Fix |
-|---|---|
-<!-- TODO: list common symptoms and fixes — e.g. "App UI is blank" → "the js/ build output is not committed; run npm run build". -->
-
-## Reference
-
-<!-- TODO: link related docs — the feature spec for the Dashboard, the OpenRegister schema, relevant ADRs. -->
+> **Status: in development.** Once the admin UI lands, this page stays
+> as the pointer it is — the real journeydoc lives in the admin track.

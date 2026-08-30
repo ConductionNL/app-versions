@@ -1,14 +1,14 @@
 {
-  "id": "app-versions",
-  "name": "App Versions",
-  "namespace": "AppVersions",
+  "id": "versioniq",
+  "name": "Versioniq",
+  "namespace": "Versioniq",
   "summary": "Install any earlier or newer version of already installed Nextcloud apps",
-  "goal": "App Versions gives Nextcloud administrators the ability to roll back apps to previous versions or install specific newer versions. This is essential for debugging, testing compatibility, and recovering from broken updates. The app queries the Nextcloud app store API for all available releases, displays them in a clean UI, and handles the download + installation process.",
+  "goal": "Versioniq gives Nextcloud administrators the ability to roll back apps to previous versions or install specific newer versions. This is essential for debugging, testing compatibility, and recovering from broken updates. The app queries the Nextcloud app store API for all available releases, displays them in a clean UI, and handles the download + installation process.",
   "category": "tools",
   "version": "1.0.0",
-  "license": "AGPL-3.0-or-later",
+  "license": "EUPL-1.2",
   "author": "Conduction B.V.",
-  "repository": "https://github.com/ConductionNL/app-versions",
+  "repository": "https://github.com/ConductionNL/versioniq",
   "dependencies": {
     "requiresOpenRegister": false,
     "additionalCiApps": []
