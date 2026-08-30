@@ -7,37 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.2.0] - 2026-07-10
-
-### Added
-
-- **In-app source-binding UI** — the App Versions picker now shows a **Version source** card next to the selected app with quick-switch buttons (`App Store` · `Codeberg` · `GitHub` · `Advanced…`). Codeberg and GitHub quick-switches pre-fill Conduction's canonical defaults (`codeberg.org/Conduction/{appId}` and `ConductionNL/{appId}`); the `Advanced…` NcDialog gives full override of `kind`, `host`, `owner`, `repo`, and `assetPattern`. The dialog renders its source-kind options from `/api/sources` so labels + ordering stay in sync with `SourceRegistry::listAvailable()` (the "(recommended)" suffix on Gitea therefore appears automatically). On successful bind the versions list re-fetches in place — no page reload.
-- **Admin tutorial for binding an alternate source** ([docs/tutorials/admin/02-bind-alternate-source.md](docs/tutorials/admin/02-bind-alternate-source.md)) — step-by-step walkthrough covering the three source kinds (`appstore`, `gitea-release`, `github-release`), trust-list configuration, the `POST /api/source/{appId}/bind` call in bash and PowerShell forms, verification in the UI, and a common-issues table. Updated to document both paths — UI (quick-switch buttons + Advanced dialog) and OCS API — side by side in step 3.
-- **Product-oriented README.md** replacing the template scaffold — describes what App Versions does, the three source kinds side by side, quickstart, API summary, and pointers to the OpenAPI spec and admin tutorials.
-- **Full OpenAPI spec** — `composer openapi` regenerated `openapi.json` from the current `#[ApiRoute]` attributes; the spec now covers all 12 endpoints (previously only a single placeholder route).
-
-### Changed
-
-- **Codeberg/Gitea is now the recommended alternate source; GitHub is the fallback.** `SourceRegistry::listAvailable()` returns the three kinds in the order App Store → Gitea → GitHub (the picker UI order), with the Gitea entry labelled "Codeberg / Gitea / Forgejo Releases (recommended)" and the GitHub entry simplified to "GitHub Releases". `TrustedSourceList::DEFAULT_PATTERNS` mirrors this — `codeberg.org/Conduction/*` first, `ConductionNL/*` second — reflecting that Conduction apps' source of truth moved to Codeberg after the GitHub org migration. Both changes are ordering-only; no source kind was removed and no trust pattern was dropped, so the change is fully backwards-compatible for existing bindings and custom allowlists.
-
-## [1.1.0] - 2026-07-09
-
-### Added
-
-- **Gitea/Forgejo release source** — install app versions directly from any Gitea-family release feed (Codeberg, Forgejo, self-hosted Gitea). Introduces:
-  - `SourceBinding::KIND_GITEA_RELEASE` (`gitea:host/owner/repo` identifier shape) with a new `SourceBinding::gitea($host, $owner, $repo)` factory.
-  - `GiteaReleaseSource` driver talking to `https://{host}/api/v1/repos/{owner}/{repo}/releases` — public read only, no PAT support in this cut.
-  - `POST /api/source/{appId}/bind` accepts `kind=gitea-release` with `host`, `owner`, `repo`, and optional `assetPattern`.
-  - `TrustedSourceList` extended to recognise `gitea:host/owner/repo` identifiers; the default allowlist now permits `codeberg.org/Conduction/*` alongside the existing `ConductionNL/*` (GitHub).
-- `SourceRegistry::listAvailable()` now surfaces the Gitea source alongside App Store and GitHub.
-
-### Notes
-
-- Unblocks canary-testing of app dev-releases that are intentionally NOT published to the Nextcloud App Store (e.g. per-push builds of `opencatalogi/development`).
-- PAT support for private Gitea repositories is intentionally deferred — the `PatResolver` currently keys on `owner/repo`, which collides between GitHub and Gitea. Adding host-aware keying is tracked separately.
-
-## [1.0.1]
-
 ### Added
 
 - First release
+- Structured install-failure diagnostics: every failed install now returns a
+  `stage`, `category` (`preflight_permission`/`download`/`checksum_mismatch`/
+  `extract`/`appid_mismatch`/`version_mismatch`/`incompatible`/`finalize`/
+  `unknown`) and an actionable `hint`, regardless of the debug toggle. The HTTP
+  status reflects the category (e.g. 409, 422, 502) instead of a blanket 500.
+- Pre-flight environment checks: app cards show a warning when an app's folder
+  is not writable by the web-server user (e.g. a bind-mounted dev checkout), and
+  installs abort early with a clear `preflight_permission` error before
+  downloading anything.
+- Install outcome taxonomy (`installed` / `reverted` / `installed-but-broken`):
+  the backup of the previous app version is now retained until finalization
+  (migrations + repair steps) succeeds, and is restored on a finalize-phase
+  failure. The result honestly reports when files were reverted but database
+  state may be uncertain.
+
+### Fixed
+
+- The install result no longer overwrites the backend's actionable message with
+  the generic "OCS request failed" text; the structured message and hint are
+  shown instead.
+
+### Changed
+
+- Versioniq UI moved from the top-level navigation to Settings → Administration (admin-only). Non-admin users who previously had the app in their navigation will no longer see it there.
+- **Renamed from "App Versions" to "Versioniq"** with the rest of the Conduction
+  fleet. The Nextcloud app id changes from `app_versions` to `versioniq`, which
+  also moves the API routes (`/apps/app_versions/...` → `/apps/versioniq/...`)
+  and the `occ` command prefix (`occ app_versions:*` → `occ versioniq:*`).
+  Nextcloud has no in-place app-id upgrade, so two repair steps run on install
+  to copy stored settings from the old id to the new one; nothing has to be
+  reconfigured by hand. Stored personal access tokens and the audit trail are
+  unaffected — they live in tables the rename does not touch.

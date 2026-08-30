@@ -25,5 +25,5 @@ This proposal introduces an explicit **external-source** install path that makes
 ## Out of scope
 - PAT upload, encrypted storage, scope validation — this proposal covers public GitHub releases only. PAT support is proposal 2 (`add-github-pat-management`).
 - Discovery / search UI — covered by proposal 3 (`add-app-discovery-search`).
-- Public Software Catalogus integration — tracked in [issue #24](https://github.com/ConductionNL/app-versions/issues/24).
+- Public Software Catalogus integration — tracked in issue #24 (Codeberg numbering, pre-migration; the same request is tracked on GitHub as ConductionNL/versioniq#24).
 - Auto-update from external sources (cron job that polls bound sources for new releases). Future work.

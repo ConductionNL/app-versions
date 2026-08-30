@@ -1,0 +1,32 @@
+{
+    "translations": {
+        "A pinned app was updated outside Versioniq": "Een vastgezette app is buiten Versioniq om bijgewerkt",
+        "%1$s is pinned to %2$s but is now running %3$s. Re-pin to restore the pinned version, or accept the change.": "%1$s is vastgezet op %2$s, maar draait nu %3$s. Zet opnieuw vast om de vastgezette versie te herstellen, of accepteer de wijziging.",
+        "Pinned {version}": "Vastgezet op {version}",
+        "Pin this version": "Deze versie vastzetten",
+        "Unpin": "Losmaken",
+        "Pin": "Vastzetten",
+        "Cancel": "Annuleren",
+        "Reason (optional)": "Reden (optioneel)",
+        "Pin {appId} at {version}": "{appId} vastzetten op {version}",
+        "Pins are enforced inside Versioniq and monitored elsewhere — Nextcloud's own updater can still update this app. If that happens you will be notified and offered a one-click re-pin.": "Vastzetten wordt afgedwongen binnen Versioniq en elders gevolgd — Nextclouds eigen updater kan deze app nog steeds bijwerken. Als dat gebeurt, krijg je een melding en de mogelijkheid om met één klik opnieuw vast te zetten.",
+        "{appId} is pinned": "{appId} is vastgezet",
+        "{appId} is pinned to version {pinnedVersion}. Versioniq will not overwrite a pin without an explicit choice.": "{appId} is vastgezet op versie {pinnedVersion}. Versioniq overschrijft een vastgezette versie niet zonder een uitdrukkelijke keuze.",
+        "Move pin and install will install {targetVersion} and move the pin there. Unpin and install will remove the pin entirely before installing.": "Vastzetting verplaatsen en installeren installeert {targetVersion} en verplaatst de vastzetting daarnaartoe. Losmaken en installeren verwijdert de vastzetting volledig voor het installeren.",
+        "Unpin and install": "Losmaken en installeren",
+        "Move pin and install": "Vastzetting verplaatsen en installeren",
+        "{appId} is pinned to {pinnedVersion} but is now running {observedVersion} — something other than Versioniq changed it.": "{appId} is vastgezet op {pinnedVersion}, maar draait nu {observedVersion} — iets anders dan Versioniq heeft dit gewijzigd.",
+        "Re-pin {version}": "Opnieuw vastzetten op {version}",
+        "Accept: move pin to {version}": "Accepteren: vastzetting verplaatsen naar {version}",
+        "Accept: remove pin": "Accepteren: vastzetting verwijderen",
+        "Checksum does not match first install": "Checksum komt niet overeen met de eerste installatie",
+        "Accept new checksum and install": "Nieuwe checksum accepteren en installeren",
+        "{appId} {version} was previously installed with a different SHA-256 checksum. The upstream release may have been rewritten since — Versioniq blocks the install to protect you from a silently altered artifact.": "{appId} {version} is eerder geïnstalleerd met een andere SHA-256-checksum. De release bij de bron is mogelijk sindsdien herschreven — Versioniq blokkeert de installatie om je te beschermen tegen een stilzwijgend gewijzigd bestand.",
+        "Recorded at first install": "Vastgelegd bij eerste installatie",
+        "Just downloaded": "Zojuist gedownload",
+        "Only accept if you are certain this change is legitimate — for example the maintainer re-tagged the release to fix a packaging error.": "Accepteer dit alleen als je zeker weet dat deze wijziging legitiem is — bijvoorbeeld wanneer de maintainer de release opnieuw heeft getagd om een verpakkingsfout te herstellen.",
+        "Matches first-install checksum": "Komt overeen met checksum van eerste installatie",
+        "Checksum recorded": "Checksum vastgelegd"
+    },
+    "pluralForm": "nplurals=2; plural=(n != 1);"
+}

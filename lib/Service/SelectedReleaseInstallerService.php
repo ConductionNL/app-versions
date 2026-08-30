@@ -1,29 +1,67 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license EUPL-1.2
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
+ */
 
-namespace OCA\AppVersions\Service;
+
+namespace OCA\Versioniq\Service;
 
 use Exception;
 use OC\Archive\TAR;
 use OC\Files\FilenameValidator;
-use OCA\AppVersions\Service\Installer\InstallFinalizer;
-use phpseclib\File\X509;
+use OCA\Versioniq\Service\Audit\AuditLogger;
+use OCA\Versioniq\Service\Cache\ArtifactCache;
+use OCA\Versioniq\Service\Installer\FailureClassifier;
+use OCA\Versioniq\Service\Installer\InstallFailure;
+use OCA\Versioniq\Service\Installer\InstallFinalizer;
+use OCA\Versioniq\Service\Installer\MigrationDiffer;
+use OCA\Versioniq\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Source\SourceInterface;
 use OCP\App\AppPathNotFoundException;
 use OCP\App\IAppManager;
-use OCP\Files;
 use OCP\Http\Client\IClientService;
+use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\ITempManager;
+use OCP\IUserSession;
 use OCP\L10N\IFactory;
 use OCP\Server;
+use phpseclib\File\X509;
 
+/**
+ * @psalm-api
+ */
 class SelectedReleaseInstallerService {
 	/** @var array<int, mixed> */
 	private array $debug = [];
 
+	/** @var list<string>|null Set only when the current install is a downgrade; see "Migration diff on downgrade". */
+	private ?array $orphanedMigrations = null;
+
+	/** Whether the last {@see replaceWithSelectedRelease()} call was a downgrade. */
+	private bool $isDowngradeInstall = false;
+
+	/** Temp path of the archive verified by the last {@see replaceWithSelectedRelease()} call; see "Persist verified artifacts on successful install". */
+	private ?string $lastArchivePath = null;
+
+	/** @var ?array{sha256: string, sourceId: ?string, installerKind: string, signature: ?string, certificate: ?string} */
+	private ?array $lastArchiveMeta = null;
+
+	/** Whether the last install's archive was served from {@see ArtifactCache} after a download failure; see "Cached fallback with full re-verification". */
+	private bool $servedFromCache = false;
+
 	public function __construct(
 		private InstallFinalizer $finalizer,
+		private AuditLogger $auditLogger,
+		private IUserSession $userSession,
+		private MigrationDiffer $migrationDiffer,
+		private ArtifactCache $artifactCache,
 	) {
 	}
 
@@ -37,10 +75,27 @@ class SelectedReleaseInstallerService {
 	}
 
 	/**
+	 * Returns the migration diff computed for the last downgrade install (null
+	 * when the last install was not a downgrade, or when the diff could not be
+	 * computed); see "Migration diff on downgrade".
+	 *
+	 * @spec openspec/specs/migration-safety/spec.md
+	 * @return list<string>|null
+	 */
+	public function getOrphanedMigrations(): ?array {
+		return $this->orphanedMigrations;
+	}
+
+	/**
 	 * Clears operation debug log.
 	 */
 	private function resetDebug(): void {
 		$this->debug = [];
+		$this->orphanedMigrations = null;
+		$this->isDowngradeInstall = false;
+		$this->lastArchivePath = null;
+		$this->lastArchiveMeta = null;
+		$this->servedFromCache = false;
 	}
 
 	/**
@@ -93,7 +148,7 @@ class SelectedReleaseInstallerService {
 		}
 
 		$loadedCertificate = $x509->loadX509($certificate);
-		if (!$loadedCertificate) {
+		if ($loadedCertificate === false) {
 			throw new Exception('Could not parse app certificate.');
 		}
 
@@ -107,7 +162,15 @@ class SelectedReleaseInstallerService {
 			throw new Exception('Could not validate CRL signature');
 		}
 
-		$serial = $loadedCertificate['tbsCertificate']['serialNumber']->toString();
+		$tbsCertificate = (array)($loadedCertificate['tbsCertificate'] ?? []);
+		$serialNumber = $tbsCertificate['serialNumber'] ?? null;
+		if (!is_object($serialNumber) || !method_exists($serialNumber, 'toString')) {
+			throw new Exception('Could not read certificate serial number.');
+		}
+		// External-API mismatch: phpseclib X509::loadX509() returns untyped arrays, so the
+		// serialNumber BigInteger's ->toString() is not statically known despite the method_exists guard above.
+		/** @psalm-suppress MixedMethodCall */
+		$serial = (string)$serialNumber->toString();
 		$revoked = $crl->getRevoked($serial);
 		if ($revoked !== false) {
 			throw new Exception(sprintf('Certificate "%s" has been revoked', $serial));
@@ -118,12 +181,14 @@ class SelectedReleaseInstallerService {
 		}
 
 		$certInfo = openssl_x509_parse($certificate);
-		if (!isset($certInfo['subject']['CN'])) {
+		$subject = is_array($certInfo) && is_array($certInfo['subject'] ?? null) ? $certInfo['subject'] : [];
+		if (!isset($subject['CN'])) {
 			throw new Exception(sprintf('App with id %s has a cert with no CN', $appId));
 		}
 
-		if ($certInfo['subject']['CN'] !== $appId) {
-			throw new Exception(sprintf('App with id %s has a cert issued to %s', $appId, $certInfo['subject']['CN']));
+		$commonName = (string)$subject['CN'];
+		if ($commonName !== $appId) {
+			throw new Exception(sprintf('App with id %s has a cert issued to %s', $appId, $commonName));
 		}
 
 		$this->addDebug('certificate-validated', ['appId' => $appId, 'serial' => $serial]);
@@ -176,6 +241,15 @@ class SelectedReleaseInstallerService {
 	}
 
 	/**
+	 * Returns app config service.
+	 *
+	 * @return IAppConfig
+	 */
+	private function getAppConfig(): IAppConfig {
+		return Server::get(IAppConfig::class);
+	}
+
+	/**
 	 * Returns temp manager.
 	 *
 	 * @return ITempManager
@@ -203,10 +277,11 @@ class SelectedReleaseInstallerService {
 	}
 
 	/**
-	 * Installs one selected release.
+	 * Installs one selected App Store release through the signed (code-signing) path; see "Install Specific Version".
 	 *
+	 * @spec openspec/specs/version-management/spec.md
 	 * @param string $appId
-	 * @param array{download?: mixed, signature?: mixed, certificate?: mixed, version?: mixed} $release
+	 * @param array<string, mixed> $release
 	 * @param bool $dryRun
 	 * @return array<string, mixed>
 	 * @throws Exception
@@ -224,90 +299,177 @@ class SelectedReleaseInstallerService {
 
 		$appManager = $this->getAppManager();
 		$config = $this->getConfig();
+		$appConfig = $this->getAppConfig();
 
-		$installedVersion = '';
 		try {
 			$installedVersion = $appManager->getAppVersion($appId);
 		} catch (Exception) {
 			$installedVersion = '';
 		}
-		$previousEnabled = $config->getAppValue($appId, 'enabled', 'no');
+		$previousEnabled = $appConfig->getValueString($appId, 'enabled', 'no');
 		$installedApp = null;
+		$requestedVersion = isset($release['version']) && is_string($release['version']) ? $release['version'] : null;
 
-		$this->replaceWithSelectedRelease($appId, $release, $dryRun);
+		try {
+			$backupDestination = $this->replaceWithSelectedRelease($appId, $release, $dryRun);
 
-		if (!$dryRun) {
-			$appPath = $appManager->getAppPath($appId, true);
-			$l = $this->getL10n()->get('core');
-			$info = $appManager->getAppInfoByPath($appPath . '/appinfo/info.xml', $l->getLanguageCode());
-			if (!is_array($info) || $info['id'] !== $appId) {
-				throw new Exception(
-					$l->t('App "%s" cannot be installed because appinfo file cannot be read.',
-						[$appId]
-					)
-				);
+			if (!$dryRun) {
+				$appPath = $appManager->getAppPath($appId, true);
+				$l = $this->getL10n()->get('core');
+
+				// Pre-finalize validation (appinfo readable, compatible, deps met).
+				// On failure the files are restored from the retained backup and the
+				// outcome is a clean revert — the previous version is intact.
+				try {
+					$info = $appManager->getAppInfoByPath($appPath . '/appinfo/info.xml', $l->getLanguageCode());
+					if (!is_array($info) || ($info['id'] ?? null) !== $appId) {
+						throw new Exception(
+							$l->t('App "%s" cannot be installed because appinfo file cannot be read.',
+								[$appId]
+							)
+						);
+					}
+					/** @var array<string, mixed> $info */
+
+					$ignoreMaxApps = (array)$config->getSystemValue('app_install_overwrite', []);
+					$ignoreMax = in_array($appId, $ignoreMaxApps, true);
+					$serverVersion = Server::get(\OCP\ServerVersion::class)->getVersionString();
+					if (!$appManager->isAppCompatible($serverVersion, $info, $ignoreMax)) {
+						$appName = isset($info['name']) && is_string($info['name']) ? $info['name'] : $appId;
+						throw new Exception(
+							$l->t('App "%s" cannot be installed because it is not compatible with this version of the server.',
+								[$appName]
+							)
+						);
+					}
+
+					\OC_App::checkAppDependencies($config, $l, $info, $ignoreMax);
+				} catch (Exception $validationError) {
+					$this->restoreFromBackup($appPath, $backupDestination);
+					throw InstallFailure::reverted($validationError->getMessage(), FailureClassifier::STAGE_INFO_VALIDATED, $validationError);
+				}
+
+				$enabled = $installedVersion === '' ? 'no' : $previousEnabled;
+				$this->addDebug('last-steps', [
+					'appPath' => $appPath,
+					'enabled' => $enabled,
+				]);
+
+				// Finalize (migrations + repair steps) is the last, unrecoverable
+				// phase. Keep the backup until it succeeds; on failure restore the
+				// previous files and report installed-but-broken.
+				try {
+					$installedApp = $this->finalizer->finalize($appPath, $info, $enabled, null, SourceBinding::appStore()->getId());
+				} catch (\Throwable $finalizeError) {
+					// Throwable, not just Exception: a finalize-phase Error must
+					// still restore the previous files and report
+					// installed-but-broken, not surface as an uncaught fatal.
+					$restoreState = $backupDestination === null
+						? FailureClassifier::RESTORE_NONE
+						: ($this->restoreFromBackup($appPath, $backupDestination) ? FailureClassifier::RESTORE_CLEAN : FailureClassifier::RESTORE_FAILED);
+					throw InstallFailure::finalizeFailed($finalizeError->getMessage(), $restoreState, $finalizeError);
+				}
+
+				// Finalize succeeded — now it is safe to drop the backup.
+				if ($backupDestination !== null && is_dir($backupDestination)) {
+					$this->rmdirr($backupDestination);
+				}
+				$this->addDebug('post-install-state', [
+					'appPath' => $appPath,
+					'installedVersionConfig' => $appConfig->getValueString($appId, 'installed_version', ''),
+					'installedApp' => $installedApp,
+				]);
+				$this->addDebug('installed', ['appId' => $installedApp]);
+
+				// Persist the just-verified archive for future rollback; see
+				// "Persist verified artifacts on successful install". Only
+				// reached after finalize() succeeded, so a failed install
+				// never populates the cache.
+				if ($requestedVersion !== null && $this->lastArchivePath !== null && $this->lastArchiveMeta !== null) {
+					$this->artifactCache->store($appId, $requestedVersion, $this->lastArchivePath, $this->lastArchiveMeta);
+				}
 			}
 
-			$ignoreMaxApps = $config->getSystemValue('app_install_overwrite', []);
-			$ignoreMax = in_array($appId, $ignoreMaxApps, true);
-			$serverVersion = implode('.', \OCP\Util::getVersion());
-			if (!$appManager->isAppCompatible($serverVersion, $info, $ignoreMax)) {
-				throw new Exception(
-					$l->t('App "%s" cannot be installed because it is not compatible with this version of the server.',
-						[$info['name']]
-					)
-				);
+			if ($dryRun) {
+				$this->addDebug('result', [
+					'status' => 'dry-run',
+					'message' => 'Skipping installAppLastSteps and post-install writes.',
+				]);
+
+				return [
+					'status' => 'dry-run',
+					'installedVersionBefore' => $installedVersion === '' ? null : $installedVersion,
+					'dryRun' => true,
+					'debug' => $this->debug,
+					'servedFromCache' => $this->servedFromCache,
+				] + ($this->isDowngradeInstall ? ['orphanedMigrations' => $this->orphanedMigrations] : []);
 			}
 
-			\OC_App::checkAppDependencies($config, $l, $info, $ignoreMax);
-
-			$enabled = $installedVersion === '' ? 'no' : $previousEnabled;
-			$this->addDebug('last-steps', [
-				'appPath' => $appPath,
-				'enabled' => $enabled,
-			]);
-			$installedApp = $this->finalizer->finalize($appPath, $info, $enabled);
-			$this->addDebug('post-install-state', [
-				'appPath' => $appPath,
-				'installedVersionConfig' => $config->getAppValue($appId, 'installed_version', ''),
-				'installedApp' => $installedApp,
-			]);
-			$this->addDebug('installed', ['appId' => $installedApp]);
-		}
-
-		if ($dryRun) {
-			$this->addDebug('result', [
-				'status' => 'dry-run',
-				'message' => 'Skipping installAppLastSteps and post-install writes.',
-			]);
+			$this->recordInstallAudit($appId, $installedVersion, $requestedVersion, AuditLogger::STATUS_SUCCESS);
 
 			return [
-				'status' => 'dry-run',
+				'status' => 'installed',
 				'installedVersionBefore' => $installedVersion === '' ? null : $installedVersion,
-				'dryRun' => true,
+				'installedApp' => $installedApp,
+				'dryRun' => false,
 				'debug' => $this->debug,
-			];
-		}
+				'servedFromCache' => $this->servedFromCache,
+			] + ($this->isDowngradeInstall ? ['orphanedMigrations' => $this->orphanedMigrations] : []);
+		} catch (\Throwable $error) {
+			// Best-effort audit write on the failure path, before the exception
+			// propagates up to the caller's error mapping; see "Failed install
+			// is recorded with the failure reason". Dry runs change nothing, so
+			// they are not audited (mirrors the success path above).
+			if (!$dryRun) {
+				$this->recordInstallAudit($appId, $installedVersion, $requestedVersion, AuditLogger::STATUS_FAILURE, $error->getMessage());
+			}
 
-		return [
-			'status' => 'installed',
-			'installedVersionBefore' => $installedVersion === '' ? null : $installedVersion,
-			'installedApp' => $installedApp,
-			'dryRun' => false,
-			'debug' => $this->debug,
-		];
+			throw $error;
+		}
 	}
 
 	/**
-	 * Replaces existing app with selected release and validates download contents.
+	 * Records one `install` audit entry for the App Store (signed) installer;
+	 * see "Version operations are recorded".
 	 *
+	 * @spec openspec/specs/audit-trail/spec.md
+	 */
+	private function recordInstallAudit(
+		string $appId,
+		string $installedVersionBefore,
+		?string $requestedVersion,
+		string $status,
+		?string $message = null,
+	): void {
+		$actorUid = $this->userSession->getUser()?->getUID() ?? 'system';
+		$this->auditLogger->record(
+			$actorUid,
+			$appId,
+			AuditLogger::OPERATION_INSTALL,
+			$installedVersionBefore === '' ? null : $installedVersionBefore,
+			$requestedVersion,
+			SourceBinding::appStore()->getId(),
+			$status,
+			$message,
+		);
+	}
+
+	/**
+	 * Verifies signature/certificate, downloads, validates appId+version, and replaces app files (with backup/restore);
+	 * see "Install Specific Version" ("Installation fails" — no partial installs).
+	 *
+	 * Returns the retained backup path (or null when there was no previous
+	 * install / on dry run); the caller deletes it after `finalize()` succeeds
+	 * or restores from it on a finalize-phase failure.
+	 *
+	 * @spec openspec/specs/version-management/spec.md
 	 * @param string $appId
 	 * @param array<string, mixed> $release
 	 * @param bool $dryRun
-	 * @return void
+	 * @return ?string
 	 * @throws Exception
 	 */
-	public function replaceWithSelectedRelease(string $appId, array $release, bool $dryRun): void {
+	public function replaceWithSelectedRelease(string $appId, array $release, bool $dryRun): ?string {
 		$downloadUrl = $release['download'] ?? '';
 		$signature = $release['signature'] ?? '';
 		$certificate = $release['certificate'] ?? '';
@@ -329,8 +491,8 @@ class SelectedReleaseInstallerService {
 		$this->addDebug('release-metadata', [
 			'downloadUrl' => $downloadUrl,
 			'expectedVersion' => $expectedVersion,
-			'hasSignature' => $signature !== '',
-			'hasCertificate' => $certificate !== '',
+			'hasSignature' => true,
+			'hasCertificate' => true,
 			'dryRun' => $dryRun,
 		]);
 
@@ -339,6 +501,9 @@ class SelectedReleaseInstallerService {
 		$tempManager = $this->getTempManager();
 		$tempFile = $tempManager->getTemporaryFile('.tar.gz');
 		$tempFolder = $tempManager->getTemporaryFolder('app-version');
+		if (!is_string($tempFile) || !is_string($tempFolder)) {
+			throw new Exception('Could not allocate temporary download paths.');
+		}
 		$appManager = $this->getAppManager();
 
 		try {
@@ -348,9 +513,36 @@ class SelectedReleaseInstallerService {
 				'timeout' => $this->getDownloadTimeout(),
 			]);
 		} catch (Exception $error) {
-			throw new Exception('Could not download selected release: ' . $error->getMessage());
+			// Download failed (network error, dead URL, deleted release):
+			// fall back to a cached artifact for this exact appId+version, if
+			// one exists — see "Cached fallback with full re-verification".
+			// The cached certificate/signature (stored materials) replace the
+			// request-supplied ones for the rest of this method so the
+			// signature check below re-verifies against what was actually
+			// cached, not merely what this request happened to pass in.
+			$cached = $this->artifactCache->fetch($appId, $expectedVersion);
+			if ($cached === null) {
+				throw new Exception('Could not download selected release: ' . $error->getMessage());
+			}
+			$cachedCertificate = is_string($cached['meta']['certificate'] ?? null) ? $cached['meta']['certificate'] : null;
+			$cachedSignature = is_string($cached['meta']['signature'] ?? null) ? $cached['meta']['signature'] : null;
+			if ($cachedCertificate === null || $cachedSignature === null) {
+				throw new Exception('Could not download selected release: ' . $error->getMessage());
+			}
+			try {
+				$this->verifyCertificate($appId, $cachedCertificate);
+			} catch (Exception) {
+				throw new Exception('Could not download selected release: ' . $error->getMessage());
+			}
+			if (file_put_contents($tempFile, $cached['content']) === false) {
+				throw new Exception('Could not download selected release: ' . $error->getMessage());
+			}
+			$certificate = $cachedCertificate;
+			$signature = $cachedSignature;
+			$this->servedFromCache = true;
+			$this->addDebug('served-from-cache', ['appId' => $appId, 'version' => $expectedVersion]);
 		}
-		$this->addDebug('downloaded', ['tempFile' => $tempFile]);
+		$this->addDebug('downloaded', ['tempFile' => $tempFile, 'servedFromCache' => $this->servedFromCache]);
 
 		$archive = new TAR($tempFile);
 		if (!$archive->extract($tempFolder)) {
@@ -381,16 +573,16 @@ class SelectedReleaseInstallerService {
 			throw new Exception('Could not parse appinfo/info.xml from selected release.');
 		}
 
-		if ((string) $info->id !== $appId) {
+		if ((string)$info->id !== $appId) {
 			throw new Exception('Downloaded app id does not match requested app.');
 		}
 
-		$archiveVersion = (string) $info->version;
+		$archiveVersion = (string)$info->version;
 		if ($expectedVersion !== $archiveVersion) {
 			throw new Exception('Downloaded app version does not match requested version.');
 		}
 		$this->addDebug('info-xml', [
-			'appId' => (string) $info->id,
+			'appId' => (string)$info->id,
 			'archiveVersion' => $archiveVersion,
 		]);
 
@@ -414,7 +606,20 @@ class SelectedReleaseInstallerService {
 		}
 		$this->addDebug('signature-verified', ['result' => 'ok']);
 
-		$previousPath = null;
+		// Captured for the caller to persist via ArtifactCache::store() once
+		// finalize() succeeds — see "Persist verified artifacts on
+		// successful install". $tempFile still holds exactly the bytes that
+		// just passed signature verification (fresh download or, on a cache
+		// fallback above, the re-verified cached copy).
+		$this->lastArchivePath = $tempFile;
+		$this->lastArchiveMeta = [
+			'sha256' => strtolower(hash('sha256', $downloadedContent)),
+			'sourceId' => SourceBinding::appStore()->getId(),
+			'installerKind' => SourceInterface::INSTALLER_SIGNED,
+			'signature' => $signature,
+			'certificate' => $certificate,
+		];
+
 		try {
 			$previousPath = $appManager->getAppPath($appId);
 		} catch (AppPathNotFoundException) {
@@ -429,6 +634,22 @@ class SelectedReleaseInstallerService {
 			throw new Exception('Could not resolve app install folder.');
 		}
 		$this->addDebug('destination', ['destination' => $destination]);
+
+		// Migration diff (downgrade only, acknowledged or dry-run): compare the
+		// still-in-place installed copy's migration steps against the
+		// just-extracted target archive before any file swap — see "Migration
+		// diff on downgrade". A diff failure degrades to `null` (generic
+		// warning); it never blocks the downgrade itself.
+		try {
+			$installedVersionForDiff = $appManager->getAppVersion($appId);
+		} catch (Exception) {
+			$installedVersionForDiff = '';
+		}
+		if ($installedVersionForDiff !== '' && version_compare($expectedVersion, $installedVersionForDiff, '<')) {
+			$this->isDowngradeInstall = true;
+			$this->orphanedMigrations = $this->migrationDiffer->diff($previousPath, $extractedRoot);
+			$this->addDebug('migration-diff', ['orphanedMigrations' => $this->orphanedMigrations]);
+		}
 
 		$backupDestination = null;
 		if (is_dir($destination)) {
@@ -446,7 +667,7 @@ class SelectedReleaseInstallerService {
 			if ($backupDestination !== null && is_dir($backupDestination)) {
 				rename($backupDestination, $destination);
 			}
-			return;
+			return null;
 		}
 
 		try {
@@ -455,22 +676,47 @@ class SelectedReleaseInstallerService {
 			}
 			$this->copyRecursive($extractedRoot, $destination);
 		} catch (Exception $error) {
-			if ($backupDestination !== null && is_dir($backupDestination)) {
+			// Pre-finalize failure: restore the previous files and report a clean
+			// revert (the previously installed version is intact). For a fresh
+			// install (no backup) there is nothing to restore — remove the
+			// partially-copied new files so we don't leave a broken app folder.
+			if ($backupDestination === null) {
 				if (is_dir($destination)) {
-					Files::rmdirr($destination);
+					$this->rmdirr($destination);
 				}
-				rename($backupDestination, $destination);
+			} else {
+				$this->restoreFromBackup($destination, $backupDestination);
 			}
-			throw $error;
+			throw InstallFailure::reverted($error->getMessage(), 'copy', $error);
 		}
 
-		if ($backupDestination !== null && is_dir($backupDestination)) {
-			Files::rmdirr($backupDestination);
-		}
 		if (function_exists('opcache_reset')) {
 			opcache_reset();
 		}
 		$this->addDebug('filesystem-updated', ['destination' => $destination]);
+
+		// Backup is intentionally retained until finalize() succeeds; the caller
+		// owns its deletion (success) or restore (finalize-phase failure).
+		return $backupDestination;
+	}
+
+	/**
+	 * Restores the previous app files from the retained backup after a post-swap
+	 * failure. Returns whether the restore completed cleanly.
+	 */
+	private function restoreFromBackup(string $destination, ?string $backupDestination): bool {
+		if ($backupDestination === null || !is_dir($backupDestination)) {
+			return false;
+		}
+		try {
+			if (is_dir($destination)) {
+				$this->rmdirr($destination);
+			}
+
+			return rename($backupDestination, $destination);
+		} catch (\Throwable) {
+			return false;
+		}
 	}
 
 	/**
@@ -487,7 +733,7 @@ class SelectedReleaseInstallerService {
 
 		$dirs = array_values(array_filter(
 			$entries,
-			static fn(string $entry): bool => $entry !== '.' && $entry !== '..' && is_dir($path . '/' . $entry)
+			static fn (string $entry): bool => $entry !== '.' && $entry !== '..' && is_dir($path . '/' . $entry)
 		));
 
 		if (count($dirs) !== 1) {
@@ -536,5 +782,35 @@ class SelectedReleaseInstallerService {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Recursively deletes a directory on the local filesystem (temp/backup dirs),
+	 * replacing the deprecated \OCP\Files::rmdirr helper.
+	 *
+	 * @param string $dir
+	 */
+	private function rmdirr(string $dir): void {
+		if (!is_dir($dir)) {
+			if (file_exists($dir) || is_link($dir)) {
+				@unlink($dir);
+			}
+
+			return;
+		}
+
+		/** @var \Iterator<string, \SplFileInfo> $iterator */
+		$iterator = new \RecursiveIteratorIterator(
+			new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
+			\RecursiveIteratorIterator::CHILD_FIRST
+		);
+		foreach ($iterator as $item) {
+			if ($item->isDir() && !$item->isLink()) {
+				@rmdir($item->getPathname());
+			} else {
+				@unlink($item->getPathname());
+			}
+		}
+		@rmdir($dir);
 	}
 }

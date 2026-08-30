@@ -1,8 +1,16 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * @license EUPL-1.2
+ * @copyright Copyright (c) 2025, Conduction B.V. <info@conduction.nl>
+ *
+ * SPDX-FileCopyrightText: 2025 Conduction B.V. <info@conduction.nl>
+ * SPDX-License-Identifier: EUPL-1.2
+ */
 
-namespace OCA\AppVersions\Migration;
+
+namespace OCA\Versioniq\Migration;
 
 use Closure;
 use OCP\DB\ISchemaWrapper;
@@ -13,11 +21,17 @@ use OCP\Migration\SimpleMigrationStep;
 /**
  * Adds the `app_versions_pats` table for PAT storage.
  *
+ * The table name is FROZEN on the pre-rename `app_versions` prefix and every
+ * literal below is deliberately left alone — see the reasoning on
+ * {@see \OCA\Versioniq\Db\PatMapper::TABLE_NAME}. A shipped migration is
+ * immutable in any case: instances that already ran this step recorded it by
+ * version, so editing the table name here would create a SECOND table on new
+ * installs while existing ones kept the first.
+ *
  * @psalm-suppress UnusedClass
  */
 class Version1000Date20260502120000 extends SimpleMigrationStep {
 	public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ?ISchemaWrapper {
-		/** @var ISchemaWrapper $schema */
 		$schema = $schemaClosure();
 
 		if ($schema->hasTable('app_versions_pats')) {

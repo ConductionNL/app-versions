@@ -1,30 +1,39 @@
 {
-  "name": "app_versions",
+  "name": "versioniq",
   "version": "1.0.0",
-  "license": "AGPL-3.0-or-later",
+  "license": "EUPL-1.2",
   "type": "module",
   "scripts": {
     "build": "vite build",
     "dev": "vite --mode development build",
     "lint": "eslint src",
-    "stylelint": "stylelint src/**/*.vue src/**/*.scss src/**/*.css",
-    "watch": "vite --mode development build --watch"
+    "stylelint": "stylelint \"src/**/*.{vue,scss,css}\"",
+    "watch": "vite --mode development build --watch",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "browserslist": [
     "extends @nextcloud/browserslist-config"
   ],
   "dependencies": {
-    "@nextcloud/vue": "^9.5.0",
-    "vue": "^3.5.29"
+    "@nextcloud/l10n": "^3.4.1",
+    "@nextcloud/vue": "^9.10.0",
+    "vue": "^3.5.42"
   },
   "devDependencies": {
     "@nextcloud/browserslist-config": "^3.1.2",
     "@nextcloud/eslint-config": "^8.4.2",
     "@nextcloud/stylelint-config": "^3.1.1",
-    "@nextcloud/vite-config": "^2.5.2",
+    "@nextcloud/vite-config": "^3.0.0-beta.1",
+    "@playwright/test": "^1.62.1",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "@vue/test-utils": "^2.4.11",
     "@vue/tsconfig": "^0.8.1",
+    "jsdom": "^30.0.1",
     "typescript": "^5.9.3",
-    "vite": "^7.3.3"
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
   },
   "engines": {
     "node": "^24.0.0",

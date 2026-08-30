@@ -9,6 +9,32 @@
 
 name: OpenAPI
 
+# This job had NEVER ONCE PASSED, for a reason that had nothing to do with this
+# repository's code:
+#
+#   PHP Fatal error: license: Unable to convert EUPL-1.2 to SPDX identifier
+#
+# nextcloud/openapi-extractor maps licences through a hardcoded match() in
+# src/Helpers.php that accepts agpl / mit / mpl / apache / gpl3 and five SPDX
+# spellings, and calls Logger::panic() — a fatal, not a warning — on anything
+# else. EUPL-1.2 is a valid SPDX identifier and is what every Conduction app
+# ships under, so the tool could not run against any of them. Upstream `main`
+# still had the same list on 2026-08-18.
+#
+# We do not get to wait on an upstream fix, and we do not get to disable a
+# check to hide it. So the tool is PATCHED at install time — see
+# vendor-bin/openapi-extractor/patches/ and the composer-patches wiring beside
+# it. The patch is pinned to the exact version this repo already pinned
+# (v1.8.7); if that pin moves and the patch stops applying, composer fails
+# LOUDLY rather than silently reverting to the broken behaviour.
+#
+# Two dishonest routes were rejected on the way: mislabelling the licence to
+# suit the tool, and marking the step continue-on-error so a broken job
+# reports green. The second is worse than the red.
+#
+# With the fatal gone the extractor reaches this app's controllers for the
+# first time and reports real findings about them. Those are ours, and the
+# trigger is back on so they stay visible.
 on: pull_request
 
 permissions:
@@ -21,6 +47,8 @@ concurrency:
 jobs:
   openapi:
     runs-on: ubuntu-latest
+    # Observed fleet-wide: max 1.0 min (n=5). Deliberately loose.
+    timeout-minutes: 20
 
     if: ${{ github.repository_owner != 'nextcloud-gmbh' }}
 
@@ -83,6 +111,73 @@ jobs:
 
       - name: Regenerate OpenAPI
         run: composer run openapi
+
+      # `info.version` HAS TWO WRITERS, and they can never agree.
+      #
+      # release.yml deliberately writes the release version into
+      # openapi.json's `info.version` as well as appinfo/info.xml — it says so
+      # itself ("a SECOND time, in openapi.json's info.version") and refuses to
+      # commit if the patch did not land, because an OpenAPI document whose
+      # version drifts from the app's is wrong.
+      #
+      # The extractor regenerates that field from its own default. Measured on
+      # 2026-08-30, versioniq #245: the ONLY difference between the committed
+      # document and the regenerated one was
+      #
+      #   -        "version": "1.4.3-unstable.20260830082124",
+      #   +        "version": "0.0.1",
+      #
+      # so this check failed on a document that was otherwise byte-identical,
+      # and would fail again after every single release.
+      #
+      # Restoring the committed value before comparing keeps the check honest:
+      # it still catches real drift in paths, schemas and responses — the thing
+      # it exists to catch — and stops failing on the one field it does not own.
+      # Deliberately NOT `continue-on-error` or a deleted step: this narrows the
+      # comparison, it does not silence it.
+      # EDIT THE TEXT, NEVER RE-SERIALISE. The first attempt round-tripped the
+      # document through json.load/json.dump and turned every non-ASCII
+      # character into a \uXXXX escape (json.dump defaults to
+      # ensure_ascii=True), so an em dash in a description became — and
+      # the check failed on hundreds of lines it had just rewritten itself.
+      # Replacing only the version token leaves every other byte untouched,
+      # which is the whole point of a freshness comparison.
+      - name: Restore the info.version that release.yml owns
+        run: |
+          set -euo pipefail
+          for f in openapi*.json; do
+            [ -e "$f" ] || continue
+            committed=$(git show "HEAD:$f" | python3 -c 'import json,sys; print(json.load(sys.stdin)["info"]["version"])')
+            COMMITTED="$committed" python3 - "$f" <<'PY'
+          import json, os, re, sys
+
+          path = sys.argv[1]
+          want = os.environ["COMMITTED"]
+
+          with open(path, encoding="utf-8") as fh:
+              text = fh.read()
+
+          have = json.loads(text)["info"]["version"]
+          if have == want:
+              print(f"{path}: info.version already {want}")
+              raise SystemExit(0)
+
+          # Anchored on the "info" object's own version, so a "version" key
+          # anywhere else in the document (a parameter, a schema) is untouched.
+          pattern = re.compile(
+              r'("info"\s*:\s*\{(?:[^{}]|\{[^{}]*\})*?"version"\s*:\s*)"'
+              + re.escape(have) + r'"',
+              re.S,
+          )
+          new_text, n = pattern.subn(lambda m: m.group(1) + json.dumps(want), text, count=1)
+          if n != 1:
+              sys.exit(f"{path}: expected exactly one info.version to replace, matched {n}")
+
+          with open(path, "w", encoding="utf-8") as fh:
+              fh.write(new_text)
+          print(f"{path}: info.version {have} -> {want}")
+          PY
+          done
 
       - name: Check openapi*.json and typescript changes
         run: |

@@ -2,25 +2,25 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Discovery;
+namespace OCA\Versioniq\Tests\Unit\Service\Discovery;
 
-use OCA\AppVersions\AppInfo\Application;
-use OCA\AppVersions\Service\Discovery\GithubSearchDiscovery;
-use OCA\AppVersions\Service\Source\TrustedSourceList;
+use OCA\Versioniq\AppInfo\Application;
+use OCA\Versioniq\Service\Discovery\GithubSearchDiscovery;
+use OCA\Versioniq\Service\Source\TrustedSourceList;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
 final class GithubSearchDiscoveryTest extends TestCase {
 	private function buildDiscovery(bool $enabled, ?IResponse $response = null, array $allowlist = ['ConductionNL/*']): GithubSearchDiscovery {
-		$config = $this->createMock(IConfig::class);
-		$config->method('getAppValue')->willReturnCallback(
+		$config = $this->createMock(IAppConfig::class);
+		$config->method('getValueString')->willReturnCallback(
 			static fn (string $app, string $key, string $default = '') => match (true) {
 				$app === Application::APP_ID && $key === 'discovery.github_search_enabled' => $enabled ? 'true' : 'false',
-				$app === Application::APP_ID && $key === 'trusted_sources' => json_encode($allowlist),
+				$app === Application::APP_ID && $key === 'trusted_sources' => (string)json_encode($allowlist),
 				default => $default,
 			}
 		);

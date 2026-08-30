@@ -2,11 +2,13 @@
 
 declare(strict_types=1);
 
-namespace OCA\AppVersions\Tests\Unit\Service\Source;
+namespace OCA\Versioniq\Tests\Unit\Service\Source;
 
 use InvalidArgumentException;
-use OCA\AppVersions\Service\Source\SourceBinding;
-use OCA\AppVersions\Service\Source\SourceRegistry;
+use OCA\Versioniq\Service\Source\AppStoreSource;
+use OCA\Versioniq\Service\Source\ForgeReleaseSource;
+use OCA\Versioniq\Service\Source\SourceBinding;
+use OCA\Versioniq\Service\Source\SourceRegistry;
 use PHPUnit\Framework\TestCase;
 
 final class SourceRegistryTest extends TestCase {
@@ -47,25 +49,42 @@ final class SourceRegistryTest extends TestCase {
 		SourceRegistry::parseSourceId('gitlab:ConductionNL/openregister');
 	}
 
-	public function testParseGiteaProducesBinding(): void {
-		$binding = SourceRegistry::parseSourceId('gitea:codeberg.org/Conduction/opencatalogi');
+	public function testParseCodeberg(): void {
+		$binding = SourceRegistry::parseSourceId('codeberg:Conduction/pipelinq');
 
-		$this->assertSame(SourceBinding::KIND_GITEA_RELEASE, $binding->kind);
-		$this->assertSame(
-			['host' => 'codeberg.org', 'ownerRepo' => 'Conduction/opencatalogi'],
-			$binding->getHostOwnerRepo(),
+		$this->assertSame(SourceBinding::KIND_GITHUB_RELEASE, $binding->kind);
+		$this->assertSame('codeberg', $binding->getForge());
+		$this->assertSame('codeberg:Conduction/pipelinq', $binding->getId());
+	}
+
+	public function testParseCodebergMissingRepoRejected(): void {
+		$this->expectException(InvalidArgumentException::class);
+
+		SourceRegistry::parseSourceId('codeberg:Conduction');
+	}
+
+	public function testParseCodebergEmptyOwnerRejected(): void {
+		$this->expectException(InvalidArgumentException::class);
+
+		SourceRegistry::parseSourceId('codeberg:/pipelinq');
+	}
+
+	public function testParseCodebergEmptyRepoRejected(): void {
+		$this->expectException(InvalidArgumentException::class);
+
+		SourceRegistry::parseSourceId('codeberg:Conduction/');
+	}
+
+	public function testListAvailableIncludesCodeberg(): void {
+		$registry = new SourceRegistry(
+			$this->createMock(AppStoreSource::class),
+			$this->createMock(ForgeReleaseSource::class),
 		);
-	}
 
-	public function testParseGiteaWithoutHostRejected(): void {
-		$this->expectException(InvalidArgumentException::class);
+		$ids = array_map(static fn (array $s): string => $s['id'], $registry->listAvailable());
 
-		SourceRegistry::parseSourceId('gitea:Conduction/opencatalogi');
-	}
-
-	public function testParseGiteaWithEmptySegmentRejected(): void {
-		$this->expectException(InvalidArgumentException::class);
-
-		SourceRegistry::parseSourceId('gitea:codeberg.org//opencatalogi');
+		$this->assertContains('appstore', $ids);
+		$this->assertContains('github', $ids);
+		$this->assertContains('codeberg', $ids);
 	}
 }
