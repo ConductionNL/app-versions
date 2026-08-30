@@ -1,6 +1,6 @@
 {
 	"require-dev": {
-		"cweagans/composer-patches": "^1.7",
+		"cweagans/composer-patches": "^2.0",
 		"nextcloud/openapi-extractor": "v1.9.0"
 	},
 	"config": {
