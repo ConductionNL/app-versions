@@ -9,7 +9,23 @@ updates:
       day: saturday
       time: "03:00"
       timezone: Europe/Paris
+    target-branch: "development"
     open-pull-requests-limit: 10
+    # The composer entry existed but carried NO cooldown, so PHP dependencies
+    # updated the moment they were published — which is exactly the window in
+    # which a compromised release is still on the registry. Two days is the
+    # floor gate-93 enforces.
+    #
+    # conduction/* is excluded on purpose: a cooldown protects against a
+    # compromised UPSTREAM release, and those come from this fleet's own CI.
+    # Delaying them would only slow the loop between a fix being released and
+    # arriving here.
+    cooldown:
+      default-days: 2
+      include:
+        - "*"
+      exclude:
+        - "conduction/*"
   - package-ecosystem: npm
     directory: "/"
     schedule:
@@ -17,6 +33,7 @@ updates:
       day: saturday
       time: "03:00"
       timezone: Europe/Paris
+    target-branch: "development"
     open-pull-requests-limit: 10
     cooldown:
       default-days: 1
