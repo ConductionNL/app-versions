@@ -13,9 +13,9 @@ the caller awaiting forever.
 -->
 <script setup lang="ts">
 import { t } from '@nextcloud/l10n'
-import NcDialog from '@nextcloud/vue/components/NcDialog'
 import { computed } from 'vue'
-import { orphanedMigrationsSummary } from '../utils/migrationSafety'
+import NcDialog from '@nextcloud/vue/components/NcDialog'
+import { orphanedMigrationsSummary } from '../utils/migrationSafety.ts'
 
 const props = defineProps<{
 	open: boolean
@@ -34,7 +34,11 @@ const emit = defineEmits<{
 	resolve: [accept: boolean]
 }>()
 
-const choose = (accept: boolean): void => {
+/**
+ *
+ * @param accept
+ */
+function choose (accept: boolean): void {
 	emit('update:open', false)
 	emit('resolve', accept)
 }

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
 import { t } from '@nextcloud/l10n'
+import { computed, ref, watch } from 'vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
-import { ocsGet } from '../ocs'
+import { ocsGet } from '../ocs.ts'
 
 type AuditEntry = {
 	id: number
@@ -35,14 +35,22 @@ const isLoadingMore = ref(false)
 const error = ref('')
 const hasLoadedOnce = ref(false)
 
-const formatWhen = (createdAt: string): string => {
+/**
+ *
+ * @param createdAt
+ */
+function formatWhen (createdAt: string): string {
 	// Stored as UTC `Y-m-d H:i:s`; make it parseable cross-browser as ISO.
 	const isoLike = createdAt.includes('T') ? createdAt : `${createdAt.replace(' ', 'T')}Z`
 	const parsed = new Date(isoLike)
 	return Number.isNaN(parsed.getTime()) ? createdAt : parsed.toLocaleString()
 }
 
-const versionTransition = (entry: AuditEntry): string => {
+/**
+ *
+ * @param entry
+ */
+function versionTransition (entry: AuditEntry): string {
 	const from = entry.fromVersion || '—'
 	const to = entry.toVersion || '—'
 	return `${from} → ${to}`
@@ -50,7 +58,11 @@ const versionTransition = (entry: AuditEntry): string => {
 
 const isFailure = (entry: AuditEntry): boolean => entry.status !== 'success'
 
-const load = async (reset: boolean): Promise<void> => {
+/**
+ *
+ * @param reset
+ */
+async function load (reset: boolean): Promise<void> {
 	if (reset) {
 		isLoading.value = true
 		offset.value = 0
@@ -85,7 +97,10 @@ const load = async (reset: boolean): Promise<void> => {
 	}
 }
 
-const loadMore = (): void => {
+/**
+ *
+ */
+function loadMore (): void {
 	void load(false)
 }
 
@@ -175,7 +190,7 @@ const isEmpty = computed(() => hasLoadedOnce.value && !isLoading.value && entrie
 			</table>
 
 			<NcButton v-if="hasMore"
-				type="tertiary"
+				variant="tertiary"
 				:disabled="isLoadingMore"
 				@click="loadMore">
 				{{ isLoadingMore ? t('versioniq', 'Loading…') : t('versioniq', 'Load more') }}

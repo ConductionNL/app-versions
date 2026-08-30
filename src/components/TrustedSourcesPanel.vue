@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
 import { t } from '@nextcloud/l10n'
+import { onMounted, ref } from 'vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
-import { ocsGet, ocsWrite } from '../ocs'
+import { ocsGet, ocsWrite } from '../ocs.ts'
 
 type SelectOption = { id: string, label: string }
 
@@ -27,7 +27,10 @@ const forgeOptions: SelectOption[] = [
 	{ id: 'codeberg', label: 'Codeberg' },
 ]
 
-const loadPatterns = async (): Promise<void> => {
+/**
+ *
+ */
+async function loadPatterns (): Promise<void> {
 	error.value = ''
 	try {
 		const { payload } = await ocsGet<{ trustedPatterns?: string[] }>(SOURCES)
@@ -37,7 +40,10 @@ const loadPatterns = async (): Promise<void> => {
 	}
 }
 
-const addPattern = async (): Promise<void> => {
+/**
+ *
+ */
+async function addPattern (): Promise<void> {
 	error.value = ''
 	notice.value = ''
 	if (!owner.value.trim()) {
@@ -71,7 +77,11 @@ const addPattern = async (): Promise<void> => {
 	}
 }
 
-const removePattern = async (pattern: string): Promise<void> => {
+/**
+ *
+ * @param pattern
+ */
+async function removePattern (pattern: string): Promise<void> {
 	error.value = ''
 	notice.value = ''
 	loading.value = true
@@ -112,7 +122,7 @@ onMounted(loadPatterns)
 		<ul :class="$style.list">
 			<li v-for="pattern in patterns" :key="pattern" :class="$style.row">
 				<code>{{ pattern }}</code>
-				<NcButton type="tertiary" :disabled="loading" @click="removePattern(pattern)">
+				<NcButton variant="tertiary" :disabled="loading" @click="removePattern(pattern)">
 					{{ t('versioniq', 'Remove') }}
 				</NcButton>
 			</li>
@@ -124,7 +134,7 @@ onMounted(loadPatterns)
 		<form :class="$style.form" @submit.prevent="addPattern">
 			<NcSelect
 				v-model="forge"
-				:input-label="t('versioniq', 'Forge')"
+				:inputLabel="t('versioniq', 'Forge')"
 				:options="forgeOptions"
 				:reduce="(option) => option.id"
 				:clearable="false"

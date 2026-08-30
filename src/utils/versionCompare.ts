@@ -5,7 +5,11 @@
 
 export type VersionCore = { major: number, minor: number, patch: number }
 
-export const parseVersionCore = (version: string): VersionCore => {
+/**
+ *
+ * @param version
+ */
+export function parseVersionCore (version: string): VersionCore {
 	const [core] = version.split('-', 2)
 	const [rawMajor, rawMinor, rawPatch] = core.split('.')
 
@@ -21,8 +25,11 @@ export const parseVersionCore = (version: string): VersionCore => {
  * `right`, <0 when older, 0 when equal. Handles a `-prerelease` suffix with
  * basic semver precedence rules (numeric identifiers compare numerically,
  * a version without a prerelease suffix outranks one with).
+ *
+ * @param left
+ * @param right
  */
-export const compareVersions = (left: string, right: string): number => {
+export function compareVersions (left: string, right: string): number {
 	const [leftCore, leftPre = ''] = left.split('-', 2)
 	const [rightCore, rightPre = ''] = right.split('-', 2)
 	const leftParts = leftCore.split('.').map((part) => Number(part || '0'))
