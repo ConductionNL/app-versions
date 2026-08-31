@@ -9,6 +9,7 @@ updates:
       day: saturday
       time: "03:00"
       timezone: Europe/Paris
+    target-branch: "development"
     open-pull-requests-limit: 10
     # The composer entry existed but carried NO cooldown, so PHP dependencies
     # updated the moment they were published — which is exactly the window in
@@ -59,6 +60,7 @@ updates:
       day: saturday
       time: "03:00"
       timezone: Europe/Paris
+    target-branch: "development"
     open-pull-requests-limit: 10
     cooldown:
       default-days: 1
