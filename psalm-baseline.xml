@@ -188,13 +188,6 @@
     </MixedAssignment>
   </file>
   <file src="lib/Service/Source/AppStoreSource.php">
-    <DeprecatedMethod>
-      <code><![CDATA[getAppValue]]></code>
-      <code><![CDATA[getAppValue]]></code>
-      <code><![CDATA[getAppValue]]></code>
-      <code><![CDATA[setAppValue]]></code>
-      <code><![CDATA[setAppValue]]></code>
-    </DeprecatedMethod>
     <MixedAssignment>
       <code><![CDATA[$severity]]></code>
       <code><![CDATA[$summary]]></code>
