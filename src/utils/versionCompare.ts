@@ -3,6 +3,13 @@
 // so the comparison logic has a single source of truth that both the UI
 // and the utils/changelog.ts range builder can import.
 
+// @spec openspec/specs/auto-update-policies/spec.md
+//
+// The spec names "Semantic Versioning 2.0.0 (level comparison)" as a standard
+// it is built on, and both exports here are that comparison: App.vue uses them
+// to decide whether a selected version is a downgrade, and to bound a version
+// range. gate-16 flagged them once this file was touched, and it was right --
+// they were the only untagged pair in src/utils.
 export type VersionCore = { major: number, minor: number, patch: number }
 
 /**
