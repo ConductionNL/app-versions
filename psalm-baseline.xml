@@ -200,18 +200,6 @@
       <code><![CDATA[$summary]]></code>
     </MixedAssignment>
   </file>
-  <file src="lib/Service/Source/ForgeRegistry.php">
-    <DeprecatedMethod>
-      <code><![CDATA[getAppValue]]></code>
-    </DeprecatedMethod>
-    <RedundantCast>
-      <code><![CDATA[(bool)$d['exposesScopeHeader']]]></code>
-      <code><![CDATA[(string)$d['api']]]></code>
-      <code><![CDATA[(string)$d['scheme']]]></code>
-      <code><![CDATA[(string)$d['tokenCreateUrl']]]></code>
-      <code><![CDATA[(string)$d['web']]]></code>
-    </RedundantCast>
-  </file>
   <file src="lib/Service/Source/ForgeReleaseSource.php">
     <InvalidArgument>
       <code><![CDATA[usort(
