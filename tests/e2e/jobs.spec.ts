@@ -299,9 +299,7 @@ test.describe("background jobs", () => {
 	});
 
 	// --- audit retention prune job ----------------------------------------
-	test("the prune job removes entries older than the retention window", async ({
-		_page,
-	}) => {
+	test("the prune job removes entries older than the retention window", async () => {
 		// Seed one clearly-old audit row and one recent row.
 		await sqlExec(
 			`INSERT INTO oc_app_versions_audit (actor_uid, app_id, operation, status, created_at) VALUES ('system','prunetest','install','success', '${tsOffset(-400)}')`,
