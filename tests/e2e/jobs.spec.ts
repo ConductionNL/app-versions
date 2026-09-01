@@ -300,7 +300,7 @@ test.describe("background jobs", () => {
 
 	// --- audit retention prune job ----------------------------------------
 	test("the prune job removes entries older than the retention window", async ({
-		_page,
+		page: _page,
 	}) => {
 		// Seed one clearly-old audit row and one recent row.
 		await sqlExec(
