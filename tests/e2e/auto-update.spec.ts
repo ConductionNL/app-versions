@@ -8,12 +8,30 @@ import { autoUpdateState, openSettings, openTab } from "./helpers.ts";
 const APP = "dashboard";
 
 test.describe("auto-update policies", () => {
+	// Cleanup runs even when a test fails, which the inline restore at the end
+	// of the kill-switch spec does not. That restore being skipped on failure is
+	// how one red spec turned into two: the switch stayed ON, and the spec that
+	// asserts the disabled hint renders only while it is OFF failed for a reason
+	// that had nothing to do with it.
 	test.afterEach(async ({ page }) => {
 		await page.request
 			.delete(
 				`/ocs/v2.php/apps/versioniq/api/app/${APP}/policy?format=json`,
 				{
 					headers: { "OCS-APIRequest": "true" },
+				},
+			)
+			.catch(() => undefined);
+
+		await page.request
+			.put(
+				"/ocs/v2.php/apps/versioniq/api/auto-update/settings?enabled=0&format=json",
+				{
+					headers: {
+						"OCS-APIRequest": "true",
+						"Content-Type": "application/json",
+					},
+					data: { enabled: "0" },
 				},
 			)
 			.catch(() => undefined);
@@ -125,6 +143,35 @@ test.describe("auto-update policies", () => {
 	test("policies show as inert while the kill switch is off", async ({
 		page,
 	}) => {
+		// The hint under test renders on `isActive && !autoUpdateEnabled`, so it
+		// depends on the kill switch being OFF. The spec above turns it ON and
+		// restores it at the end, which means a failure there leaves it ON and
+		// this spec fails for a reason that has nothing to do with what it
+		// checks. That is exactly what happened on the run before this change.
+		//
+		// So assert the precondition instead of inheriting it.
+		const off = await page.request.put(
+			"/ocs/v2.php/apps/versioniq/api/auto-update/settings?enabled=0&format=json",
+			{
+				headers: {
+					"OCS-APIRequest": "true",
+					"Content-Type": "application/json",
+				},
+				data: { enabled: "0" },
+			},
+		);
+		expect(
+			off.ok(),
+			`could not turn the kill switch off (HTTP ${off.status()}); the hint below only renders while it is off`,
+		).toBe(true);
+		await expect
+			.poll(async () => (await autoUpdateState(page)).autoUpdateEnabled, {
+				message:
+					"the kill switch must be off before this spec can mean anything",
+				timeout: 20_000,
+			})
+			.toBe(false);
+
 		// Seed a policy directly, then confirm the UI explains it will not run.
 		//
 		// The seed is asserted. Without this the request could fail and the
