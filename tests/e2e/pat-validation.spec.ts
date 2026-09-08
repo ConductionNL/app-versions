@@ -195,9 +195,7 @@ test.describe("PAT validation & lifecycle", () => {
 			`INSERT INTO oc_versioniq_pats (owner_uid, label, target_pattern, kind, forge, encrypted_token, token_hint, shared_with_admins, warned_thresholds, created_at) VALUES ('otheradmin','theirs','x/*','forge-token','codeberg','enc','abcd...wxyz',false,'[]', '${tsOffset()}')`,
 		);
 		const id = (
-			await sql(
-				"SELECT id FROM oc_versioniq_pats WHERE label='theirs'",
-			)
+			await sql("SELECT id FROM oc_versioniq_pats WHERE label='theirs'")
 		).trim();
 
 		// admin does not see a non-shared PAT owned by someone else.
