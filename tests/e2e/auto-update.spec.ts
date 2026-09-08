@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { appConfigValue, openSettings, openTab } from "./helpers.ts";
+import { autoUpdateState, openSettings, openTab } from "./helpers.ts";
 
 /**
  * Per-app auto-update policies and the global kill switch / window.
@@ -60,12 +60,12 @@ test.describe("auto-update policies", () => {
 		await page.getByTestId("auto-update-settings-save").click();
 
 		await expect
-			.poll(async () => appConfigValue(page, "auto_update_enabled"), {
+			.poll(async () => (await autoUpdateState(page)).autoUpdateEnabled, {
 				message: "kill switch should persist",
 				timeout: 20_000,
 			})
-			.toBe("1");
-		expect(await appConfigValue(page, "auto_update_window")).toBe(
+			.toBe(true);
+		expect((await autoUpdateState(page)).autoUpdateWindow).toBe(
 			"23:00-03:00",
 		);
 
@@ -74,10 +74,10 @@ test.describe("auto-update policies", () => {
 		await page.getByTestId("auto-update-window").fill("01:00-05:00");
 		await page.getByTestId("auto-update-settings-save").click();
 		await expect
-			.poll(async () => appConfigValue(page, "auto_update_enabled"), {
+			.poll(async () => (await autoUpdateState(page)).autoUpdateEnabled, {
 				timeout: 20_000,
 			})
-			.not.toBe("1");
+			.toBe(false);
 	});
 
 	test("a per-app policy is persisted and badged", async ({ page }) => {
@@ -96,11 +96,14 @@ test.describe("auto-update policies", () => {
 		await page.getByRole("option", { name: /patch/i }).first().click();
 
 		await expect
-			.poll(async () => appConfigValue(page, `policy.${APP}`), {
-				message: "policy should persist",
-				timeout: 20_000,
-			})
-			.toContain("patch");
+			.poll(
+				async () =>
+					(await autoUpdateState(page)).policies.find(
+						(p) => p.appId === APP,
+					)?.level,
+				{ message: "policy should persist", timeout: 20_000 },
+			)
+			.toBe("patch");
 
 		await expect(card.getByTestId("policy-active-badge")).toBeVisible();
 	});
@@ -109,7 +112,11 @@ test.describe("auto-update policies", () => {
 		page,
 	}) => {
 		// Seed a policy directly, then confirm the UI explains it will not run.
-		await page.request.put(
+		//
+		// The seed is asserted. Without this the request could fail and the
+		// only symptom would be the hint below never appearing, which reads as
+		// a broken component rather than a fixture that never ran.
+		const seeded = await page.request.put(
 			`/ocs/v2.php/apps/versioniq/api/app/${APP}/policy?format=json`,
 			{
 				headers: {
@@ -119,6 +126,25 @@ test.describe("auto-update policies", () => {
 				data: { level: "patch" },
 			},
 		);
+		expect(
+			seeded.ok(),
+			`seeding the ${APP} policy failed with HTTP ${seeded.status()}; the hint below cannot appear without it`,
+		).toBe(true);
+
+		// And assert the app itself now reports it, so a write that returns 200
+		// without persisting is caught here rather than blamed on the UI.
+		await expect
+			.poll(
+				async () =>
+					(await autoUpdateState(page)).policies.find(
+						(p) => p.appId === APP,
+					)?.level,
+				{
+					message: "the seeded policy should be readable back",
+					timeout: 20_000,
+				},
+			)
+			.toBe("patch");
 
 		await openSettings(page);
 		await openTab(page, "Apps");

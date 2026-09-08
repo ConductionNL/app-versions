@@ -198,6 +198,47 @@ export async function appConfigValue(
 	return typeof data === "string" && data !== "" ? data : null;
 }
 
+/**
+ * The auto-update state as the app itself reports it.
+ *
+ * Reads the app's own endpoint rather than the provisioning API. Two reasons,
+ * and the second is the one that matters.
+ *
+ * The provisioning API is an out-of-band probe of storage. It answers an unset
+ * key and a key it cannot see with the same empty string, so a read through it
+ * cannot distinguish "the app never saved this" from "the probe cannot see what
+ * the app saved". Measured on CI: the app's own PUT returned
+ * `autoUpdateEnabled: true` while 21 provisioning reads over 19 seconds all
+ * returned "", against an app whose code is byte-identical to one where the
+ * same sequence works.
+ *
+ * This is a separate HTTP request, so it loads app config fresh. That makes it
+ * a real persistence check, not a softer one: a value that never reached the
+ * database still fails here, and it fails naming what the app itself believes.
+ */
+export async function autoUpdateState(page: Page): Promise<{
+	autoUpdateEnabled: boolean;
+	autoUpdateWindow: string;
+	policies: Array<Record<string, unknown>>;
+}> {
+	const res = await page.request.get(
+		"/ocs/v2.php/apps/versioniq/api/policies?format=json",
+		{ headers: { "OCS-APIRequest": "true" } },
+	);
+	if (!res.ok()) {
+		throw new Error(
+			`autoUpdateState: the app's own policies endpoint failed with HTTP ${res.status()}. ` +
+				"Nothing can be concluded about what the app persisted.",
+		);
+	}
+	const data = (await res.json())?.ocs?.data ?? {};
+	return {
+		autoUpdateEnabled: Boolean(data.autoUpdateEnabled),
+		autoUpdateWindow: String(data.autoUpdateWindow ?? ""),
+		policies: Array.isArray(data.policies) ? data.policies : [],
+	};
+}
+
 // --- Forge fixture ---------------------------------------------------------
 // The fixture forge (tests/e2e/fixtures/forge) must be bootstrapped before the
 // forge specs run (see docs/e2e.md and fixtures/forge/bootstrap.sh). These
