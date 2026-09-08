@@ -77,25 +77,36 @@ test.describe("auto-update policies", () => {
 		await page.getByTestId("auto-update-window").fill("23:00-03:00");
 		await page.getByTestId("auto-update-settings-save").click();
 
-		await expect
-			.poll(async () => (await autoUpdateState(page)).autoUpdateEnabled, {
-				message: "kill switch should persist",
-				timeout: 20_000,
-			})
-			.toBe(true);
-		expect((await autoUpdateState(page)).autoUpdateWindow).toBe(
+		// The app confirms the save before anything else is asserted.
+		await expect(
+			page.getByTestId("auto-update-settings-save"),
+		).toBeDisabled();
+
+		// Then prove it PERSISTED, by reloading and reading the form back.
+		//
+		// Deliberately not read through page.request. A value written by the
+		// page and read back through the request context comes back stale on
+		// CI: this assertion polled for 20 seconds, twice, and saw false while
+		// the app's own PUT had returned autoUpdateEnabled: true. The two specs
+		// below and above that pass are the ones whose write and read share a
+		// context. A reload re-fetches from the server, so this still fails if
+		// the value never reached the database.
+		await page.reload();
+		await openTab(page, "Apps");
+
+		await expect(page.getByTestId("auto-update-kill-switch")).toBeChecked();
+		await expect(page.getByTestId("auto-update-window")).toHaveValue(
 			"23:00-03:00",
 		);
 
-		// Put the instance back the way we found it.
+		// Put the instance back the way we found it. afterEach also turns the
+		// switch off, so this is about the window, which afterEach leaves alone.
 		await page.getByTestId("auto-update-kill-switch").uncheck();
 		await page.getByTestId("auto-update-window").fill("01:00-05:00");
 		await page.getByTestId("auto-update-settings-save").click();
-		await expect
-			.poll(async () => (await autoUpdateState(page)).autoUpdateEnabled, {
-				timeout: 20_000,
-			})
-			.toBe(false);
+		await expect(
+			page.getByTestId("auto-update-settings-save"),
+		).toBeDisabled();
 	});
 
 	test("a per-app policy is persisted and badged", async ({ page }) => {
