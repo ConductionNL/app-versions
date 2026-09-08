@@ -95,17 +95,31 @@ test.describe("auto-update policies", () => {
 		await selector.click();
 		await page.getByRole("option", { name: /patch/i }).first().click();
 
-		await expect
-			.poll(
-				async () =>
-					(await autoUpdateState(page)).policies.find(
-						(p) => p.appId === APP,
-					)?.level,
-				{ message: "policy should persist", timeout: 20_000 },
-			)
-			.toBe("patch");
-
+		// The badge is driven by the parent's `policies` map, which
+		// onPolicyChange only writes after the PUT comes back, so seeing it
+		// means the server accepted the change.
 		await expect(card.getByTestId("policy-active-badge")).toBeVisible();
+
+		// Then prove it SURVIVES, by reloading and looking again. This is the
+		// property the test name claims and the one a user would notice.
+		//
+		// Deliberately not read through page.request here. A policy written by
+		// the page and read back through the request context comes back empty
+		// on CI, while the same read succeeds for a policy that context wrote
+		// itself — see the kill-switch test below, which passes. Reloading
+		// keeps the write and the read in one context and still fails if the
+		// value never reached the database.
+		await page.reload();
+		await openTab(page, "Apps");
+
+		const reloaded = page
+			.locator("article")
+			.filter({ has: page.getByText(APP, { exact: true }) })
+			.first();
+		await expect(reloaded.getByTestId("policy-active-badge")).toBeVisible();
+		await expect(reloaded.getByTestId("policy-select")).toContainText(
+			/patch/i,
+		);
 	});
 
 	test("policies show as inert while the kill switch is off", async ({
